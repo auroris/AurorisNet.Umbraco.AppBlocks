@@ -13,7 +13,7 @@ internal sealed record FormSubmissionResult(int Status, object? Body = null);
 
 /// <summary>Validates and saves an admitted form submission, including its detail rows. HTTP admission and antiforgery belong to the caller.</summary>
 internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesService lists, FormResourceRegistry resources,
-    IOptions<TabularOptions> limits, ILoggerFactory logs)
+    IOptions<TabularOptions> limits, ILoggerFactory logs, IEnumerable<IFormSubmissionProcessor>? processors = null)
 {
     private readonly ILogger logger = logs.CreateLogger("ApplicationForms");
     private readonly ILogger tabularLogger = logs.CreateLogger("ApplicationTabular");
@@ -67,6 +67,11 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
             var mergedErrors = form.Validate(JsonSerializer.SerializeToElement(merged.Where(p => writableBindings.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value)), false);
             if (mergedErrors.Count > 0) return Result(new(422, Errors: mergedErrors));
             values = JsonSerializer.SerializeToElement(merged);
+        }
+        foreach (var processor in processors ?? []) {
+            var processed = await processor.ProcessAsync(form, values, stored, context, ct);
+            if (processed.Refusal is { } denied) return Result(denied);
+            values = processed.Values;
         }
         var choiceErrors = await lists.ValidateAsync(form, values, context, ct, stored?.Values);
         if (choiceErrors.Count > 0) return Result(new(422, Errors: choiceErrors));
