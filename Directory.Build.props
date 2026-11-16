@@ -6,7 +6,12 @@
     <Version>0.1.0-alpha.1</Version>
     <Authors>auroris</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <!-- UmbracoAppHost pins the same version in its Directory.Packages.props, and its build fails if the two differ. -->
     <AppBlocksUmbracoVersion>18.3.0</AppBlocksUmbracoVersion>
   </PropertyGroup>
+  <!-- One icon for the whole package family; the SVG beside it is the editable source. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)docs/images/icon.png" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
 </Project>
