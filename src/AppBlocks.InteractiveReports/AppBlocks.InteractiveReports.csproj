@@ -11,7 +11,6 @@
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <InteractiveReportsRoot Condition="'$(InteractiveReportsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\Interactive-Reports</InteractiveReportsRoot>
-    <UseInteractiveReportsSource Condition="'$(UseInteractiveReportsSource)' == '' and Exists('$(InteractiveReportsRoot)/src/InteractiveReport.AspNetCore/InteractiveReport.AspNetCore.csproj')">true</UseInteractiveReportsSource>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -37,9 +36,9 @@
     <ProjectReference Include="$(InteractiveReportsRoot)/src/InteractiveReport.Client.FileDownload/InteractiveReport.Client.FileDownload.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseInteractiveReportsSource)' != 'true'">
-    <PackageReference Include="InteractiveReport.AspNetCore" Version="1.0.0" />
-    <PackageReference Include="InteractiveReport.Client.Json" Version="1.0.0" />
-    <PackageReference Include="InteractiveReport.Client.FileDownload" Version="1.0.0" />
+    <PackageReference Include="AurorisNet.InteractiveReports.AspNetCore" Version="1.0.2" />
+    <PackageReference Include="AurorisNet.InteractiveReports" Version="1.0.2" />
+    <PackageReference Include="AurorisNet.InteractiveReports.Client.FileDownload" Version="1.0.2" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
@@ -49,8 +48,4 @@
     <!-- Embedded above, so a site's project must not receive them as well. -->
     <Content Update="Schema/**/*.config;Reports/umbraco-reports.json;appsettings-schema*.json;umbraco-package-schema.json" Pack="false" />
   </ItemGroup>
-  <!-- UseInteractiveReportsSource stays empty only when nobody chose and the checkout was not found. -->
-  <Target Name="WarnInteractiveReportsFromPackages" BeforeTargets="CollectPackageReferences;ResolveProjectReferences" Condition="'$(UseInteractiveReportsSource)' == '' and '$(DesignTimeBuild)' != 'true'">
-    <Warning Code="APPBLOCKS001" Text="No Interactive-Reports checkout at '$(InteractiveReportsRoot)', so AppBlocks.InteractiveReports uses the InteractiveReport NuGet packages instead of source. Set InteractiveReportsRoot to the checkout, or UseInteractiveReportsSource=false to choose the packages." />
-  </Target>
 </Project>

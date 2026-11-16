@@ -1,6 +1,14 @@
 # Developing AppBlocks
 
-AppBlocks builds without Interactive Reports. Its optional companion references it; source development for the companion uses a sibling `../Interactive-Reports` checkout when present. Override `InteractiveReportsRoot` when needed. Set `UseInteractiveReportsSource=false` to use NuGet dependencies, including when checking the release package against a local package feed.
+AppBlocks builds without Interactive Reports. Its optional companion uses the published
+`AurorisNet.InteractiveReports` packages, including their browser assets. Documents uses
+`AurorisNet.Pressroom.Client`. These dependencies restore from NuGet even when sibling
+checkouts are present.
+
+To develop against Interactive Reports source, pass `-p:UseInteractiveReportsSource=true`.
+It uses `../Interactive-Reports`; override `InteractiveReportsRoot` for another location.
+For Pressroom source, pass `-p:UsePressroomSource=true` and, if needed, `PressroomRoot`
+to override `../Pressroom`.
 
 ```powershell
 dotnet build AppBlocks.slnx

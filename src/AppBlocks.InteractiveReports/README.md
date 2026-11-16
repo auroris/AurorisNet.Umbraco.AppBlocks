@@ -92,4 +92,4 @@ dotnet pack src/AppBlocks.InteractiveReports -c Release -o artifacts/packages
 dotnet run --project tests/AppBlocks.InteractiveReports.Tests -- -noLogo
 ```
 
-Source development uses a sibling `../Interactive-Reports` checkout when present. Override `InteractiveReportsRoot`, or set `UseInteractiveReportsSource=false` to consume its NuGet packages; a checkout that is simply not found falls back to them with warning APPBLOCKS001. The core AppBlocks project builds independently of that checkout.
+Builds use the `AurorisNet.InteractiveReports`, `AurorisNet.InteractiveReports.AspNetCore` and `AurorisNet.InteractiveReports.Client.FileDownload` NuGet packages at version 1.0.2, including the browser assets. For source development, set `UseInteractiveReportsSource=true`; the checkout defaults to `../Interactive-Reports`, overridable with `InteractiveReportsRoot`. The core AppBlocks project builds independently of these packages and that checkout.

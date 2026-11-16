@@ -71,7 +71,7 @@ The administrator-only management API is under `/umbraco/management/api/v1/appbl
 
 ## Build
 
-Source builds use sibling `../Pressroom` when available, overridable with `PressroomRoot`. Set `UsePressroomSource=false` to resolve `AurorisNet.Pressroom.Client` 1.1.0 from a package feed; it bundles the Client and Contracts assemblies, so no separate Contracts package is needed. The C# namespaces remain `Pressroom.Client` and `Pressroom.Contracts`. A checkout that is simply not found falls back to the package with warning APPBLOCKS002. No browser or PDF engine is installed in the Umbraco process.
+Builds use `AurorisNet.Pressroom.Client` 1.2.0 from NuGet. It bundles the Client and Contracts assemblies; the C# namespaces remain `Pressroom.Client` and `Pressroom.Contracts`. To develop against source, set `UsePressroomSource=true`; the checkout defaults to `../Pressroom`, overridable with `PressroomRoot`. Rendering runs on the Pressroom server, so the Umbraco process needs no browser or PDF engine.
 
 ```powershell
 dotnet build src/AppBlocks.Documents
