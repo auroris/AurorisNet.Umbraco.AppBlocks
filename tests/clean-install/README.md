@@ -1,21 +1,70 @@
-# Clean Umbraco package acceptance test
+# Clean-install test
 
-From the repository root on Windows with PowerShell 7, .NET 10 and Node installed:
+This test builds the AppBlocks packages, installs them into new Umbraco sites from the official template, and checks installation, editing, data operations and a restart in a real browser.
+
+## Running it
+
+Run it from the repository root on Windows, with PowerShell 7, the .NET 10 SDK and Node.js installed:
 
 ```powershell
 pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
 ```
 
-The script builds local NuGet packages and creates two new sites using the official Umbraco 18.3.0 template: AppBlocks alone, then AppBlocks with its Interactive Reports and Documents companions. Each run has new SQLite databases and a separate NuGet cache under an ignored `artifacts/clean-install-*` directory. The sites use package references and the template's unchanged startup code. No uSync, AppHost or starter kit is installed.
+| Parameter | Default | What it does |
+|---|---|---|
+| `-InteractiveReportsRoot` | `../AurorisNet.InteractiveReports` | The Interactive Reports checkout whose projects the script packs, and whose `node_modules` supply Playwright. Run `npm ci` there first |
+| `-PressroomRoot` | `../Pressroom` | The Pressroom checkout whose client the script packs |
+| `-Port` | `5189` | The port the test sites listen on |
 
-Source checkouts of `../Interactive-Reports` and `../Pressroom` supply the companion dependencies. Override their paths with `-InteractiveReportsRoot` and `-PressroomRoot`. The browser test uses Playwright from Interactive Reports' `node_modules` (`npm ci` in that checkout), with its installed Chromium or Microsoft Edge. Use `-Port` if 5189 is occupied. Test hosts run only while checks execute and are stopped afterward.
+The browser is Playwright's Chromium, or Microsoft Edge. The test sites run only while the checks run.
 
-The base-package site starts with no connection string and no unattended installation. A real browser completes the account, telemetry and SQLite steps of Umbraco's installation wizard, and the runner rejects fatal startup errors. The companions site also covers unattended installation.
+## What it sets up
 
-The initial checks verify every embedded schema definition and its AppBlocks folder in the backoffice tree, packaged JavaScript/CSS/manifest, backoffice sign-in, the Connections screen, the Business rules help page and its section navigation, database metadata, connection testing and anonymous access rejection. Only after installation passes does the script add website-owned sample content. It then checks native Block List and Block Grid forms, required-field validation, optimistic concurrency, antiforgery protection, report queries and saved views, attachment upload/download/removal, document HTML output, and browser edits surviving a reload. A fresh browser session verifies that the page establishes its antiforgery cookie before multiple blocks load in parallel. The full functional checks run again after restarting the host.
+The script packs the projects into a local feed and creates two sites with the Umbraco 18.3.0 template:
 
-`SchemaFolderChecks` verifies fresh folder placement and repeated installation without duplicate folders. `WizardSiteTests` additionally covers the pre-install runtime without a database, while `SchemaInstallationChecks` verifies direct installation outside `RuntimeLevel.Run` and saving/publishing table names and 20,000-character SQL sources on a fresh site. `tests/ui/table-picker.browser.test.mjs` checks the table dropdown and plain-string SQL editing.
+1. **core**: AppBlocks alone.
+2. **companions**: AppBlocks with the Interactive Reports and Documents packages.
 
-Both sites first verify that AppBlocks adds no content files or PostgreSQL/Oracle driver dependencies, and that saving or testing a connection without its driver returns a validation error naming the package to install. The companions site then installs `Npgsql` and `Oracle.ManagedDataAccess.Core` itself, using the versions in `AppBlocks.Tests`, and adds the [Oracle assembly-scan exclusion](../../docs/connections.md#database-drivers). The seeded site and its restart verify that both drivers load and attempt connections, including both Oracle compatibility modes. Build and publish outputs contain the drivers only when the site installs them; the old bundled `oracle/` path is absent. No PostgreSQL or Oracle server is involved.
+Each run has new SQLite databases and its own NuGet cache, in an `artifacts/clean-install-*` folder that git ignores. The sites use package references and the template's unchanged startup code, with no other CMS packages.
 
-Logs, JSON results and screenshots remain in that run's directory. Generated administrator credentials are test-only and stay inside the ignored site configuration. These checks cover SQLite and HTML document output; live SQL Server/PostgreSQL/Oracle servers and a live Pressroom printer/PDF service are not part of this local test.
+The core site starts with no connection string and no unattended installation. A browser completes the account, telemetry and SQLite steps of Umbraco's installer. The companions site installs unattended. The script fails on a fatal startup error in either site's log.
+
+## What it checks
+
+**On both sites, after installation:**
+
+- Every embedded schema definition and its AppBlocks folder in the backoffice trees.
+- The packaged JavaScript, CSS and manifests.
+- Backoffice sign-in, the Connections screen, database metadata and connection testing.
+- The Business rules help page and its section navigation.
+- Rejection of anonymous access to the management API.
+- That AppBlocks adds no content files and no PostgreSQL or Oracle driver to the site.
+- That saving or testing a connection without its driver returns a validation error that names the package to install.
+
+**On the companions site, with sample content.** The script adds website-owned sample content only after installation has passed. It then checks:
+
+- Forms in a Block List and a Block Grid, required-field validation, optimistic concurrency and antiforgery protection.
+- Report queries and saved views.
+- Attachment upload, download and removal.
+- Document HTML output.
+- Browser edits that survive a reload.
+- In a new browser session, that the page sets its antiforgery cookie before several blocks load in parallel.
+
+The script runs these checks again after restarting the site.
+
+**Database drivers.** The companions site installs `Npgsql` and `Oracle.ManagedDataAccess.Core`, in the versions `tests/AppBlocks.Tests/AppBlocks.Tests.csproj` references, and adds the [Oracle assembly-scan exclusion](../../docs/connections.md#database-drivers). The seeded site and its restart verify that both drivers load and attempt connections, in both Oracle modes. The publish output must hold each driver only when the site installs it.
+
+## What it leaves out
+
+The test uses SQLite and HTML document output. It contacts no SQL Server, PostgreSQL or Oracle server and no Pressroom service. [Developing AppBlocks](../../docs/developing.md#live-database-tests) describes the live database tests.
+
+## Results
+
+Logs, JSON results and screenshots stay in the run's folder. The administrator account the script generates is for the test only and stays inside that folder.
+
+## Related checks in the test projects
+
+- `SchemaFolderChecks` verifies folder placement on a new site, and repeated installation with no duplicate folders.
+- `WizardSiteTests` covers the runtime before installation, with no database.
+- `SchemaInstallationChecks` verifies installation outside `RuntimeLevel.Run`, and saving and publishing table names and 20,000-character SQL sources on a new site.
+- `tests/ui/table-picker.browser.test.mjs` checks the table dropdown and SQL editing as a plain string.

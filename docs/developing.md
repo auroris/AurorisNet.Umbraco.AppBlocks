@@ -1,99 +1,158 @@
 # Developing AppBlocks
 
-AppBlocks builds without Interactive Reports. Its optional companion uses the published
-`AurorisNet.InteractiveReports` packages, including their browser assets. Documents uses
-`AurorisNet.Pressroom.Client`. These dependencies restore from NuGet even when sibling
-checkouts are present.
+How to build and test the packages in this repository, run the demo site, and change the definitions the packages install.
 
-To develop against Interactive Reports source, pass `-p:UseInteractiveReportsSource=true`.
-It uses `../Interactive-Reports`; override `InteractiveReportsRoot` for another location.
-For Pressroom source, pass `-p:UsePressroomSource=true` and, if needed, `PressroomRoot`
-to override `../Pressroom`.
+## Build, test and pack
+
+Building needs the .NET 10 SDK. The projects build against the Umbraco release in `UmbracoVersion` in `Directory.Build.props`.
 
 ```powershell
 dotnet build AppBlocks.slnx
 dotnet run --project tests/AppBlocks.Tests -- -noLogo
 dotnet run --project tests/AppBlocks.InteractiveReports.Tests -- -noLogo
 dotnet run --project tests/AppBlocks.Documents.Tests -- -noLogo
-dotnet run --project samples/AppBlocks.Demo --urls http://localhost:5079
 dotnet pack src/AppBlocks -c Release -o artifacts/packages
 dotnet pack src/AppBlocks.InteractiveReports -c Release -o artifacts/packages
 dotnet pack src/AppBlocks.Documents -c Release -o artifacts/packages
 dotnet pack src/AppBlocks.Testing -c Release -o artifacts/packages
-pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
 ```
 
-`src/AppBlocks.Testing` (package `AurorisNet.Umbraco.AppBlocks.Testing`) holds the HTTP clients
-that site tests use to drive the forms, attachments, tabular, report and paper-report endpoints
-the way the browser runtime does, with `TestSiteException` and the `UmbracoTestSupport` helpers
-for running Umbraco in a test process. It moved here from UmbracoAppHost's
-`tests/UmbracoAppHost.Testing`, which now depends on it, so the clients change together with the
-endpoints they drive. `AppBlocks.Tests` references the project and tests the clients against
-the endpoints; a change to an endpoint's protocol changes its client in the same commit. The
-package references no test framework; keep it that way, because hosts test with different runners.
+The three test projects and the [clean-install test](#clean-install-test) are the full test run. The workflows on GitHub run the three test projects on one Umbraco release. To build and test against another release, add `--property:UmbracoVersion=<release>` to each command, before the `--` of a `dotnet run`.
 
-The SQL Server live tests reuse the LocalDB scenarios for form data sources, application schema installation and attachment storage. Supply an empty, disposable SQL Server database with `db_owner` access:
+## Dependencies from sibling checkouts
+
+The companions restore their dependencies from NuGet: `AurorisNet.InteractiveReports`, `AurorisNet.InteractiveReports.AspNetCore` and `AurorisNet.InteractiveReports.Client.FileDownload` for reports, and `AurorisNet.Pressroom.Client` for documents. To build against the source of either one, pass a switch:
+
+| Switch | Source checkout | Property that moves it |
+|---|---|---|
+| `-p:UseInteractiveReportsSource=true` | `../AurorisNet.InteractiveReports` | `InteractiveReportsRoot` |
+| `-p:UsePressroomSource=true` | `../Pressroom` | `PressroomRoot` |
+
+The core `AppBlocks` project builds without either.
+
+## Live database tests
+
+The ordinary test run uses SQLite and SQL Server LocalDB and contacts no remote server. Two test classes run the same scenarios on a real server. They run only when a command asks for them with `-explicit only`, and each reads its connection string from an environment variable, which keeps credentials out of source control.
+
+**SQL Server.** Supply an empty, disposable database and an account with `db_owner` on it. The tests cover form data sources, application schema installation and attachment storage.
 
 ```powershell
 $env:APPBLOCKS_SQLSERVER_CONNECTION = "Server=HOST,1433;Database=TEST_DATABASE;User ID=TEST_USER;Password=TEST_PASSWORD;Encrypt=True;TrustServerCertificate=True;"
 dotnet run --project tests/AppBlocks.Tests -- -noLogo -explicit only -class AppBlocks.Tests.SqlServerLiveTests
 ```
 
-These tests refuse to run if any of their object names already exist and drop their own objects in cleanup. They do not need server administration rights. `TrustServerCertificate=True` is for a test server using a self-signed certificate. Credentials stay in the environment; ordinary runs do not contact the remote server.
+`TrustServerCertificate=True` suits a test server with a self-signed certificate. The tests refuse to run when one of their object names already exists, and they drop their own objects afterwards.
 
-The Oracle 11.2 live tests are opt-in. Supply a test-schema connection through the environment, keeping credentials out of source control:
+**Oracle.** Supply a test schema whose account has `CREATE SESSION`, `CREATE TABLE`, `CREATE VIEW`, `CREATE SEQUENCE` and a tablespace quota.
 
 ```powershell
 $env:APPBLOCKS_ORACLE_CONNECTION = "User Id=TEST_USER;Password=TEST_PASSWORD;Data Source=HOST:1521/SERVICE_NAME;"
 dotnet run --project tests/AppBlocks.Tests -- -noLogo -explicit only -class AppBlocks.Tests.OracleLiveTests
 ```
 
-The account needs `CREATE SESSION`, `CREATE TABLE`, `CREATE VIEW`, `CREATE SEQUENCE` and a tablespace quota. The tests create uniquely named tables, views and sequences and drop them in cleanup. They exercise the `Oracle.ManagedDataAccess.Core` driver the test projects reference (AppBlocks itself references no driver) in both `oracle11g` and automatic `oracle` modes, including metadata discovery, generated keys, form CRUD, concurrency, row restrictions, queries and custom-statement validation. Ordinary test runs do not contact Oracle.
+The tests run once in `oracle11g` mode and once in `oracle` mode, with the `Oracle.ManagedDataAccess.Core` driver the test project references. They create uniquely named tables, views and sequences and drop them afterwards.
 
-The demo references the reports companion, which brings in AppBlocks. The optional demo seed is website code, outside the package. Enable `AppBlocksDemo:SeedContent` in the demo's ignored `appsettings.Development.local.json` on a local SQLite installation to create a sample table and an ordinary article with a Block List and a Block Grid. Its own template uses both native rendering helpers. The companion's HTTP acceptance test can verify that running demo:
+## Browser tests
+
+The tests in `tests/ui` drive the backoffice screens and the browser runtime with Playwright:
+
+```powershell
+node --test tests/ui/
+```
+
+They load Playwright from the checkout at `../AurorisNet.InteractiveReports`, after `npm ci` there. Set `INTERACTIVE_REPORTS_ROOT` for a checkout elsewhere. Set `BROWSER_PATH` to an installed Chromium browser when Playwright's own is missing.
+
+## Clean-install test
+
+`tests/clean-install/Invoke-CleanInstall.ps1` builds NuGet packages, installs them into new Umbraco sites and checks installation, editing, data operations and a restart in a browser. It needs PowerShell 7 and Node.js. The [test's README](../tests/clean-install/README.md) describes what it checks.
+
+```powershell
+pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
+```
+
+The script packs the Interactive Reports and Pressroom projects from the checkouts at `../AurorisNet.InteractiveReports` and `../Pressroom`. `-InteractiveReportsRoot` and `-PressroomRoot` name other locations.
+
+## The demo site
+
+```powershell
+dotnet run --project samples/AppBlocks.Demo --urls http://localhost:5079
+```
+
+The demo references the reports companion, which brings in AppBlocks. It also references `Umbraco.Cms.DevelopmentMode.Backoffice`, so **Settings → AppBlocks → Backing Classes** edits and compiles its `AppBlocks/Code` folder, which git ignores. Remove that package reference to see [Backing Classes](csharp-editor.md) read-only.
+
+The demo can seed sample content: a task table, and an article page with a Block List and a Block Grid. The seed is website code in the demo, outside the packages. Turn it on with `AppBlocksDemo:SeedContent` in the demo's `appsettings.Development.local.json`, which git ignores and publishing leaves out. Use it on a local SQLite installation only.
+
+`DemoHttpTests` in the reports test project checks the seeded demo over HTTP. It runs when `APPBLOCKS_DEMO_SETTINGS` names that settings file, and signs in with the unattended account in it:
 
 ```powershell
 $env:APPBLOCKS_DEMO_SETTINGS = "$PWD/samples/AppBlocks.Demo/appsettings.Development.local.json"
 dotnet run --project tests/AppBlocks.InteractiveReports.Tests -- -noLogo
 ```
 
-The seed and HTTP test are intended only for this disposable local demo. The local settings file is excluded from publishing. The test uses the unattended demo account from that file.
+## The Testing package
 
-The demo also references `Umbraco.Cms.DevelopmentMode.Backoffice`, so **Settings → AppBlocks → Backing Classes** edits and compiles its `AppBlocks/Code` folder, which git ignores; remove the package to see [Backing Classes](csharp-editor.md) read-only. The browser tests in `tests/ui` run with `node --test tests/ui/`, using Playwright from the Interactive Reports checkout (`INTERACTIVE_REPORTS_ROOT` when it is not `../Interactive-Reports`).
+`src/AppBlocks.Testing` holds the HTTP clients a site's tests use to drive the forms, attachments, tabular, report and paper-report endpoints, with the helpers for running Umbraco in a test process. `AppBlocks.Tests` references the project and tests the clients against the endpoints.
 
-The [clean-install acceptance test](../tests/clean-install/README.md) builds actual NuGet packages, installs them into fresh official Umbraco sites without uSync or other CMS plugins, and verifies installation, browser editing, data operations and restart behavior. Each run uses empty databases and its own package cache.
+- Change a client in the same commit as the endpoint protocol it drives.
+- Keep the package free of any test framework reference, because sites test with different runners.
 
 ## Uppy assets
 
-The attachment uploader's pinned dependencies and bundler are in `tools/uppy`. After updating them, run `npm ci` and `npm run build` in that directory. Commit its lockfile and the generated `uppy.js`, `uppy.css` and `uppy-LICENSE.txt` under `src/AppBlocks/wwwroot/App_Plugins/ApplicationBlocks`. The bundle contains Core, Dashboard and XHR Upload; it loads when someone opens **Upload**. Normal .NET builds and consuming sites use the checked-in assets and need neither Node.js nor a CDN connection. The bundle includes its dependencies' license notices alongside the assets.
+The attachment uploader is a bundle of Uppy's Core, Dashboard and XHR Upload. Its pinned dependencies and bundler are in `tools/uppy`. After updating them, run `npm ci` and `npm run build` there. Commit the lockfile and the generated `uppy.js`, `uppy.css` and `uppy-LICENSE.txt` under `src/AppBlocks/wwwroot/App_Plugins/ApplicationBlocks`.
+
+.NET builds and sites use the committed files, so they need neither Node.js nor a CDN. The browser loads the bundle when someone opens **Upload**.
 
 ## Code organization
 
-The core package and each companion own their implementation and assets. The standalone Interactive Reports engine is a dependency; its AppBlocks integration lives in `src/AppBlocks.InteractiveReports`.
+The core package and each companion own their code and assets. The Interactive Reports engine is a dependency, and its AppBlocks integration is in `src/AppBlocks.InteractiveReports`.
 
-- C# code is grouped by feature, including its controllers. `Management` holds the settings controller that spans features. Form inventory and sample generation live under `Forms/Authoring`; backing-class generation lives under `Code/Generation`. Some public namespaces retain their earlier names for source compatibility.
-- `FormEndpoints` handles HTTP admission, antiforgery and serialization. `FormSubmissionService` validates and saves records and their detail rows, using `TabularOperations` for shared row validation and presentation. `FormRequestValues` owns bounded request-value parsing.
-- Companions use public core operations. `DataSourceReadQuery` supplies read SQL and bindings without exposing the execution plan; callers still authorize through `DataSourceQueries.AuthorizeAsync`. Connection registration and schema migrations have their own public operations. Production companions have no friend-assembly access to core internals.
-- `runtime.js` mounts the browser features. Forms, attachments, tabular rows, anti-spam and field controls have separate modules; `form-coordination.js` owns their registration and submission-key exchange. Keep the existing runtime entry URL and form events when changing these modules.
-- Razor views, static assets and Umbraco schema files retain their framework-specific locations. Core addresses page-owned blocks generically through `AppBlockContent`; the Interactive Reports companion names and resolves its report blocks through `ReportBlocks`, which hosts use too.
+- C# is grouped by feature, controllers included. `Management` holds the settings controller that spans features. Form inventory and sample generation are in `Forms/Authoring`, and backing-class generation is in `Code/Generation`.
+- `FormEndpoints` handles HTTP admission, antiforgery and serialization. `FormSubmissionService` validates and saves a record and its detail rows, and uses `TabularOperations` for row validation. `FormRequestValues` parses the bounded request values.
+- Companions call public operations of the core. `DataSourceReadQuery` supplies read SQL and its bindings, and callers authorize through `DataSourceQueries.AuthorizeAsync`. The companions have no friend-assembly access to core internals.
+- `runtime.js` mounts the browser features. Forms, attachments, tabular rows, anti-spam and field controls are separate modules, and `form-coordination.js` handles their registration and the exchange of submission keys. Keep the runtime's entry URL and the form events when changing these modules.
+- Core addresses blocks through `AppBlockContent`. The reports companion resolves its report blocks through `ReportBlocks`.
+
+### Backoffice screens
+
+Each Settings tab is a `workspaceView` manifest conditioned on `AppBlocks.Workspace`, and companions register views of their own. Management requests go through `umbHttpClient`, so Umbraco handles authentication and the application's base URL. A link into a backoffice section starts from `backofficePath`, exported by `App_Plugins/AppBlocks/api.js`. A repository shares the picker catalogue for 30 seconds for each authentication context.
+
+### Published content lookups
+
+`AppBlockContent.PageAsync`, `ReportAsync` and `FormDefinition.ResolveAsync` await published-content lookups. Call `LoadAsync` on a catalogue, a resource registry, a schedule source collection or an `AppBlocksValidator` before using its synchronous members. Controllers, publishing notifications and rendering do this already. A provider of form resources may implement `IFormResourceProvider.GetResourcesAsync`.
+
+Saved block values are read through Umbraco's Block Grid, Block List and Single Block converters. A form's Form Interface uses Umbraco's Single Block editor and resolves to one `BlockListItem`.
 
 ## Who owns the definitions
 
-The `Schema/` folders of AppBlocks and its companions are the only source of their element and data types, the data source types and the report definition type. Change them there. Fresh sites install the complete current definitions through Umbraco’s package importer, invoked by a tracked package migration. Installation imports only missing definitions, so a change reaches existing sites in one of two ways:
+The `Schema/` folder of each package is the only source of its element types, data types and document types. Change a definition there. A new site installs every definition through Umbraco's package importer, which a package migration starts.
 
-- **A migration step**, for a change a released version carries to every site. Each package has an Umbraco package migration plan (`AppBlocksMigrationPlan`, `InteractiveReportsMigrationPlan`, `DocumentsMigrationPlan`), and Umbraco runs the steps a site has not reached during startup, recording the last one in its key-value store under the plan's name. A step is a class deriving from `AsyncMigrationBase` that takes the Umbraco services it needs in its constructor and changes the definition, or rewrites block values, through them. Add it after the last step in `DefinePlan` as `To<TheStep>("yyyy-MM-dd-what-it-does")`, and never reorder, rename or remove a step once a site may have run it. A fresh site runs every step. Steps before `InstallPackageDefinitions` must tolerate absent definitions; later steps run after missing definitions have been imported. All schema steps respect `Umbraco:CMS:PackageMigration:RunSchemaAndContentMigrations=false`, including explicit calls to `EnsureAsync`. No application-started handler bypasses that setting. `Reinstall` is an explicit administrator operation and can restore definitions even when automatic schema migrations are disabled. The first step, `AddDataSourceBackingClass`, adds the SQL data source's **Backing class** property and the data type its picker needs to a site that has the type without them, reading both from the schema files, and is the example to follow. Schema steps take Umbraco’s key-value write lock before reading, because even a step with no schema changes writes its migration state on completion. This avoids upgrading a SQLite read transaction while other startup activity is writing.
-- **Reinstall**, from **Settings → AppBlocks → Definitions**, for a change no step carries, and during development after editing a schema file. It resets every definition to the package in place, by key: names, properties, allowed children, data type settings and folders, in one transaction. Content keeps its values, since each property is matched by alias and kept, except the values of a property the package no longer has; a type of the site's own that took one of the aliases is left alone, and the screen says so. **Uninstall** on the same screen removes every definition and the folders they leave empty, refuses while documents, library elements, block configurations, compositions or saved block values still reference the definitions, or a host-owned property uses one of the data types, naming what to remove first, and stops startup from installing them again until Reinstall.
+Installation imports only the definitions a site lacks. A change to a definition reaches an existing site in one of two ways.
 
-Definitions keep their keys across versions because the keys are derived, by `AppBlockSchema.Key`, from names and a fixed seed. Changing the seed changes every key, which no step carries; [Renamed identifiers](renamed-identifiers.md#definition-keys) describes what that means for an existing site.
+### A migration step
 
-When a release does change a definition, write the step and check it the way the clean-install test will: install the previous package, start the new one, and compare the result with a fresh install of the new one, definition by definition.
+Use a step for a change that a released version carries to every site. Each package has an Umbraco package migration plan: `AppBlocksMigrationPlan`, `InteractiveReportsMigrationPlan` and `DocumentsMigrationPlan`. At startup Umbraco runs the steps a site has not reached and records the last one in its key-value table under the plan's name. A new site runs every step.
 
-A site importing definitions before Umbraco’s package migration runner may call `SchemaInstaller.EnsureAsync` from a service scope before that import. It is safe to repeat and respects the schema migration setting. Native package import handles creation and the package keeps custom reset logic because a reset removes extra properties and restores current settings, whereas normal package import merges types and preserves existing data-type configuration. A host that imports these definitions through a synchronization tool of its own, and changes some of them on purpose, gets them reset to the package's by a Reinstall until its next import.
+- A step is a class deriving from `AsyncMigrationBase`. It takes the Umbraco services it needs in its constructor and changes the definition, or rewrites block values, through them. `AddDataSourceBackingClass` is the example to follow.
+- Add the step after the last one in `DefinePlan`, as `To<TheStep>("yyyy-MM-dd-what-it-does")`. Once a site may have run a step, keep its name and its place in the plan.
+- A step before `InstallPackageDefinitions` runs before the definitions exist on a new site, so it must accept that. Later steps run after the missing definitions are imported.
+- Every schema step follows `Umbraco:CMS:PackageMigration:RunSchemaAndContentMigrations`. When the setting is `false`, the steps change nothing.
+- A schema step takes Umbraco's key-value write lock before it reads. Each step writes its migration state when it completes, and taking the lock first avoids upgrading a SQLite read transaction while other startup work is writing.
 
-## Backoffice and published lookups
+Check a new step as the clean-install test does: install the previous package, start the new one, and compare each definition with a new install of the new package.
 
-Settings tabs are `workspaceView` manifests conditioned on `AppBlocks.Workspace`; companions register their own views. Management requests use `umbHttpClient`, so authentication refresh, interceptors and the application base URL remain Umbraco’s responsibility. A link into a backoffice section starts from `backofficePath`, exported by `App_Plugins/AppBlocks/api.js`: the path base and the backoffice's own first segment, read from the address it runs at. Picker catalogues are shared through a repository for 30 seconds per auth context, and failed loads can be retried.
+### Reinstall
 
-`AppBlockContent.PageAsync`, `ReportAsync` and `FormDefinition.ResolveAsync` await published-content lookups. Call `LoadAsync` on a catalogue, resource registry, schedule source collection or `AppBlocksValidator` before using its synchronous snapshot or validation methods. Normal controllers, publishing notifications and rendering paths do this themselves; code-only resource lookups need no catalogue. Providers may implement `IFormResourceProvider.GetResourcesAsync` while existing in-memory providers keep their enumerable contract.
+**Settings → AppBlocks → Definitions → Reinstall** resets every definition to the installed package, by key, in one transaction: names, properties, allowed children, data type settings and folders. Use it for a change that no step carries, and during development after editing a schema file.
 
-Saved block envelopes and layouts are read through Umbraco’s Grid, List and Single Block converters. AppBlocks retains its own rules for bindings, ownership and placement. Form Interface uses the native Single Block editor and resolves to one `BlockListItem`; the form’s fields remain in their Block Grid areas. The `UseSingleBlockFormInterface` package migration updates only the package’s Form Interface data type, keeping its key and property references. This is a breaking change for saved development content: recreate existing Form Interface values and republish their pages, or regenerate the disposable sample pages. Old Block List values, including historical versions, are not converted or supported by a fallback reader. Restoring an old version therefore requires recreating its Form Interface too. Host-owned Block List data types are unchanged.
+- Content keeps its values, because each property is matched by alias. Values of a property the package no longer has are removed.
+- A type of the site's own that has taken one of the package's aliases is left as it is, and the screen says so.
+- Reinstall works when automatic schema migrations are turned off, because an administrator starts it.
+- A site that imports these definitions through a synchronization tool, and changes some of them on purpose, gets them reset by a Reinstall until its next import.
+
+**Uninstall** on the same screen removes every definition and the folders it leaves empty. It refuses while documents, library elements, block configurations, compositions or saved block values still use a definition, or while a property of the site uses one of the data types, and names what to remove first. After an Uninstall, startup leaves the definitions out until someone chooses Reinstall.
+
+### Definition keys
+
+`AppBlockSchema.Key` derives each definition's key from its name and a fixed seed, so a definition keeps its key across versions. Changing the seed changes every key, and no migration step can carry that change to an existing site.
+
+A site that imports definitions before Umbraco's package migrations run can call `SchemaInstaller.EnsureAsync` from a service scope first. The call is safe to repeat and follows the schema migration setting.

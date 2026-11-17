@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { chromium } = require('playwright');
 const styles = await readFile(resolve(root, 'src/AppBlocks/wwwroot/App_Plugins/ApplicationBlocks/runtime.css'), 'utf8');
 let browser;

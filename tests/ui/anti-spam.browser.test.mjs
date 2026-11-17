@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 // verification services. Only the third-party scripts are faked here, so nothing reaches the network. Set APPBLOCKS_ANTISPAM_REAL=1
 // to also load the real widgets with the test site keys each service publishes, and verify them for real.
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { chromium } = require('playwright');
 const pluginRoot = resolve(root, 'src/AppBlocks/wwwroot');
 const assets = resolve(process.env.UMBRACO_ASSETS || resolve(process.env.USERPROFILE || process.env.HOME, '.nuget/packages/umbraco.cms.staticassets/18.3.0/staticwebassets'), 'umbraco/backoffice');

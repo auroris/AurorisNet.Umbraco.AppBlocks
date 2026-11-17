@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [int] $Port = 5189,
-    [string] $InteractiveReportsRoot = (Join-Path $PSScriptRoot '../../../Interactive-Reports'),
+    [string] $InteractiveReportsRoot = (Join-Path $PSScriptRoot '../../../AurorisNet.InteractiveReports'),
     [string] $PressroomRoot = (Join-Path $PSScriptRoot '../../../Pressroom')
 )
 $ErrorActionPreference = 'Stop'
@@ -91,7 +91,7 @@ try {
             Invoke-Checked "new-$mode.log" { dotnet new umbraco -n CleanAppBlocks -o $site --package-management PerProject --development-database-type SQLite --friendly-name 'Clean install tester' --email clean@appblocks.test --password $password --telemetry-level Minimal --models-mode Nothing --no-restore }
         }
         @{ UnattendedUserName = 'Clean install tester'; UnattendedUserEmail = 'clean@appblocks.test'; UnattendedUserPassword = $password } | ConvertTo-Json | Set-Content (Join-Path $site 'test-account.json')
-        $packages = if ($mode -eq 'core') { @('AppBlocks') } else { @('AppBlocks.InteractiveReports', 'AppBlocks.Documents') }
+        $packages = if ($mode -eq 'core') { @('AurorisNet.Umbraco.AppBlocks') } else { @('AurorisNet.Umbraco.AppBlocks.InteractiveReports', 'AurorisNet.Umbraco.AppBlocks.Documents') }
         foreach ($package in $packages) {
             Invoke-Checked "add-$package.log" { dotnet add "$site/CleanAppBlocks.csproj" package $package --version $version --no-restore }
         }

@@ -1,6 +1,8 @@
 # Backing Classes
 
-**Settings → AppBlocks → Backing Classes** edits a folder of C# that the site compiles while it runs, the way Umbraco's development mode compiles Razor views. A class in the folder that implements one of AppBlocks' extension points is used beside the classes compiled into the site, without a build or a restart:
+**Settings → AppBlocks → Backing Classes** edits a folder of C# that a development site compiles while it runs, as Umbraco's development mode compiles Razor views. This page covers the folder, how it compiles, who may use the section and the wizard that writes a class for a table.
+
+A class in the folder that implements one of AppBlocks' extension points is used beside the classes compiled into the site, with no build and no restart:
 
 | Extension point | What it is for |
 | --- | --- |
@@ -9,21 +11,23 @@
 | `IDataSourcePolicy` | A rule every data source operation must pass |
 | `IBindVariableProvider` | Values for `:APP.name` |
 
-The [business rules guide](business-rules.md) describes each of them. The section adds nothing to what a class can do; it only changes where the class is compiled.
+The [business rules guide](business-rules.md) describes each of them. A class in the folder can do what a class compiled into the site can. Only the place it is compiled differs.
 
 ## The development-mode package
 
-AppBlocks never ships or references a compiler. It uses the one the site brings: `Umbraco.Cms.DevelopmentMode.Backoffice`, the package Umbraco uses for runtime Razor compilation and the InMemoryAuto models builder, depends on `Microsoft.CodeAnalysis.CSharp`. AppBlocks finds it by type name at runtime, as it finds the Npgsql and Oracle drivers.
+AppBlocks uses the C# compiler the site brings. `Umbraco.Cms.DevelopmentMode.Backoffice`, the package Umbraco uses for runtime Razor compilation and the InMemoryAuto models builder, depends on `Microsoft.CodeAnalysis.CSharp`. AppBlocks finds the compiler by type name at run time, as it finds the Npgsql and Oracle drivers.
 
 ```bash
 dotnet add package Umbraco.Cms.DevelopmentMode.Backoffice
 ```
 
-Umbraco's own runtime-mode validation refuses that package in Production mode, so code is compiled here only on development sites.
+Umbraco's runtime-mode validation refuses that package in Production mode, so the folder compiles on development sites only.
 
 ### Read-only without it
 
-Without the package, the section is read-only. It lists the folder and shows each file, but nothing can be created, saved, renamed or deleted, and a notice names the package to install. Nothing in the folder is compiled or used: a form or data source that names one of its classes is unavailable, as it is when a class compiled into the site is removed.
+Without the package, the section is read-only. It lists the folder and shows each file, and a notice names the package to install. Creating, saving, renaming and deleting are turned off.
+
+The folder is then left uncompiled. A form or data source that names one of its classes is unavailable, as it is when a class compiled into the site is removed.
 
 ## The folder
 
@@ -39,7 +43,7 @@ The folder is `AppBlocks/Code` under the site's content root. It may contain sub
 
 The MSBuild property is read by a build file in the AppBlocks package, which removes the folder from the site project's `Compile` items. The files are therefore never compiled into the site as well, and each class is only one type. A site that references AppBlocks as a project, as the demo does, imports `src/AppBlocks/buildTransitive/AppBlocks.targets` itself.
 
-The folder is created by the first file or folder saved in the section, not on startup. The section takes only paths inside it:
+The first file or folder saved in the section creates the folder. The section accepts paths inside the folder only:
 
 - A name is any the file system takes, in any language and with spaces inside it, such as `Réservations.cs` or `Order rules.cs`, up to 100 characters. It holds no control characters and none of `\ / : * ? " < > |`, does not start with a dot, does not start or end with a space or end with a dot, and is not a device name such as `CON`. The same rules hold on every server, so a folder copied between Windows and Linux keeps every file.
 - Files end in `.cs`. Other files in the folder are neither listed nor compiled.
@@ -81,9 +85,9 @@ The section appears to backoffice Users in the Administrators group and in any U
 { "AppBlocks": { "AdministratorGroups": [ "developers" ] } }
 ```
 
-This is the same administrator rule used by AppBlocks' other Settings screens and its data source and API endpoint previews. It delegates AppBlocks access without putting the User in Umbraco's Administrators group. Every endpoint checks the same rule, and also requires access to the Settings section. Editing still requires the development compilation setup described above. Every save, create, rename and delete is written to Umbraco's audit log with the entity type `AppBlocks C#` and the path.
+AppBlocks' other Settings screens and its data source and API endpoint **Test** actions use the same administrator rule. The setting gives a User AppBlocks access without membership of Umbraco's Administrators group.
 
-`AppBlocks:CodeEditorGroups` has been removed. Move any aliases from that setting into `AppBlocks:AdministratorGroups`; the old setting no longer grants access.
+Every endpoint of the section checks the rule and also requires access to the Settings section. Editing requires the development-mode package as well. Every save, create, rename and delete is written to Umbraco's audit log with the entity type `AppBlocks C#` and the path.
 
 ## Security
 
@@ -133,4 +137,4 @@ The data source checks its own Access, groups and allow flags before it asks a b
 - Static state starts again with each compilation, because each compilation's types are new types.
 - Only the four extension points above are read from the folder. Other services, such as an `IProtectedPageAdmission`, still belong in the site's project.
 - The wizard writes a class once. It never changes a file again, and a table that changes needs its class changed by hand.
-- The downloadable sample on **Settings → AppBlocks → Forms** is still an example AppBlocks never compiles or runs, whether or not the section is available.
+- The downloadable sample on **Settings → AppBlocks → Forms** is an example to copy into your own code. AppBlocks itself never compiles or runs the sample.

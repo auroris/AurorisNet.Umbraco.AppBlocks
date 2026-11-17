@@ -1,95 +1,38 @@
-# AppBlocks.InteractiveReports
+# AppBlocks Interactive Reports
 
-Optional Interactive Reports companion for **AppBlocks** on Umbraco 18.3 / .NET 10. This package requires AppBlocks; NuGet installs that dependency automatically.
+`AurorisNet.Umbraco.AppBlocks.InteractiveReports` adds an **Interactive Report** block to [AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks) on Umbraco. An editor picks a table or writes a SELECT, and readers search, filter, sort, chart, save views and download the result.
+
+## Install
+
+The package depends on `AurorisNet.Umbraco.AppBlocks`, which NuGet installs with it. It is an alpha and is not on nuget.org yet. The [repository README](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks#install) describes how to reference it until it is.
 
 ```powershell
 dotnet add package AurorisNet.Umbraco.AppBlocks.InteractiveReports --version 0.1.0-alpha.1
 ```
 
-This is an unpublished alpha. Use the locally built packages until a public release is available.
+The package registers itself through an Umbraco composer. When the site restarts, it installs the report element type and data types beside AppBlocks' own.
 
-The Umbraco composer registers the companion automatically. On startup, AppBlocks installs its missing report element and data type definitions alongside the base schema, and the companion lets report definition nodes sit under the Data sources root. Add **Interactive Report** to an existing Block Grid or Block List, choose **Table** or **SQL query**, and configure the block's starting view. The site retains its page types, templates and layout.
+## Use
 
-The table dropdown lists tables and views from **Settings → AppBlocks → Connections** as `DataSourceName.TableName`, including schema names where needed. SQL mode selects a configured data source and accepts a SELECT query, with optional `:PARAM.name` and signed-in user bind variables such as `:USER_KEY`. Connection credentials stay in AppBlocks configuration. The source and starting view are saved directly on the block; no configuration content nodes are required. Administrators can preview an unpublished source to configure its view; previews are private to their creator and expire after ten minutes.
+1. Add **Interactive Report** to the allowed blocks of a Block Grid or Block List.
+2. Add the block to a page and choose **Table** or **SQL query**. Tables come from the connections under **Settings → AppBlocks → Connections**.
+3. Configure the block's starting view.
 
-The companion supplies the report block, native rendering partials, report editors, browser runtime, JSON and download endpoints, saved views, authorization and optional backoffice reports. AppBlocks supplies connections, data sources, forms and page access. Installing AppBlocks alone adds no Interactive Reports dependency, endpoints or report schema.
+**A report on a page without Public Access is public, export included.** Protect the page when its rows are not for everyone.
 
-A report on an unprotected page is public, including export. On a page with no Public Access of its own or inherited, an anonymous visitor can view, query and download a report block, with no site setting to turn this on, so protect the page if its rows are not for everyone. Saved views are hidden from such a visitor, because they have no owner, and printing through Documents is not offered. A custom `IReportAccessPolicy` or data source policy that refuses them gets the same sign-in notice in place of the report. A report whose SQL uses a `:USER_` bind variable is never run for them: the page shows a sign-in notice and the endpoints answer 401. Reports that are not blocks, such as report definition nodes and configured reports, keep requiring an account. A report definition node's **Access** tab narrows that: **Signed-in accounts**, the default and the meaning of an empty value, admits any signed-in Member or backoffice User, and **Specific groups** admits the Members of the Member groups picked in **Access groups**. Report administrators keep their access, and an authorization policy named in the report's options still applies. A site installed before the choice existed gets the properties at startup from the package migration step `2026-11-08-report-definition-access`, with every node left at Signed-in accounts. A custom `IReportAccessPolicy` or `IDataSourcePolicy` can refuse anonymous visitors; a replacement policy that wants the standard rule calls `AnonymousReportAccess.Allows`.
+## Settings
 
-Report requests use AppBlocks page access and registered data-source policies. The endpoints are `/api/reports`, `/api/download`, `/umbraco/reports` and `/umbraco/report-download`. These routes stay under `/api` whatever `AppBlocks:ApiRoot` says, which moves only the base package's own endpoints. Record-level print actions use AppBlocks' optional document-link capability when installed. Forms select registered C# classes or published data sources; the table/SQL editor belongs to reports.
+| Setting | Default | What it does |
+|---|---|---|
+| `AppBlocks:ReportAdministratorGroups` | none | Backoffice User Group aliases that grant report administration, beside `admin` and `interactiveReportsAdministrator` |
+| `AppBlocks:IncludeBackOfficeReports` | `false` | Turns on the optional backoffice reports |
+| `AppBlocks:InteractiveReports:PaperSizes` | `A4`, `Letter`, `Legal` | The paper sizes the Print dialog offers |
+| `InteractiveReport:SavedReports:Connection` | `AppBlocksDb` | The connection that stores saved views |
 
-A report block with a **Form page** links its rows to that page. The **Open link** on each row opens the page with the row's **Record key column** value in the query parameter, `id` unless **Record key query parameter** names another. The **Create button** above the report opens the page for a new record. Each has its own setting for who sees it: **Public**, everyone the report's page admits; **Form page decides**, the default and also the meaning of a block saved with no value; **Groups**, those in a backoffice user group or member group picked under the setting; or **Hidden**, nobody. Every Open link choice but Hidden needs the record key column, and Groups needs at least one group. **Open label** and **Create label** name the link and the button; left blank, the report's own labels apply. The backoffice group pickers store group aliases separated by commas, and membership is checked against the caller as AppBlocks resolves them for data sources, Member and backoffice User alike. A block saved with the earlier single **Record links** choice is moved to these settings by the package migration: **Create only** hides the Open link, **Open only** hides the Create button, **None** hides both, and the rest is left at Form page decides. A published block whose Open link needs a key column it lacks offers no Open link, and the log says so once.
+## Documentation
 
-With **Form page decides**, the create button appears for a caller the form page lets add a record, and the open link for one it lets change records, worked out for each request as that caller. A form whose Form Interface selects a SQL data source decides from the data source's **Allow insert** or **Allow update**, its write groups, its anonymous-writes setting and any `:USER_` binding in its writes. A form whose Form Interface is marked **Read only** offers neither. A C# form class is asked through its `InitializeAsync` for that caller, with no query parameters. The button shows when the new record it returns allows `Create`. The link shows whenever it answers with a record at all, because that new record says nothing about changing an existing one: the class decides that for each record as it loads, allowing or refusing the edit there. A class that refuses the caller hides both, and a class that throws keeps them. On a page with several forms, one that allows it is enough, and a page whose forms do not resolve keeps the link. Registered `IDataSourcePolicy` rules and a data source's backing class decide at the write itself, so a caller only they refuse sees the link and the form then refuses the save. The form endpoints check every write, so these settings are a convenience for readers and the form remains the rule.
+The [Interactive Reports guide](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/interactive-reports.md) covers report access, links to form pages, saved views, downloads, printing and administration. The [repository README](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks#readme) lists the other guides.
 
-A saved view belongs to one identity: the Member when a Member is signed in, otherwise the backoffice User. The website routes carry both sessions, Member first, so someone signed in to both saves and owns views as the Member there. The backoffice routes authenticate only the backoffice User, so views saved there belong to the User. A report block's page access still applies on those routes: the page resolves its user from every session on the request, the Member cookie included, and admits the backoffice caller when the User is among the identities it resolved. The owner key is read through `InteractiveReport:IdentityClaim` when the site sets it, as the engine stores owners, and the default `IReportAccessPolicy` compares owners the same way.
+## License
 
-**Actions → Download → HTML** downloads the same self-contained HTML that the default print preview prepares for Documents/Pressroom, using all matching rows, A4 portrait, and the current report's filters, columns, labels, masks, sorting and totals. Documents and Pressroom configurations are not required: the original `InteractiveReport.Client.FileDownload` package generates the HTML, and the companion reuses its `HtmlReportPresentation` renderer for printing. Like CSV, HTML follows the `download` control and server export authorization. The file is served as an attachment by `POST /api/download/{name}/html` (also `/umbraco/report-download/{name}/html`), and never submits a print job. Truncated or oversized results return an error instead of an incomplete file. CSV remains available alongside HTML.
-
-**Actions → Print** uses the optional `AppBlocks.DocumentOutput.IDocumentOutputService` contract in the base AppBlocks assembly. Install `AppBlocks.Documents` and add Pressroom configurations in its backoffice settings. The menu is absent when the service is missing or there are no configured PDF/printer destinations; it also follows the report's `download` control and export authorization. InteractiveReports has no package dependency on Documents or Pressroom and never handles Pressroom URLs, API keys, or printer discovery.
-
-The dialog offers the configured destinations, all matching rows (default) or the current page, paper size, orientation, and a preview. The paper sizes are A4, Letter and Legal, the first chosen to start with, unless `AppBlocks:InteractiveReports:PaperSizes` lists others, in order, from `Letter`, `Legal`, `Tabloid`, `A3`, `A4` and `A5`; a print request may name any of those six. The dialog takes its colours, borders and radii from the blocks' `--app-` tokens. The document is formatted in the culture of the request that prepared the preview and the web server's time zone. It prints the authorized server query's columns, labels, masks, filtering, sorting, grouped/pivot rows, breaks and totals. Charts print their underlying data table; interactive renderers become text. The current-page footer identifies aggregates that cover all matching rows. Export limits produce an error rather than silently printing an incomplete report.
-
-The host endpoints are `GET /api/reports/{name}/print/options`, `POST …/preview`, and `POST …/submit`; the POSTs require the antiforgery token returned by options. Preview stores a bounded, five-minute HTML snapshot bound to the user, report, and page query. Submit rechecks export access and data before consuming the token once and calling Documents. Changed data or destinations require a new preview. Tokens live in a bounded memory cache, so multi-instance sites need session affinity for this flow; eviction or restart requires another preview. No client-supplied HTML or report rows are submitted to Documents.
-
-PDF destinations download a file; Documents' HTML fallback is clearly identified. Printer destinations return a submission receipt, which does not confirm physical printing. Neither browser nor server automatically retries printing, including uncertain failures. Existing record-level paper-document links remain separate from printing the current interactive report.
-
-Print validation:
-
-```powershell
-dotnet run --project tests/AppBlocks.InteractiveReports.Tests -c Release -- -noLogo -class '*ReportPrintTests'
-node --test tests/ui/report-print.browser.test.mjs
-```
-
-Browser tests use the sibling Interactive-Reports checkout's Playwright dependency and built client. Set `INTERACTIVE_REPORTS_ROOT` for another checkout and `BROWSER_PATH` for an installed Chromium browser when Playwright's browser is unavailable.
-
-The companion uses the same business connections as AppBlocks.
-
-**Oracle 11.2** and **Oracle 12+** select Interactive Reports' Oracle SQL compatibility modes. AppBlocks shares this selection across forms and report blocks: Oracle 11.2 mode maps to the `Oracle11g` dialect (including legacy paging), and Oracle 12+ mode maps to the `Oracle` dialect with automatic detection of pre-12 servers. Both modes use the site's `Oracle.ManagedDataAccess.Core` package, which AppBlocks does not ship; see the [base guide](../../docs/connections.md#database-drivers) for the driver each database needs and for configuration.
-
-The built-in `AppBlocksDb` connection is the default for application data and saved report views. It opens `AppBlocks.sqlite.db` beside Umbraco's SQLite database and also stores uploads by default. Prefer it for application forms and reports, so their writes do not compete with CMS saves in Umbraco's SQLite file. Business tables are supplied by the site; the report store creates its own tables on first use. `UmbracoDb` remains available for reports that specifically need CMS data.
-
-To store saved views elsewhere, set `InteractiveReport:SavedReports:Connection` to a registered connection, or `InteractiveReport:SavedReports:DataSource` to a configured connection-string name. These explicit settings take precedence over `AppBlocksDb`. To override the shared default database itself, configure `ConnectionStrings:AppBlocksDb` and `ConnectionStrings:AppBlocksDb_ProviderName`. See the [base guide](../../docs/connections.md) for file locations and separate upload storage.
-
-## Database setup
-
-Saved views use `IR_SAVED_REPORTS` on the connection above. The saved report administration page at `/api/reports/admin` also reads `IR_ADMINISTRATORS`, although AppBlocks decides who is an administrator itself, so nothing a reader does needs that table. Where the account may, the report store creates them on first use, including on Oracle 11.2 a sequence and a trigger behind the key.
-
-Where it may not, **Settings → AppBlocks → Database setup** shows both remedies for that database type: the permission to grant, or a script to run. The script comes from the report stores' own statements, and it works for an account with no DDL rights at all. It needs read and write on the tables, which it grants on SQL Server and PostgreSQL. On PostgreSQL and Oracle an account with no DDL rights is refused the store's DDL even when the objects already exist, so the store then checks that it can read the table and carries on. Setting `InteractiveReport:SavedReports:AutoCreate` to `false` stops it trying at all. Either remedy takes effect on the next request, with no restart. The [base guide](../../docs/database-setup.md) has the permissions for each database type.
-
-Until then, reports do not depend on it. They load, query and export on their own starting view, saving is out of their features, so the **Report** actions and the saved-view selector are absent, and readers see no error. The reason is logged once, with what to do, and a backoffice administrator also sees a line on the block linking to the setup screen. The administration page itself keeps reporting failures, for administrators alone, because it exists to manage those rows. A site that replaces `ISavedReportStore` with its own answers for that store's storage, and the screen says so.
-
-For an additional business connection:
-
-```csharp
-using AppBlocks;
-
-umbraco.AddAppBlocks(connections =>
-    connections.AddConnection("Business", services => new SqlConnection(connectionString)));
-```
-
-For report-specific customization:
-
-```csharp
-using AppBlocks.InteractiveReports;
-
-umbraco.AddAppBlocksInteractiveReports(reports =>
-{
-    // Interactive Reports authorization, row restrictions, context parameters or logging.
-});
-```
-
-Both registration calls are idempotent. Connections added to `AddAppBlocks` before or after the companion are available to reports, appear read-only in Settings → AppBlocks → Connections, and can be chosen by a report block. A connection added directly to the report builder is available to configured reports, report definition nodes and forms, but it is not listed and a report block refuses it, so register a site's connections with `AddAppBlocks`. Move existing `AddAppBlocks(Action<InteractiveReportBuilder>)` callbacks to `AddAppBlocksInteractiveReports` when upgrading; ordinary connection-only callbacks stay with `AddAppBlocks(Action<AppBlocksBuilder>)`. `ReportApplicationDatabases` is gone: `AddApplicationDatabase` is on `AppBlocksBuilder`. To hand a builder's connections to a report engine composed without the companion, call `reports.AddConnectionsFrom(connections)`.
-
-**Settings → AppBlocks → Interactive Reports** appears under the AppBlocks header in the Settings sidebar, alongside AppBlocks and Backing Classes. It lists public and private saved reports and lets administrators reassign ownership, delete user-created reports and create new public reports from configured reports, published report definitions or published report blocks. Ownership and deletion operate on saved-report metadata, including reports whose source page is protected or has been removed. Viewing report data and creating public reports remain subject to the source's page and data access rules. Configured report documents remain read-only. Owner choices search backoffice users and members, with account identity entry also available. Concurrent changes require refreshing before retrying.
-
-The companion creates no backoffice User Groups and grants no section access at startup. The default report policy recognizes the **Administrators** group (`admin`) and, if the host creates it, **Interactive Reports Administrator** (`interactiveReportsAdministrator`). Either group is sufficient. Hosts manage groups, Settings section access and memberships through Umbraco's Users section. Existing groups and memberships are preserved. The `AppBlocks:ReportAdministratorGroups` setting accepts additional backoffice User Group aliases and defaults to an empty list. A developer can replace `IReportAccessPolicy` with the application's rules. Member groups never grant report administration. `AppBlocks:IncludeBackOfficeReports`, or `AppBlocksOptions.IncludeBackOfficeReports` set through `Configure<AppBlocksOptions>`, enables the optional backoffice reports. Configured report definitions remain in the `InteractiveReport` configuration section. Report definition APIs live in `PublishedReportCatalog`; the base `PublishedDataCatalog` supplies sources and lists of values.
-
-Build from the repository root:
-
-```powershell
-dotnet pack src/AppBlocks.InteractiveReports -c Release -o artifacts/packages
-dotnet run --project tests/AppBlocks.InteractiveReports.Tests -- -noLogo
-```
-
-Builds use the `AurorisNet.InteractiveReports`, `AurorisNet.InteractiveReports.AspNetCore` and `AurorisNet.InteractiveReports.Client.FileDownload` NuGet packages at version 1.0.2, including the browser assets. For source development, set `UseInteractiveReportsSource=true`; the checkout defaults to `../Interactive-Reports`, overridable with `InteractiveReportsRoot`. The core AppBlocks project builds independently of these packages and that checkout.
+[MIT](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/LICENSE)

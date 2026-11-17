@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const site = resolve(process.env.APPBLOCKS_CLEAN_SITE || resolve(root, 'artifacts/clean-install/site'));
 const url = process.env.APPBLOCKS_CLEAN_URL || 'http://localhost:5187';
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(url).hostname), 'Use a disposable local site.');
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { request, chromium } = require('playwright');
 const settings = JSON.parse(await readFile(resolve(site, 'appsettings.Development.json'), 'utf8'));
 const unattended = existsSync(resolve(site, 'test-account.json'))

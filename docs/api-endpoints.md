@@ -1,10 +1,12 @@
 # API endpoints
 
-An **API endpoint** serves a SQL data source's rows as JSON over GET, at a route the editor defines. The route is a URL template whose parameters bind into the query. Endpoints read; writes stay with forms, tabular forms and their data sources.
+An **API endpoint** serves a SQL data source's rows as JSON over GET, at a route the editor defines. The route is a URL template whose parameters bind into the query. Endpoints read only. Forms and tabular forms do the writing.
 
 ## Creating one
 
-Create an **API endpoint** and publish it. Where it sits in the content tree is up to you: under a **Data sources** root beside the sources it reads, or under an **API endpoints** root at the top of the tree that keeps them together; a site can also allow the type under document types of its own. AppBlocks serves every published endpoint whose ancestors are published, wherever it is, and its position never changes its URL, which comes from its **Route**. Its properties:
+Create an **API endpoint** content node and publish it. It can sit under a **Data sources** root beside the sources it reads, or under an **API endpoints** root at the top of the content tree. A site can also allow the type under document types of its own.
+
+AppBlocks serves every published endpoint whose ancestors are published. The endpoint's URL comes from its **Route**, whatever its position in the tree. Its properties:
 
 | Property | What it does |
 | --- | --- |
@@ -18,13 +20,29 @@ Create an **API endpoint** and publish it. Where it sits in the content tree is 
 | **Maximum rows** | The most rows a collection returns; 1000 by default. |
 | **Access**, **Read groups**, **Row restriction** | Only with the endpoint's own SQL, on the Access tab, with the same choices and checks as a SQL data source. |
 
-**Test** calls the endpoint as you, signed in to the backoffice, with sample values for its route and query parameters, and shows the status and JSON it answers. It uses your current edits; nothing is saved or published. Testing requires Umbraco's Administrators group or a group listed in `AppBlocks:AdministratorGroups`, as well as Content section access and permission to edit the node (or create under its parent for an unsaved node). Anyone else sees a note saying so in place of the Test button.
+### Testing
 
-Publishing checks the endpoint as a request would read it, against its source's schema: the route must be well formed and answer no request another published endpoint answers, Order by must name columns of the source, and every `:PARAM.` the SQL uses must be a route parameter or listed under **Query parameters**, so a typo is refused rather than bound as NULL. With a data source selected, the endpoint's own connection, SQL, access, read groups and row restriction must stay empty.
+**Test** calls the endpoint as you, signed in to the backoffice, with sample values for its route and query parameters. It shows the status and the JSON the endpoint answers. It uses your current edits and saves or publishes nothing.
+
+Testing requires Umbraco's Administrators group or a group listed in `AppBlocks:AdministratorGroups`. It also requires Content section access and permission to update the node, or to create under the parent of an unsaved node. Anyone else sees a note in place of the Test button.
+
+### Publishing checks
+
+Publishing checks the endpoint as a request would read it, against its source's schema:
+
+- The route must be well formed, and no other published endpoint may answer the same requests.
+- **Order by** must name columns of the source.
+- Every `:PARAM.` the SQL uses must be a route parameter or listed under **Query parameters**. A misspelt name is refused at publishing, where it would otherwise bind NULL.
+- With a data source selected, the endpoint's own connection, SQL, access, read groups and row restriction must stay empty.
 
 ## Routes and parameters
 
-A route has up to eight segments separated by `/`, or as many as `AppBlocks:ApiEndpoints:MaxRouteSegments` allows. Each is a literal, of letters, digits, `-`, `.`, `_` and `~`, or a parameter, a colon and a name: `:id`. There are no empty segments, no `.` or `..`, and no query string. Literals match ignoring case. Two routes that would match the same requests, such as `orders/:id` and `orders/:key`, cannot both be published.
+A route has up to eight segments separated by `/`, or as many as `AppBlocks:ApiEndpoints:MaxRouteSegments` allows. Each segment is one of two kinds:
+
+- A literal of letters, digits, `-`, `.`, `_` and `~`. Literals match ignoring case.
+- A parameter: a colon and a name, such as `:id`.
+
+A route has no empty segments, no `.` or `..` segments and no query string. Two routes that would match the same requests, such as `orders/:id` and `orders/:key`, cannot both be published.
 
 When several routes match a request, the one with more literal segments wins, and then the one whose first literal comes earlier: `orders/latest` answers before `orders/:id`, and `orders/:id` before `:kind/latest`.
 
@@ -47,7 +65,9 @@ An endpoint has no page, so Umbraco Public Access does not apply to it. The read
 - **Specific groups**: Members of the read or write groups.
 - The row restriction, every registered `IDataSourcePolicy` and the backing class's `QueryAsync` apply. A policy sees `DataSourceAction.Query`, and a context whose page and form keys are `Guid.Empty`, with the bound parameters.
 
-The caller is the signed-in Member and backoffice User, as for the blocks' endpoints; a cookie for a disabled or locked-out account stays refused. A refused request is 401 for a caller without an account and 403 for a signed-in one. Public on an endpoint means public to the internet: choose it only for data you would put on a public page.
+The caller is the signed-in Member and backoffice User, as for the blocks' endpoints. A cookie for a disabled or locked-out account is refused. A refused request is 401 for a caller without an account and 403 for a signed-in one.
+
+**Public on an endpoint means public to the internet.** Choose it only for data you would put on a public page.
 
 ## Answering from code
 
@@ -79,7 +99,7 @@ Every answer is `application/json; charset=utf-8` with `Cache-Control: no-store`
 - **Single**: the first row as one object, in Order by's order when it is set, and 404 when there is none. A second row is no error.
 - **Errors**: `{ "status": 404, "title": "Not Found" }` and the like, with no SQL, column names or connection details; those go to the log.
 
-There is no paging. A collection returns every row up to **Maximum rows**, and a larger result is a 500 logged with its reason, never a silently shorter list: narrow the query or raise the limit. An unknown route is 404, and any method but GET is 405 with `Allow: GET`.
+A collection returns every row up to **Maximum rows**, with no paging. A larger result is a 500, logged with its reason: narrow the query or raise the limit. An unknown route is 404, and any method except GET is 405 with `Allow: GET`.
 
 ## Base path
 

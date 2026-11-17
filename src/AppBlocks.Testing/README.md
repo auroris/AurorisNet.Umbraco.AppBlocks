@@ -1,22 +1,30 @@
-# AppBlocks Testing for Umbraco
+# AppBlocks Testing
 
-`AurorisNet.Umbraco.AppBlocks.Testing` drives a running site's AppBlocks endpoints over HTTP the way the browser runtime does, so a test can load, create, update and delete form records, upload attachments, save tabular rows and read reports. It also holds the helpers a test process needs to run Umbraco: single-server registration, a wait for the unattended install, and resets for the static state Umbraco keeps between sites.
+`AurorisNet.Umbraco.AppBlocks.Testing` drives the [AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks) endpoints of a running site over HTTP, as the browser runtime does. A test can load, create, update and delete form records, upload attachments, save tabular rows and read reports. The package also has helpers for running Umbraco in a test process.
 
-The package references no test framework. A call that cannot be made, such as a write before the load that supplies its antiforgery token, throws `TestSiteException` with what was observed. It is proven with xUnit v2 and v3.
+## Install
+
+Add the package to the site's test project. It depends on `AurorisNet.Umbraco.AppBlocks`, so use the version that matches the site's AppBlocks version. It is an alpha and is not on nuget.org yet. The [repository README](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks#install) describes how to reference it until it is.
+
+```powershell
+dotnet add package AurorisNet.Umbraco.AppBlocks.Testing --version 0.1.0-alpha.1
+```
+
+The package references no test framework. A call that cannot be made, such as a write before the load that supplies its antiforgery token, throws `TestSiteException` with what was observed.
 
 ## Clients
 
-Each client takes an `HttpClient` that keeps cookies, the site's virtual path (empty at the root), and the keys of the page and block it drives.
+Each client takes an `HttpClient` that keeps cookies and the site's virtual path, which is empty at the root. The form, attachment and tabular clients also take the keys of the page and the block they drive.
 
-| Client | Endpoint | What it does |
+| Client | Endpoint | Methods |
 |---|---|---|
-| `FormsClient` | `/api/forms/{page}/{form}` | `LoadAsync`, `CreateAsync`, `UpdateAsync`, `DeleteAsync`; answers are `FormResponse` with `RecordKey`, `RecordChecksum`, `Values` and `Errors` |
+| `FormsClient` | `/api/forms/{page}/{form}` | `LoadAsync`, `CreateAsync`, `UpdateAsync`, `DeleteAsync`. Answers are a `FormResponse` with `RecordKey`, `RecordChecksum`, `Values` and `Errors` |
 | `AttachmentsClient` | `/api/attachments/{page}/{block}` | `ListAsync`, `UploadAsync` with an `AttachmentFile`, `RenameAsync`, `DownloadAsync`, `RemoveAsync` |
 | `TabularClient` | `/api/tabular/{page}/{block}` | `ListAsync`, and `SaveAsync` with a batch of `TabularChange` |
-| `ReportsClient` | `/api/reports`, `/api/download` | `SchemaAsync`, `RowsAsync`, `DownloadAsync` in a format such as `csv` |
-| `PaperReportsClient` | `/api/paper-reports/{node}` | `DownloadAsync` of a Paper report node (AppBlocks.Documents) |
+| `ReportsClient` | `/api/reports`, `/api/download` | `SchemaAsync`, `RowsAsync`, and `DownloadAsync` in a format such as `csv` |
+| `PaperReportsClient` | `/api/paper-reports/{node}` | `DownloadAsync` of a Document node of the Documents package |
 
-Load or list before the first write, and again wherever a browser would reload the page: the writes carry the antiforgery token and definition version the last load returned. Page parameters, such as the record key a block follows, go in the `query` argument of every call.
+Load or list before the first write, and again wherever a browser would reload the page. A write carries the antiforgery token and the definition version that the last load returned. Page parameters, such as the record key a block follows, go in the `query` argument of each call.
 
 ```csharp
 using AppBlocks.Testing;
@@ -29,14 +37,16 @@ var updated = await forms.UpdateAsync(created.RecordKey!, created.RecordChecksum
 
 ## Running Umbraco in a test process
 
-`UmbracoTestSupport` works with any way of booting the site:
+`UmbracoTestSupport` works with any way of starting the site:
 
 - `UseSingleServer(services)` replaces server election, whose writes can race a SQLite startup import.
-- `WaitForInstallAsync(services)` waits, after the host has started, for the unattended install or upgrade, then for `RuntimeLevel.Run` and content routing.
-- `ResetBackOfficePath()` and `ResetPublishedContentServices()` clear the static state Umbraco caches from the first site, so a later site in the same process starts clean. Run one site at a time.
+- `WaitForInstallAsync(services)` waits, after the host has started, for the unattended install or upgrade, and then for `RuntimeLevel.Run` and content routing.
+- `ResetBackOfficePath()` and `ResetPublishedContentServices()` clear static state that Umbraco keeps from the first site, so a later site in the same process starts clean. Run one site at a time.
 
-A test process that boots Umbraco needs its runner's assemblies excluded from Umbraco's type scan, as `Umbraco:CMS:TypeFinder:AdditionalAssemblyExclusionEntries` with `xunit.` does for xUnit.
+A test process that starts Umbraco must exclude its test runner's assemblies from Umbraco's type scan. For xUnit, add `xunit.` to `Umbraco:CMS:TypeFinder:AdditionalAssemblyExclusionEntries`.
 
-To boot a whole UmbracoAppHost site, use [AurorisNet.Umbraco.AppHost.Testing](https://github.com/auroris/UmbracoAppHost/blob/main/docs/getting-started.md#test-a-host), whose `TestSite` creates these clients for its own address and virtual path.
+To start a whole AppHost site, use [AurorisNet.Umbraco.AppHost.Testing](https://github.com/auroris/AurorisNet.Umbraco.AppHost/blob/main/docs/getting-started.md#test-a-host), whose `TestSite` creates these clients for its own address and virtual path.
 
-Use the version of this package that matches `AurorisNet.Umbraco.AppBlocks`; the package depends on that version.
+## License
+
+[MIT](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/LICENSE)

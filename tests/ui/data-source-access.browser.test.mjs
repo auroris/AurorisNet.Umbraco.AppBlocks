@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { chromium } = require('playwright');
 const plugin = resolve(root, 'src/AppBlocks/wwwroot/App_Plugins/DataSourceAuthoring');
 const sqlDataSource = '6a79805a-4170-811d-64a8-83ee1422bade';

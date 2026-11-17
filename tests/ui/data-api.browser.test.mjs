@@ -8,7 +8,7 @@ import { runtimeAsset } from './runtime-assets.mjs';
 
 // data-api.js on a page of a site served under the path base /site, against answers routed here as the endpoints give them.
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { chromium } = require('playwright');
 let browser, context, page;
 const requests = [];

@@ -1,10 +1,10 @@
 # Business rules for AppBlocks forms
 
-Generated form samples contain the fields and example database reads and writes for one form. These recipes cover behaviour shared by many forms. They are examples to adapt in your application; AppBlocks never executes a sample or a recipe. On a development site with `Umbraco.Cms.DevelopmentMode.Backoffice`, [Backing Classes](csharp-editor.md) compiles the classes saved in it, and its wizard writes a form class or backing class for a table with these checks in place.
+Who may read and change the data behind a form, a report or a file, and where to state each rule: on the page, on a SQL data source, or in C#. The recipes are examples to adapt in your application.
 
-The generated repository uses SQLite and a separate `SampleForm` table to keep the example easy to run. It does not assume your production database is SQLite. Dates and times in the example use ISO strings. Replace the example table and migrations when integrating it with your application's storage.
+**Settings → AppBlocks → Forms** offers a C# sample for each saved form, with its fields and example database reads and writes. AppBlocks never compiles or runs the sample. The sample stores its rows in a `SampleForm` table in SQLite, with dates and times as ISO strings, so replace the table with your application's storage. On a development site, the [Backing Classes](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/csharp-editor.md) wizard writes a form class or a backing class for a table with the checks of this guide in place.
 
-For application forms and reports, use the separate `AppBlocksDb` database rather than Umbraco's SQLite file. The default `AppBlocks.sqlite.db` sits beside Umbraco's database and holds application data, saved report views and uploads. This separates application writes from CMS saves. Choose another named connection when needed; `Attachments:Connection` can select a separate upload store, including the optional `AttachmentsDb`. The application owns its business tables and schema changes.
+Keep application data in the `AppBlocksDb` database, which is separate from Umbraco's. [Connections](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/connections.md) describes it and the upload store. The application owns its business tables and their schema changes.
 
 ## Where each rule belongs
 
@@ -26,7 +26,11 @@ The other layers are there for rules a page cannot express. Requests pass throug
 | `IAddOnlyAttachmentOwner` | Who may add files to a record without changing the ones there | C#, on your resource |
 | `IReportAccessPolicy` | What may be done with reports and saved views | C#, or `AppBlocks:ReportAdministratorGroups` |
 
-Two things apply to every layer. First, Umbraco's Public Access is the baseline, and there is no site setting beside it; the only exception is an `IProtectedPageAdmission` the host registers, which AppBlocks itself never does. A block under Public Access, the page's own or inherited from an ancestor, refuses whoever that rule refuses. On a page without it, an anonymous visitor reaches the block, and whatever is behind the block decides what they get. **A C# class with no check is public on an unprotected page**, because your code is trusted to know what it is doing. And AppBlocks recognizes only Umbraco's Member and backoffice sign-ins, so a caller authenticated another way, such as with a bearer token or an API key, is not recognized: they count as anonymous on an unprotected page and are refused under Public Access. To use another identity system, sign people in through it as Umbraco Members or Users.
+Two things apply to every layer.
+
+**Umbraco's Public Access is the baseline.** A block under Public Access, the page's own or inherited from an ancestor, refuses whoever that rule refuses. The one exception is an `IProtectedPageAdmission` that the site registers. On a page without Public Access, an anonymous visitor reaches the block, and whatever is behind the block decides what they get. **A C# class with no check is public on an unprotected page.**
+
+**AppBlocks recognizes Umbraco's Member and backoffice sign-ins only.** A caller authenticated another way, such as with a bearer token or an API key, counts as anonymous on an unprotected page and is refused under Public Access. To use another identity system, sign people in through it as Umbraco Members or Users.
 
 | Block on an unprotected page | What an anonymous visitor gets |
 | --- | --- |
@@ -69,7 +73,7 @@ public sealed class LeaveRequests(/* ... */) : FormResource<LeaveInput, LeaveInp
 }
 ```
 
-`RequireMember` is false unless a class sets it, which keeps an existing class's behaviour.
+`RequireMember` is false unless a class sets it.
 
 Member IDs and User IDs belong to different account stores. Use AppBlocks' resolver when you need a stable application key or current account information:
 
@@ -111,11 +115,16 @@ var canPublish = backOfficeUser?.CanPublishPage == true;
 var canDelete = backOfficeUser?.CanDeletePage == true;
 ```
 
-Both account objects also expose `Name` and `Sid`. For compatibility, the top-level `Key`, `Name`, `Email`, `Sid` and `Groups` use the Member when both are present, otherwise the only signed-in account. This also keeps `:USER_` bind variables, ownership and audit fields on the Member while both sessions are active. `MemberGroupNames` always describes the Member, and `UserGroupNames` and `UserGroupAliases` always describe the backoffice User; their groups are never merged. Each account's approval, lockout status and groups are read afresh on every operation. A disabled or locked account contributes no identity, groups or permissions.
+Both account objects also expose `Name` and `Sid`.
 
-The resolver accepts approved, unlocked Members and backoffice Users, regardless of group membership. `null` means there is no valid authenticated account. Resolving an account grants no business permission, and membership of the Administrators User Group grants no automatic application access.
+- The top-level `Key`, `Name`, `Email`, `Sid` and `Groups` describe the Member when both accounts are signed in, and otherwise the one signed-in account. `:USER_` bind variables, ownership and audit fields therefore stay on the Member while both sessions are active.
+- `MemberGroupNames` always describes the Member. `UserGroupNames` and `UserGroupAliases` always describe the backoffice User. The two sets of groups are kept separate, even when names match.
+- `Groups` holds display names. `UserGroupAliases` holds the current backoffice User Group aliases.
+- `Sid` is the provider key of an external login. On some sites it is a Windows SID, and on others it is another provider's key.
 
-The resolver reads the current account and groups rather than relying only on old cookie claims. An external login's provider key is available as `Sid` for compatibility; it is not necessarily a Windows SID on every site. `Groups` contains display names; `UserGroupAliases` contains current backoffice User Group aliases. Member Groups and User Groups are separate, even when their names match.
+The resolver reads each account's approval, lockout status and groups on every operation, so a change takes effect at once and old cookie claims are not relied on. A disabled or locked account contributes no identity, groups or permissions.
+
+The resolver accepts approved, unlocked Members and backoffice Users, whatever their groups. `null` means there is no valid authenticated account. Resolving an account grants no business permission, and membership of the Administrators User Group grants no application access by itself.
 
 `account.CanEditPage`, `account.CanPublishPage` and `account.CanDeletePage` check the signed-in backoffice User's permissions on the page that called your C# code, including when a Member is also signed in. Pass the whole `FormExecutionContext` to `ResolveAsync` as above: its `PageKey` identifies the hosting page, including for API requests. AppBlocks asks Umbraco for each permission independently, including group permissions and content start nodes:
 
@@ -125,7 +134,9 @@ The resolver reads the current account and groups rather than relying only on ol
 | `CanPublishPage` | Publish |
 | `CanDeletePage` | Delete |
 
-All three are false without a valid backoffice account, when no page is supplied (the older `ResolveAsync(context.Member, ...)` overload), or when the page does not exist. A denied permission makes its corresponding property false; permission to edit does not imply permission to publish or delete. These are permission checks, not guarantees that a particular content change will pass validation. The same properties are available on `account.BackOfficeUser`. In an `IDataSourcePolicy`, use `request.User.CanEditPage`, `request.User.CanPublishPage` or `request.User.CanDeletePage`; AppBlocks has already resolved them for `request.Context.PageKey`. The results grant no application permission unless your rule uses them:
+All three are false without a valid backoffice account, when no page is supplied (the `ResolveAsync(ClaimsPrincipal, ...)` overload), or when the page does not exist. Each permission is checked on its own, so permission to edit does not imply permission to publish or delete.
+
+The same properties are on `account.BackOfficeUser`. In an `IDataSourcePolicy`, use `request.User.CanEditPage`, `request.User.CanPublishPage` or `request.User.CanDeletePage`, which AppBlocks has resolved for `request.Context.PageKey`. The results grant an application permission only when your rule uses them:
 
 ```csharp
 var account = await userResolver.ResolveAsync(context, cancellationToken);
@@ -186,7 +197,11 @@ if (!canEdit)
 
 Avoid granting a Member access by comparing their email address with a backoffice User's email. Sign-in, page access and permission to update a particular record are separate checks.
 
-For the built-in data-source engine, **Public** is the normal rule: **if you can see the page, you can read its data**. It defers to the decision Umbraco already made about the page, so a new SQL data source created in the backoffice starts with **Public** selected. The page and its data API requests enforce the same Umbraco Public Access rules. **Access** on the SQL data source's **Access** tab is still required: an existing source keeps the value it stores, and one created in code or imported without a value starts empty, which is an error until a value is chosen:
+## Data source access
+
+A SQL data source's **Access** setting, on its **Access** tab, says who may read through it. **Public** is the usual choice: **if you can see the page, you can read its data**. It follows the decision Umbraco made about the page, and the page and its data requests enforce the same Public Access rules.
+
+A SQL data source created in the backoffice starts with **Public** selected. A source created in code or imported without a value has an empty Access, which is an error until a value is chosen:
 
 | Access | Who may read |
 | --- | --- |
@@ -195,19 +210,39 @@ For the built-in data-source engine, **Public** is the normal rule: **if you can
 | Specific groups | Members in any selected Read group or Write group; at least one Read group is required |
 | Empty or unknown | Configuration error: publishing is refused and the source cannot run |
 
-**Read groups** and **Write groups** select Umbraco Member Groups. Public and Not public ignore Read groups, and selecting them does not change Access: choose Specific groups for them to apply. Write groups still limit writes in every mode: when empty, any signed-in reader may write; when set, only readers in a selected Write group may write. Allow insert/update/delete and all other checks still apply. Anonymous row and attachment changes additionally require **Allow anonymous writes** on the source, off by default. Publishing refuses the setting on a source that is not Public, that has Write groups, or whose insert defaults bind `:USER_*`; queries, restrictions and custom write statements that bind `:USER_*` still require an account at run time.
+### Read groups and Write groups
 
-Page Public Access, row restrictions and every `IDataSourcePolicy` still apply to public reads. Policies receive `DataSourceUser.Anonymous` for a visitor without an account. A query or row restriction that uses `:USER_*` binds still requires sign-in, even on a Public source; this prevents an absent identity from broadening a predicate such as `:USER_KEY IS NULL`. An authenticated account that fails resolution cannot fall back to anonymous access.
+**Read groups** and **Write groups** select Umbraco Member Groups.
 
-There is no administrator exception to Specific groups: backoffice User groups do not satisfy Member group requirements. When your rules involve backoffice Users, use Not public and enforce the rules in `IDataSourcePolicy` using `request.User`. Each registered policy must allow the operation. Custom `IFormResource` implementations enforce their own rules on every operation.
+- Read groups apply with **Specific groups** only. Public and Not public ignore them, and selecting groups leaves Access as it is.
+- Write groups limit writes in every mode. When empty, any signed-in reader may write. When set, only readers in a selected Write group may write.
+- **Allow insert**, **Allow update**, **Allow delete** and every other check still apply.
 
-In C#, the required `DataSourceDefinition.Access` property must be `DataSourceAccess.Public`, `NotPublic` or `SpecificGroups`. Null and unknown values fail runtime validation before a connection is opened. Read groups never supply a missing Access value. Changing the access setting changes the definition fingerprint and form contract version. Renaming the data source node changes neither, so forms already open on it stay current.
+Backoffice User Groups never satisfy a Member Group requirement, and administrators get no exception to Specific groups. When your rules involve backoffice Users, use Not public and enforce the rules in an `IDataSourcePolicy` with `request.User`. Each registered policy must allow the operation.
 
-Fresh installations include the required Access editor. Existing sites retain their installed document types: add the mandatory `access` property to `sqlDataSource` using the **Application: Data source access** radio-button data type, with the choices **Public**, **Not public**, and **Specific groups**, or apply the updated packaged schema through the site's schema-management process. Set and publish an explicit Access value on every existing source. Previously published sources with no value are unavailable until corrected, including sources that already have Read groups. Public as the starting value comes from the AppBlocks backoffice extension rather than the stored definitions, so it applies on existing sites as soon as the package is updated, and only to sources created in the backoffice: opening an existing source never fills in its Access.
+### Anonymous visitors
 
-**Row restriction** limits rows without any C#. It is added to every fetch and write, for example `OWNER_KEY = :USER_KEY` or `REGION IN (:USER_GROUPS)`, and a write that would leave the restriction is refused. It may use `:USER_KEY`, `:USER_SID`, `:USER_NAME`, `:USER_EMAIL`, `:USER_GROUPS`, `:NOW` and `:NOW_UTC`. `:USER_GROUPS` holds the account's group display names, so a Member and a backoffice User are matched against different lists.
+Page Public Access, row restrictions and every `IDataSourcePolicy` apply to public reads. A policy receives `DataSourceUser.Anonymous` for a visitor without an account.
 
-**The clock** has two bind variables, read once per operation so they name the same moment. `:NOW` is the wall time of the data source's convention, the value the audit columns record. `:NOW_UTC` is that moment in UTC whatever the convention; it needs no zone conversion in SQL, so it stays correct in the autumn hour that repeats.
+- A query, row restriction or custom write statement that uses a `:USER_*` value requires sign-in, on a Public source too. An absent identity therefore cannot broaden a predicate such as `:USER_KEY IS NULL`.
+- An authenticated account that fails resolution is refused. It never falls back to anonymous access.
+- Anonymous row and attachment changes require **Allow anonymous writes** on the source, which is off by default. Publishing refuses the setting on a source that is not Public, that has Write groups, or whose insert defaults bind `:USER_*`.
+
+### Access in C#
+
+`DataSourceDefinition.Access` must be `DataSourceAccess.Public`, `NotPublic` or `SpecificGroups`. A null or unknown value fails validation before a connection is opened, and Read groups never stand in for a missing value.
+
+Changing the access setting changes the definition fingerprint and the form contract version. Renaming the data source node changes neither, so forms already open on it stay current.
+
+A custom `IFormResource` enforces its own rules on every operation.
+
+## Row restriction and bind variables
+
+**Row restriction** limits rows with no C#. It is added to every fetch and write, for example `OWNER_KEY = :USER_KEY` or `REGION IN (:USER_GROUPS)`, and a write that would leave the restriction is refused. It may use `:USER_KEY`, `:USER_SID`, `:USER_NAME`, `:USER_EMAIL`, `:USER_GROUPS`, `:NOW` and `:NOW_UTC`. `:USER_GROUPS` holds the account's group display names, so a Member and a backoffice User are matched against different lists.
+
+### The clock
+
+The clock has two bind variables, read once per operation so that they name the same moment. `:NOW` is the wall time of the data source's convention, the value the audit columns record. `:NOW_UTC` is that moment in UTC whatever the convention. It needs no zone conversion in SQL, so it stays correct in the autumn hour that repeats.
 
 **Date-times** on the data source's **Definition** tab says what a date and time without a zone means in its database:
 
@@ -216,7 +251,7 @@ Fresh installations include the required Access editor. Existing sites retain th
 | `ServerLocal` (the default, and the meaning of an empty value) | The web server's local time | The web server's local wall time |
 | `Utc` | UTC | The UTC wall time |
 
-A date-time field reads and writes its column in that convention, so a form shows the moment in the visitor's own time either way. A column that stores an offset, such as `datetimeoffset` or `timestamptz`, keeps it in both. Choose `Utc` for a database whose application stores UTC stamps, so the engine's date-time fields read and write them without a shift. A site installed before the setting existed gets it at startup, from the package migration step `2026-11-08-date-time-mode-and-list-access`, with every source left empty and so `ServerLocal`. Each dialect binds `:NOW_UTC` in the form UTC stamps compare with:
+A date-time field reads and writes its column in that convention, so a form shows the moment in the visitor's own time either way. A column that stores an offset, such as `datetimeoffset` or `timestamptz`, keeps it in both. Choose `Utc` for a database whose application stores UTC stamps, so the engine's date-time fields read and write them without a shift. Each dialect binds `:NOW_UTC` in the form UTC stamps compare with:
 
 | Database | `:NOW_UTC` binds | Compare with |
 |---|---|---|
@@ -227,7 +262,13 @@ A date-time field reads and writes its column in that convention, so a form show
 
 A posting window stored as UTC text in SQLite becomes a row source condition such as `WHERE POST_FROM <= :NOW_UTC AND (POST_UNTIL IS NULL OR POST_UNTIL > :NOW_UTC)`. Field defaults and insert defaults accept both names. As a default, `:NOW_UTC` fills a date or time field with the UTC date or time, a date-time field with the UTC moment written with `+00:00`, and a text field with the ISO form with `Z`. A date-time value carries its offset, so `:NOW` and `:NOW_UTC` give a date-time field the same moment, which its data source then stores in its own convention.
 
-**Application bind variables** are values your own code computes for an operation, written `:APP.name`. Register an `IBindVariableProvider`; it receives the execution context, the page key and form key, the signed-in person and the request's parameters, and answers with named values. Because they come from the application and not from the browser, they may filter a row source, appear in a row restriction and fill insert defaults, which `:PARAM.` never may. A site that gives each tenant a copy of the same pages decides the tenant from the page in one place and writes one data source for every copy, `WHERE TENANT_ID = :APP.tenant`; a field default of `:APP.tenant` hands the same value to a form class. A name no provider answers binds NULL.
+### Application bind variables
+
+Application bind variables are values your own code computes for an operation, written `:APP.name`. Register an `IBindVariableProvider`. It receives the execution context, with the page key, the form key, the signed-in person and the request's parameters, and answers with named values. A name no provider answers binds NULL.
+
+These values come from the application, so a row restriction may use them, as a row source and insert defaults may. A row restriction refuses `:PARAM.` and `:FIELD.` values, because the caller controls those.
+
+A site that gives each tenant a copy of the same pages decides the tenant from the page in one place and writes one data source for every copy, with `WHERE TENANT_ID = :APP.tenant`. A field default of `:APP.tenant` hands the same value to a form class.
 
 ```csharp
 using AppBlocks.DataSources;
@@ -250,7 +291,7 @@ public sealed class TenantProvider(IPublishedContentCache pages, IDocumentNaviga
 }
 ```
 
-Register it with `services.AddScoped<IBindVariableProvider, TenantProvider>()`. A property on the tenant's page type is the explicit way; matching the ancestor's content type alias instead works the same way. The providers are asked once per request for each signed-in person, page, form and set of request parameters, and every operation and every row of a save in that request binds the same answer. Field defaults are resolved once per page before any form, so there the context carries the page and an empty form key, and a block report's providers see its page and block. The [worked example](activity-schedule-example.md) builds a whole application on this rule.
+Register it with `services.AddScoped<IBindVariableProvider, TenantProvider>()`. A property on the tenant's page type is the explicit way; matching the ancestor's content type alias instead works the same way. The providers are asked once per request for each signed-in person, page, form and set of request parameters, and every operation and every row of a save in that request binds the same answer. Field defaults are resolved once per page before any form, so there the context carries the page and an empty form key, and a block report's providers see its page and block. The [worked example](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/activity-schedule-example.md) builds a whole application on this rule.
 
 A provider can also declare the names it answers, by implementing `Names`, which `IBindVariableProvider` otherwise answers with an empty list:
 
@@ -260,27 +301,97 @@ public IReadOnlyCollection<string> Names => ["tenant"];
 
 When every registered provider declares its names, publishing checks each `:APP.` name in a data source, an API endpoint's own SQL, a list of values' own SQL and a field default against them, and warns about one no provider declares, such as `:APP.tennant`. The publish goes ahead, because providers are code that may be deployed after the content that names their values, and the name binds NULL until a provider answers it. A provider that declares nothing may answer any name, so while one is registered nothing is checked. A data source's **Test** lists the declared names, so an editor can give them sample values such as `{"APP.tenant": "north"}`, and shows the same warning. Classes in the C# folder declare names the same way.
 
-By default, whoever can read a record can read its files and, for a custom resource, change them too if they are signed in. An anonymous visitor can change them only through this interface. They are not told which account filed a file, only that someone signed in did. Implement `IAttachmentOwner` on the resource when the rule for changing files is narrower. The data source engine already limits changes to its write groups.
+## Attachments
 
-The attachment list shows each file with a download link and, when the caller may change it, **Rename** and **Remove**. **Rename** updates its display and download filename without uploading its contents again; its other details are kept. A stored file is never replaced and AppBlocks keeps no revisions: a new version of a document is uploaded as a new file, and the old one is removed if it should go.
+Whoever can read a record can read its files. Who may change them depends on what owns the record:
 
-**Upload** opens an in-page dialog containing the locally packaged [Uppy](https://uppy.io/) file picker. Selecting or dropping files starts uploading them immediately. Optional purpose, label and notes sit above the picker; their current values are copied onto each file when it is added, and retries keep those values. The files upload in the background while the page remains open, including when the dialog is closed with **Close** or Escape. The button that opened it shows circular progress and the overall percentage; clicking it reopens the same queue. Successful uploads join the attachment list, and the button returns to **Upload** when all finish. While the list is read again after uploads, the dialog stays usable: details can be typed and more files added, and files that finish meanwhile are listed by a further reading. **Rename** and **Remove** wait for it. The dialog stays open until the user closes it, so more files can be added. Details clear once the dialog is closed and its queue is empty.
+- For a C# resource, any signed-in caller who can read the record may change its files. Implement `IAttachmentOwner` on the resource when the rule is narrower. An anonymous visitor can change files only when `IAttachmentOwner` allows it.
+- For a SQL data source, the engine limits changes to the source's write groups.
 
-Failed files stay in the queue with their error, and the outer button shows **Upload failed** with an error indicator. The dialog shows only problems with uploading, including a list that could not be read after an upload; a refused rename or removal shows beside the list. Reopen it to **Retry failed uploads** or remove them. Adding another file starts only that new upload; it never silently retries a failed one. Automatic retries are disabled because repeating an upload after a lost response could create another stored file. Uppy sends multipart requests with antiforgery protection to AppBlocks; no external upload service is involved. The uploader's texts are runtime texts like any other, so a site translates them as [Localisation](localisation.md) describes.
+An anonymous visitor is told that a signed-in person filed a file, and is not told which account.
 
-Rename uses `PATCH /api/attachments/{page}/{block}/{id}` (or `.../new/{submissionKey}/{id}` for pending files) with JSON `{ "fileName": "invoice.pdf" }` and the list's antiforgery token. It requires permission to change the owner's files. The name is trimmed, limited to 260 characters, cannot contain path separators, control characters or filename punctuation such as `:`, `*` and `?`, and must use a file type the block accepts. It keeps the file's id and contents.
+The attachment list shows each file with a download link and, when the caller may change it, **Rename** and **Remove**. A stored file is never replaced and AppBlocks keeps no revisions. Upload a new version of a document as a new file, and remove the old one if it should go.
 
-Saving a form while one of its attachment blocks has queued, uploading or failed files shows a JavaScript dialog and cancels that save attempt. Finish the uploads or remove the outstanding files, then select **Save** again. Completing an upload never submits the form automatically. An upload, rename, file removal, list refresh or pending-file adoption under way also holds back a save, and a deletion, with a dialog asking to wait for it. Files merely queued do not hold back a deletion, since they would have belonged to the record it deletes. Attachment controls cannot start new operations while the form is saving.
+### Uploading
 
-An Attachments block inside a form takes files before the form's record exists, so a visitor can attach them while filling in a new record. The block offers it when it writes, the form is not read only, the form's resource offers this caller a new record (its `InitializeAsync` answers a record whose capabilities allow `Create`), and the caller may write the record's files: `IAttachmentOwner` decides from that new record, and without it the caller must be signed in. The page marks the block `data-new-uploads="allowed"`, or `save-first` when it asks for a save first. The files go up under the attachments endpoint, `/api/attachments/{page}/{block}/new/{submissionKey}`, with the key the runtime generates for the submission, which lists, uploads, downloads, renames and removes them. Once the form has saved, the runtime posts `{ "key": "<record key>" }` to `.../new/{submissionKey}/adopt`, and the files belong to the record, judged by the record's own load for that caller. Pending files are kept under the submission key and the uploader's account, so a signed-in caller sees and adopts only their own; an anonymous visitor's are kept under the submission key alone, a random value only their page holds. Files nobody adopts are deleted after `Attachments:PendingLifetimeHours`, 24 unless configured. AppBlocks registers an hourly Umbraco recurring job to delete expired pending uploads and their file data, even when nobody visits the site. The job first looks for the upload tables without creating anything, so a site where no upload has created them yet, or whose upload database cannot be reached, is left as it is; deletion can occur up to an hour after the lifetime expires while the site is running. Pending-file requests also run this cleanup. Files associated with records are kept.
+**Upload** opens a dialog with the [Uppy](https://uppy.io/) file picker, which AppBlocks serves from the site. Uppy sends multipart requests with antiforgery protection to AppBlocks, and no external upload service is involved.
 
-For forms whose files become read-only at submission, adopt pending files inside the resource's create transaction with `AttachmentStore.AdoptAsync(connection, transaction, pendingOwner, savedOwner, actor, ct)`. Open the connection with the injected `AttachmentStore`'s `OpenConnectionAsync`, which opens the `Attachments:Connection` database with its attachment tables ensured; the form's tables must be in that database too. The pending owner is `AttachmentOwner.Pending(alias, submissionKey, context.Member)`, with the submission key the create receives in `context.SubmissionKey`, and the saved owner is `new AttachmentOwner(alias, key)`. Commit the record and adoption together, then deny later file writes through `IAttachmentOwner`.
+- Selecting or dropping files starts their upload at once.
+- Optional purpose, label and notes sit above the picker. Their current values are copied onto each file when it is added, and a retry keeps them. They clear once the dialog is closed and its queue is empty.
+- Files upload in the background while the page stays open, including after the dialog is closed with **Close** or Escape. The button that opened the dialog shows progress as a circle and a percentage, and clicking it reopens the same queue.
+- A finished upload joins the attachment list. The button returns to **Upload** when every file has finished.
+- While the list is read again after uploads, the dialog stays usable and more files can be added. **Rename** and **Remove** wait for the list.
 
-Such a resource also implements `ISubmittedAttachmentOwner.ConfirmSubmissionAsync`. The browser's later adoption request calls this method to confirm the saved key, submission key and caller against persisted ownership. A successful confirmation lists the files already adopted; it does not move later pending uploads. The endpoint still checks page access, the saved record's load and antiforgery. Persist the submission key with the record so retries return the same record and confirmation remains valid after a restart.
+A failed file stays in the queue with its error, and the button shows **Upload failed**. Reopen the dialog to **Retry failed uploads** or to remove the files. Adding another file starts that upload only. Failed uploads are never retried automatically, because repeating an upload after a lost response could store the file twice.
 
-A resource can let a caller add files to a saved record without letting them rename or remove the ones there. Implement `IAddOnlyAttachmentOwner.MayAddAttachmentsAsync` beside `IAttachmentOwner`: a requester who has been asked for a missing document can then send it, and the documents already filed stay as filed. AppBlocks asks it only about a caller the write rule refuses, since whoever may write may add, and never for a block set to read only. The list answers `canAdd` beside `canWrite`, and the block shows such a caller **Upload** without Rename or Remove. A rename or removal by them is refused with 403, their own file included. Adopting the files a caller sent ahead of a new record's first save adds them and changes nothing there, so it takes the same leave to add: a form can let a requester attach and remove files while they fill in a new record, through `IAttachmentOwner` on that new record, and only add once it is saved.
+The dialog shows problems with uploading, including a list that could not be read after an upload. A refused rename or removal shows beside the list. A site translates the uploader's texts as [Localisation](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/localisation.md) describes.
 
-Interactive Reports exposes `IReportAccessPolicy` for report permissions. By default, any signed-in account that can reach a report's page can view, query and export it, and manage its own saved views. A saved view belongs to one identity: the Member when a Member is signed in, otherwise the backoffice User, so someone signed in to both saves and owns views as the Member on the website and as the User on the backoffice routes. Backoffice Users in either the Administrators group (`admin`) or a host-created Interactive Reports Administrator group (`interactiveReportsAdministrator`) can manage public and private saved reports through **Settings → AppBlocks → Interactive Reports**. `AppBlocks:ReportAdministratorGroups` grants additional User Group aliases the same access. Member groups never grant report administration; to change this rule, supply your own policy. Umbraco's own backoffice management permissions remain separate from application business rules.
+### Renaming
+
+**Rename** changes a file's display and download name. Its id, contents and other details are kept.
+
+It uses `PATCH /api/attachments/{page}/{block}/{id}`, or `.../new/{submissionKey}/{id}` for a pending file, with the JSON body `{ "fileName": "invoice.pdf" }` and the list's antiforgery token. It requires permission to change the owner's files. The name is trimmed and must meet these rules:
+
+- At most 260 characters.
+- No path separators, control characters or filename punctuation such as `:`, `*` and `?`.
+- A file type the block accepts.
+
+### Saving a form while files are in progress
+
+Saving a form while one of its Attachments blocks has queued, uploading or failed files shows a dialog and cancels that save. Finish the uploads or remove the outstanding files, then select **Save** again. Completing an upload never submits the form.
+
+An upload, rename, removal, list refresh or adoption that is under way also holds back a save or a deletion, with a dialog that asks the user to wait. Queued files alone do not hold back a deletion, since they would belong to the record being deleted. Attachment controls start no new operation while the form is saving.
+
+### Files for a record not saved yet
+
+An Attachments block inside a form accepts files before the form's record exists, so a visitor can attach files while filling in a new record. The block offers this when all of these hold:
+
+- The block is not read only, and the form is not read only.
+- The form's resource offers this caller a new record: its `InitializeAsync` answers a record whose capabilities allow `Create`.
+- The caller may write the record's files. `IAttachmentOwner` decides from that new record. Without it, the caller must be signed in.
+
+The page marks the block `data-new-uploads="allowed"`, or `save-first` when it asks for a save first.
+
+The files go to `/api/attachments/{page}/{block}/new/{submissionKey}`, with the key the runtime generates for the submission. That route lists, uploads, downloads, renames and removes them. Once the form has saved, the runtime posts `{ "key": "<record key>" }` to `.../new/{submissionKey}/adopt`. The files then belong to the record, judged by the record's own load for that caller.
+
+Pending files are kept under the submission key and the uploader's account, so a signed-in caller sees and adopts only their own. An anonymous visitor's files are kept under the submission key alone, a random value that only their page holds.
+
+Files that nobody adopts are deleted after `Attachments:PendingLifetimeHours`, 24 unless configured:
+
+- An hourly Umbraco recurring job deletes expired pending uploads and their file data, with or without visits to the site. Deletion can come up to an hour after the lifetime expires.
+- The job looks for the upload tables and creates nothing. It leaves a site alone when no upload has created the tables yet or the upload database cannot be reached.
+- Pending-file requests run the same cleanup.
+- Files that belong to records are kept.
+
+### Files that become read-only at submission
+
+For a form whose files become read-only when it is submitted, adopt the pending files inside the resource's create transaction:
+
+1. Open the connection with the injected `AttachmentStore`'s `OpenConnectionAsync`. It opens the `Attachments:Connection` database with the attachment tables ensured. The form's tables must be in that database too.
+2. Call `AttachmentStore.AdoptAsync(connection, transaction, pendingOwner, savedOwner, actor, ct)`. The pending owner is `AttachmentOwner.Pending(alias, submissionKey, context.Member)`, with the submission key from `context.SubmissionKey`. The saved owner is `new AttachmentOwner(alias, key)`.
+3. Commit the record and the adoption together.
+4. Deny later file writes through `IAttachmentOwner`.
+
+Such a resource also implements `ISubmittedAttachmentOwner.ConfirmSubmissionAsync`. The browser's later adoption request calls it to confirm the saved key, the submission key and the caller against what the resource stored. A successful confirmation lists the files already adopted and moves no later pending uploads. The endpoint still checks page access, the saved record's load and antiforgery.
+
+Store the submission key with the record, so that a retry returns the same record and confirmation still works after a restart.
+
+### Adding files only
+
+A resource can let a caller add files to a saved record while the files already there stay as filed. Implement `IAddOnlyAttachmentOwner.MayAddAttachmentsAsync` beside `IAttachmentOwner`. A requester who was asked for a missing document can then send it.
+
+- AppBlocks asks it only about a caller the write rule refuses, since whoever may write may add. It is never asked for a block set to read only.
+- The list answers `canAdd` beside `canWrite`, and the block shows such a caller **Upload** with no Rename or Remove.
+- A rename or removal by that caller is refused with 403, for their own file too.
+- Adopting the files a caller sent ahead of a new record's first save needs the same permission to add. A form can therefore let a requester attach and remove files while filling in a new record, through `IAttachmentOwner` on that new record, and only add files once it is saved.
+
+## Report permissions
+
+Interactive Reports exposes `IReportAccessPolicy` for report permissions. By default, any signed-in account that can reach a report's page can view, query and export it, and manage its own saved views.
+
+A saved view belongs to one identity: the Member when a Member is signed in, otherwise the backoffice User. Someone signed in to both saves and owns views as the Member on the website and as the User on the backoffice routes.
+
+Backoffice Users in the Administrators group (`admin`), or in an Interactive Reports Administrator group (`interactiveReportsAdministrator`) that the site creates, can manage public and private saved reports through **Settings → AppBlocks → Interactive Reports**. `AppBlocks:ReportAdministratorGroups` gives further User Group aliases the same access. Member Groups never grant report administration. To change the rule, supply your own policy.
 
 ## Common scenarios
 
@@ -301,7 +412,7 @@ These are starting points, and they combine. Check the rule on every operation i
 | Roles assigned on each Member | A custom Member property. See User Group selections on a Member |
 | Each person sees only their own rows | Row restriction, or filter in your resource |
 | Rules that depend on the record | `IDataSourcePolicy` or your resource. See Ownership and record status |
-| Several tenants in one site, each with its own pages and editors | The tenant from the page tree, a bind variable provider, a policy and a form class together. See the [worked example](activity-schedule-example.md) |
+| Several tenants in one site, each with its own pages and editors | The tenant from the page tree, a bind variable provider, a policy and a form class together. See the [worked example](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/activity-schedule-example.md) |
 
 A person signed in as both a Member and a backoffice User can satisfy either account-type check or a rule requiring both. Use the account-specific properties when a rule depends on one identity's key, email or groups. Reports embedded in the backoffice itself continue to use only the backoffice account, including for saved-view ownership.
 
@@ -387,7 +498,7 @@ public sealed class ResolverWithExternalGroups(UmbracoDataSourceUsers umbraco, I
 
 Register `builder.Services.AddScoped<UmbracoDataSourceUsers>()` and `builder.Services.AddScoped<IDataSourceUserResolver, ResolverWithExternalGroups>()`, with your `IExternalGroups` implementation. AppBlocks asks the resolver on every operation, so cache a slow lookup briefly; `UmbracoDataSourceUsers` itself reads each account once per request. Public Access still uses the account's real Member Groups, and `IsInUserGroup` still uses `UserGroupAliases`, which this example does not change.
 
-Forward both resolver overloads as shown to preserve `CanEditPage`, `CanPublishPage` and `CanDeletePage` for the calling page. Existing custom resolvers that implement only the principal overload continue to work, but do not calculate page permissions.
+Forward both resolver overloads as shown to preserve `CanEditPage`, `CanPublishPage` and `CanDeletePage` for the calling page. A resolver that implements only the principal overload resolves no page, so the three page permissions stay false.
 
 ## User Group selections on a Member
 
@@ -575,7 +686,7 @@ AppBlocks asks every registered policy about every data source on every page, wh
 - Register the class with a scope. `builder.Services.AddDataSourcePolicy<DraftOrderPolicy>(new DataSourcePolicyScope("orders"))` asks the policy only about data sources whose alias starts with `orders`, ignoring case. Add page keys, as in `new DataSourcePolicyScope("notices.", [noticesPage, archivePage])`, to ask it only about operations from those pages. The class is made per request scope through dependency injection, as with `AddScoped`.
 - Implement `IScopedDataSourcePolicy`, which adds `bool Applies(DataSourceRequest request)` to `IDataSourcePolicy`, when the scope needs code. AppBlocks calls `Applies` first and calls `IsAllowedAsync` only when it answers true. Classes in the C# folder can implement it too.
 
-A scope narrows where a rule holds, so choose it with the data source's other routes in mind. An [API endpoint](api-endpoints.md) call has no page, so a policy scoped to pages never governs it. Scope by alias alone when the rule must hold wherever the data source is used. A policy registered the usual way keeps deciding every request.
+A scope narrows where a rule holds, so choose it with the data source's other routes in mind. An [API endpoint](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/api-endpoints.md) call has no page, so a policy scoped to pages never governs it. Scope by alias alone when the rule must hold wherever the data source is used. A policy registered the usual way keeps deciding every request.
 
 ## How a SQL data source writes
 
@@ -612,7 +723,7 @@ Every hook passes through by default, so a class implements only the ones it nee
 | `DeleteAsync` | A row about to be deleted, locked, after any enabled checksum check | Delete it its own way, such as marking it cancelled, or refuse |
 | `ListAsync` | The rows a Tabular form block shows for one record, once read | Change what the rows show, or refuse |
 | `QueryAsync` | A report, API endpoint, list of values, schedule or paper report about to read | Refuse |
-| `ReadAsync` | An API endpoint, list of values, schedule or paper report reading, once access, `QueryAsync` and the policies allow it | Answer with rows of its own, keyed by the row source's column names, or return `null` to read the row source. The row restriction cannot filter rows from code, so the class applies its rule itself. See [API endpoints](api-endpoints.md#answering-from-code) |
+| `ReadAsync` | An API endpoint, list of values, schedule or paper report reading, once access, `QueryAsync` and the policies allow it | Answer with rows of its own, keyed by the row source's column names, or return `null` to read the row source. The row restriction cannot filter rows from code, so the class applies its rule itself. See [API endpoints](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/api-endpoints.md#answering-from-code) |
 
 Each hook receives one `DataSourceOperation`. `Action`, `User` (an anonymous visitor, a Member, a backoffice User or both, as policies see them), `Context` and `Key` say who asks for what. `Current` is the record as stored. `Values` holds what the engine is about to write or show, by field alias, in the form's JSON shape: text, numbers as text, true or false, ISO dates and times. Change, add or remove entries; a field removed from an update stays as stored. A value the class sets is converted and checked by its field's kind, length, range and choices, as a submitted value is. The class may set a read-only field of the written table, which a form never can, but not a key once the record exists, an audit column or a column the database computes. `Rows` holds a list's rows, and `Details` a form's rows saved with the record, described in the next section. `Connection` and `Transaction` are the engine's, and `Dialect` names the database; a class never opens, commits, rolls back or disposes either.
 
@@ -667,11 +778,9 @@ A Tabular form block offers each operation its data source allows and the caller
 
 The server enforces each setting. A change the block does not offer is refused with 403 and the batch it came in is not written, whether the rows were saved by the block or with the form's record. To hold a rule for every block and form, clear **Allow update** or **Allow delete** on the data source, or state it in an `IDataSourcePolicy`.
 
-On an existing site the package migration step `2026-11-09-display-link-and-tabular-without-editing` adds **Without editing** at startup.
-
 ## A form and its rows in one save
 
-A Tabular form block inside a form edits the rows of the form's record. When the caller can save that record, the block shows no save control of its own: its pending changes go with the form's save, in the same request. A record not saved yet can take rows too, and they are linked to its key once it has one; the block lists them from `/api/tabular/{page}/{block}/new`, below `AppBlocks:ApiRoot` when the site moves it. A block on its own, or inside a form the caller cannot save, keeps its own save control and saves its rows as before.
+A Tabular form block inside a form edits the rows of the form's record. When the caller can save that record, the block shows no save control of its own: its pending changes go with the form's save, in the same request. A record not saved yet can take rows too, and they are linked to its key once it has one. The block lists them from `/api/tabular/{page}/{block}/new`, below `AppBlocks:ApiRoot` when the site moves it. A block on its own, or inside a form the caller cannot save, has its own save control and saves its rows itself.
 
 When the form's Form Interface selects a published SQL data source and every block's data source uses the same connection, the save is one transaction. The record is written first, so a new record's key becomes its new rows' link value, whatever a change says. Its backing class sees the record's values and every block's pending changes in `operation.Details`: each `DataSourceDetail` names the block, its data source, the link field and the record's key, which is still null while a new record's hook runs unless the class writes the record itself. The class may apply a change itself and remove it, replace it, add one, or refuse the whole save. The engine then applies what is left to each block's rows with the checks a block's own save makes: the allow flags, at most 200 changes (`AppBlocks:DataSources:MaxChanges`), the row checksums, the row restriction, and the block's data source's own backing class and policies. One commit keeps the record and all of its rows, or none of them, and a refused change is named by its block and its place in the batch.
 
@@ -718,9 +827,9 @@ public sealed class ContactFormResource(ContactCaptcha captcha, IContactInbox in
 
     public override Task<FormResult> LoadAsync(string key, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
 
-    public override Task<FormResult> DeleteAsync(string key, string checksum, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
+    public override Task<FormResult> DeleteAsync(string key, string? checksum, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
 
-    protected override Task<FormResult> UpdateAsync(string key, ContactMessage input, string checksum, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
+    protected override Task<FormResult> UpdateAsync(string key, ContactMessage input, string? checksum, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
 
     protected override async Task<FormResult> CreateAsync(ContactMessage input, FormExecutionContext context, CancellationToken ct)
     {
@@ -896,25 +1005,55 @@ A hidden field, a disabled control, a query parameter (`FormExecutionContext.Par
 
 ## Concurrency and duplicate submissions
 
-Last save wins by default. A SQL data source's **Concurrency** choices map to the `DataSourceConcurrency` enum: `LastSaveWins` and `Checksum`. Select `Checksum` to detect conflicting edits without adding a table column. Existing sources that selected version-column protection are upgraded to `Checksum`. These modes apply to individual records, tabular batches and master/detail saves.
+Last save wins by default. A SQL data source's **Concurrency** choices map to the `DataSourceConcurrency` enum: `LastSaveWins` and `Checksum`. Select `Checksum` to detect conflicting edits without adding a table column. These modes apply to individual records, tabular batches and master/detail saves.
 
-For a C# form resource, return `FormRecord.Checksum = null` for last-save-wins. Returning a checksum of the row's values opts into conflict detection; the resource must compare the caller's checksum with the current row and perform the update or delete in the same transaction. A missing checksum cannot bypass that check. Generated form classes use last-save-wins; set their `UseChecksum` field to `true` to opt in. The downloadable repository sample applies the same protection to its SQLite table: `ReadAsync` returns a checksum of the row's values, and `SaveAsync` compares it with the current row inside a write transaction and returns `false` for a stale change. Updates must not recreate deleted records.
+### Checksums in a C# resource
 
-The built-in engine also handles create receipts. Every create carries a submission key the runtime generates, and the engine remembers each successful create by it for `AppBlocks:DataSources:ReceiptLifetimeMinutes`, 15 unless configured. A request retried within that time, after an answer was lost, returns the record the first one created instead of inserting it again, and two requests with one key wait for each other. The default store keeps receipts in the web server's memory, up to `AppBlocks:DataSources:ReceiptCapacity` (10,000), which covers a single web server: on a load-balanced site a retry that reaches another server, or any retry after a restart, finds no receipt and inserts again. Such a site registers a store its servers share, implementing `IDataSourceReceiptStore` (`EnterAsync` holds the submission keys across servers, `FindAsync` and `AddAsync` read and write receipts), with `AddSingleton<IDataSourceReceiptStore, YourStore>()`, and keeps each receipt at least the configured lifetime.
+Return a `FormRecord` whose `Checksum` is null for last-save-wins. Returning a checksum of the row's values opts into conflict detection. The resource must then compare the caller's checksum with the current row and perform the update or delete in the same transaction, and a missing checksum must not pass that check. An update must never recreate a deleted record.
 
-Custom resources should make creation idempotent when a retry could create a duplicate; `FormExecutionContext.SubmissionKey` is available for that purpose. Persist the receipt and the new record together.
+- A form class the Backing Classes wizard writes uses last-save-wins. Set its `UseChecksum` field to `true` to opt in.
+- The downloadable sample applies the same protection to its SQLite table. `ReadAsync` returns a checksum of the row's values. `SaveAsync` compares it with the current row inside a write transaction and returns `false` for a stale change.
+
+### Create receipts
+
+Every create through a SQL data source carries a submission key that the runtime generates. The engine remembers each successful create by that key for `AppBlocks:DataSources:ReceiptLifetimeMinutes`, 15 unless configured. A request retried within that time, after a lost answer, returns the record the first request created. Two requests with one key wait for each other.
+
+The default store keeps receipts in the web server's memory, up to `AppBlocks:DataSources:ReceiptCapacity` (10,000). That covers a single web server. On a load-balanced site, a retry that reaches another server finds no receipt and inserts again, and so does any retry after a restart.
+
+A load-balanced site registers a store that its servers share, with `AddSingleton<IDataSourceReceiptStore, YourStore>()`. `EnterAsync` holds the submission keys across servers, and `FindAsync` and `AddAsync` read and write receipts. Keep each receipt at least the configured lifetime.
+
+A C# resource should make its create safe to repeat when a retry could create a duplicate. `FormExecutionContext.SubmissionKey` identifies the submission. Store the receipt and the new record together.
 
 ## Wiring a custom resource
 
-Implement `IFormResource`, or derive from `FormResource<TCreate, TUpdate>` for typed input and data-annotation validation. Register it as an `IFormResource`, choose its alias in the Form interface and map the field blocks to its field descriptors. The generated repository is a persistence example to call from those operations, not an automatically registered form resource.
+Implement `IFormResource`, or derive from `FormResource<TCreate, TUpdate>` for typed input and data-annotation validation. Register it as an `IFormResource`, select its alias in the form's Form Interface and bind the field blocks to its fields. The downloadable sample is a persistence example to call from those operations. Register a form resource of your own to use it.
 
-Return `FormResult.Denied()` for refused operations, `Missing()` for absent records, `Conflict()` for stale updates, `Invalid(field, message)` for validation, and `Ok(record)` for success. A success without a record means "done, go back": the runtime takes the visitor to the **Return page** of the form's Form Interface, or to the site's root when it has none. A delete answers this way, with `new FormResult(204)`, and the endpoint sends any successful delete that carries no record as 204 No Content. A create or update that answers success without a record sends the visitor back the same way after saving. Set the returned `FormCapabilities` to describe the actions the caller may see, and enforce the same rules again when an action is submitted.
+| Return | For |
+| --- | --- |
+| `FormResult.Ok(record)` | Success |
+| `FormResult.Denied()` | A refused operation |
+| `FormResult.Missing()` | An absent record |
+| `FormResult.Conflict()` | A stale update |
+| `FormResult.Invalid(field, message)` | A validation error |
+| `new FormResult(204)` | Success with no record, as a delete answers |
+
+A success without a record means "done, go back". The runtime takes the visitor to the **Return page** of the form's Form Interface, or to the site's root when it has none. The endpoint sends a successful delete that carries no record as 204 No Content. A create or update that answers success without a record sends the visitor back the same way.
+
+Set the returned `FormCapabilities` to the actions the caller may see, and enforce the same rules again when an action is submitted.
 
 ## An anonymous SQL contact form
 
-For a contact form backed by SQL, set the source's **Access** to **Public**, enable **Allow anonymous writes** and **Allow insert**, and leave **Write groups**, **Allow update** and **Allow delete** empty/off. Put the form on a page without Public Access. Keep identity-dependent `:USER_*` variables out of its SQL and defaults; name and email supplied by the visitor are ordinary form fields. Antiforgery and any Anti-spam block still run on submissions.
+For a contact form backed by SQL:
 
-Public access also permits reads. To keep submitted messages private, register a policy that allows only initialization and creation for this source (or enforce the same rule in its backing class):
+1. Set the source's **Access** to **Public**.
+2. Turn on **Allow anonymous writes** and **Allow insert**.
+3. Leave **Write groups** empty, and **Allow update** and **Allow delete** off.
+4. Put the form on a page without Public Access.
+5. Keep `:USER_*` variables out of the source's SQL and defaults. The visitor's name and email are ordinary form fields.
+
+Antiforgery and any Anti-spam block run on each submission.
+
+Public access also permits reads. To keep submitted messages private, register a policy that allows only initialization and creation for this source, or enforce the same rule in its backing class:
 
 ```csharp
 public sealed class ContactSubmissionPolicy : IDataSourcePolicy
@@ -926,5 +1065,3 @@ public sealed class ContactSubmissionPolicy : IDataSourcePolicy
 ```
 
 Register it with `builder.Services.AddScoped<IDataSourcePolicy, ContactSubmissionPolicy>()` and use the alias `contact` for the source. This refuses loads and queries of saved messages as well as updates and deletes. Use a separately authorized source for staff to read submissions.
-
-Existing installations obtain the new **Allow anonymous writes** property through **Settings → AppBlocks → Definitions → Reinstall**. No migration changes existing definitions; an absent setting remains off.

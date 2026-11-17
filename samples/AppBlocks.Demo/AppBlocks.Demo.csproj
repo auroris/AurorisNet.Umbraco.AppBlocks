@@ -7,5 +7,5 @@
     <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="$(UmbracoVersion)" />
     <ProjectReference Include="../../src/AppBlocks.InteractiveReports/AppBlocks.InteractiveReports.csproj" />
   </ItemGroup>
-  <Import Project="../../src/AppBlocks/buildTransitive/AppBlocks.targets" />
+  <Import Project="../../src/AppBlocks/buildTransitive/AurorisNet.Umbraco.AppBlocks.targets" />
 </Project>

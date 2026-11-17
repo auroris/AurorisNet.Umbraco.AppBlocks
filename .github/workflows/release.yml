@@ -1,0 +1,106 @@
+name: Release
+
+run-name: Release ${{ inputs.version || format('(next {0})', inputs.bump) }}${{ inputs.dry-run && ' (dry run)' || '' }}
+
+# Publishes the four packages to nuget.org and GitHub. Starts by hand, or from the New Umbraco releases and CI workflows when
+# a new release of a dependency has passed the tests. The shared steps come from auroris/AurorisNet.Build, whose
+# docs/releasing.md describes them. nuget.org trusts this file by its name, so keep it release.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, such as 0.1.0-alpha.2 or 1.2.3. Leave empty to raise the newest release tag.
+        required: false
+        type: string
+      bump:
+        description: Which part of the newest stable tag to raise when the version is empty
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+      test:
+        description: Run the tests before publishing. The automated runs turn this off, because they have just run them.
+        type: boolean
+        default: true
+      dry-run:
+        description: Test and pack only, and keep the packages as an artifact
+        type: boolean
+        default: false
+      notes:
+        description: Notes for the GitHub release, in Markdown, shown above the generated list of changes
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  release:
+    name: Test and publish
+    runs-on: windows-latest
+    # The three test projects take several minutes each.
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      # Makes the build deterministic.
+      ContinuousIntegrationBuild: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Choose the version
+        id: version
+        uses: auroris/AurorisNet.Build/actions/version@main
+        with:
+          version: ${{ inputs.version }}
+          bump: ${{ inputs.bump }}
+          dry-run: ${{ inputs.dry-run }}
+
+      # The three test projects run on the Umbraco release in Directory.Build.props. The live-database tests need
+      # connection strings and run on a developer's machine, as docs/developing.md describes.
+      - name: Test
+        if: ${{ inputs.test }}
+        run: |
+          foreach ($project in 'AppBlocks.Tests', 'AppBlocks.InteractiveReports.Tests', 'AppBlocks.Documents.Tests') {
+            dotnet run --project "tests/$project" -- -noLogo
+            if ($LASTEXITCODE -ne 0) { throw "$project failed." }
+          }
+
+      # The four packages carry one version, and the companions depend on AppBlocks at that version.
+      - name: Pack
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          foreach ($project in 'AppBlocks', 'AppBlocks.InteractiveReports', 'AppBlocks.Documents', 'AppBlocks.Testing') {
+            dotnet pack "src/$project" -c Release "-p:Version=$env:RELEASE_VERSION" -o artifacts/packages
+            if ($LASTEXITCODE -ne 0) { throw "Could not pack $project." }
+          }
+
+      - name: Publish
+        uses: auroris/AurorisNet.Build/actions/publish@main
+        with:
+          versions: ${{ steps.version.outputs.versions }}
+          dry-run: ${{ inputs.dry-run }}
+          notes: ${{ inputs.notes }}

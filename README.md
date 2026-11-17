@@ -1,75 +1,126 @@
-<h1 align="center">AppBlocks</h1>
+# AppBlocks
 
-<p align="center">
-  Forms, reports and database-backed blocks for Umbraco.<br>
-  Add them to the Block Grid or Block List you already have, alongside your Rich Text, on the pages you already have.
-</p>
+AppBlocks adds forms, reports and database-backed blocks to the pages of an existing Umbraco site.
 
-<p align="center">
-  <a href="LICENSE"><img alt="MIT license" src="docs/images/badge-license.svg"></a>
-  <img alt="Umbraco 18.3" src="docs/images/badge-umbraco.svg">
-  <img alt=".NET 10" src="docs/images/badge-dotnet-10.svg">
-  <img alt="Status: alpha" src="docs/images/badge-status.svg">
-  <img alt="SQLite, SQL Server, PostgreSQL and Oracle supported" src="docs/images/badge-databases.svg">
-</p>
+![MIT license](https://raw.githubusercontent.com/auroris/AurorisNet.Build/main/badges/license-mit.svg)
+![Umbraco 18](https://raw.githubusercontent.com/auroris/AurorisNet.Build/main/badges/umbraco-18.svg)
+![.NET 10](https://raw.githubusercontent.com/auroris/AurorisNet.Build/main/badges/dotnet-10.svg)
+![Status: alpha](https://raw.githubusercontent.com/auroris/AurorisNet.Build/main/badges/status-alpha.svg)
+![SQLite, SQL Server, PostgreSQL and Oracle](https://raw.githubusercontent.com/auroris/AurorisNet.Build/main/badges/databases.svg)
 
-![An interactive report of sample orders on an ordinary Umbraco page, with search, view switching and paging](docs/images/hero.png)
+![An interactive report of sample orders on an Umbraco page, with search, view switching and paging](https://raw.githubusercontent.com/auroris/AurorisNet.Umbraco.AppBlocks/main/docs/images/hero.png)
 
-## What it is
+Editors add AppBlocks blocks to the Block Grid or Block List a site already has, beside its other content. The site keeps its page types, templates, layout and sign-in. The blocks read and write the application's own database tables:
 
-AppBlocks gives Umbraco editors blocks that work with real application data. The site keeps its page types, templates, layout and sign-in. AppBlocks adds no page type or template of its own.
+- **Forms** bound to a C# class you register, or to a SQL data source an editor publishes. Field blocks, file attachments and editable tables of related rows are included.
+- **Schedules** that draw the rows of one data source against time, with the rows of another as bars.
+- **Anti-spam** for public forms: Turnstile, reCAPTCHA, hCaptcha or a honeypot, checked on the server.
+- **API endpoints** that serve a data source's rows as JSON at a route an editor defines.
+- **Interactive reports** over a table or a SELECT, from the `AurorisNet.Umbraco.AppBlocks.InteractiveReports` package.
+- **HTML and PDF documents** from Razor templates, from the `AurorisNet.Umbraco.AppBlocks.Documents` package.
 
-- **Sets itself up.** Install the package and start the site. Its definitions install through Umbraco's own services, with no import step or configuration, and a new version updates them through Umbraco's package migrations. **Settings → AppBlocks → Definitions** can reset them to the package or remove them.
-- **Forms backed by your C# or your SQL.** Add a Forms container to a page and bind it to a registered C# class, which owns persistence, validation and business rules, or to a published SQL data source, whose generated statements, row restriction and optional C# backing class do. The field pickers follow its fields. Attachments, editable tables and schedules are included, and a form on a SQL data source saves its record and the rows of its editable tables in one transaction.
-- **Anti-spam without code.** Place a block in a public form to protect it with Turnstile, reCAPTCHA, hCaptcha or a honeypot, checked on the server before your class runs.
-- **Interactive reports.** The optional **AppBlocks.InteractiveReports** package adds a block powered by [Interactive Reports](https://github.com/auroris/Interactive-Reports). Pick a table or write a SELECT, and readers can search, filter, sort, chart, save and download.
-- **Documents and printing.** The optional **AppBlocks.Documents** package produces template-based HTML and PDF documents, with optional direct-to-printer output through [Pressroom](https://github.com/auroris/Pressroom).
-- **Umbraco's access rules first.** Blocks follow their page's Public Access. Add group rules, row restrictions and C# policies only when a rule goes beyond the page.
-- **Your own database.** Application data goes in a separate SQLite file by default, away from Umbraco's. Connect SQL Server, PostgreSQL or Oracle from the backoffice, with connection strings encrypted at rest. SQLite and SQL Server drivers come with Umbraco; a site installs `Npgsql` or `Oracle.ManagedDataAccess.Core` for the others. An application database of your own brings its schema up to date on first open, with ensure scripts at every start and run-once migrations recorded in its version table.
-- **Room for companion packages.** A package can add blocks that stay out of caches when their data changes, API controllers for signed-in Members with 401 and 403 answers and an antiforgery token endpoint, backoffice controllers for administrators, data source policies scoped to its own aliases, backing classes that answer API endpoints from C#, content nodes it generates and keeps current from code, form pages built from block aliases with no GUIDs, and its blocks allowed in the site's Block Grids from its registration.
-- **Keeps working when it can't create tables.** If the database account isn't allowed to, the backoffice shows the grant or script to run, and everything else carries on.
+Blocks follow the Public Access of their page. Data source groups, row restrictions and C# policies narrow access further. Application data goes in a separate SQLite file by default, and the backoffice connects SQL Server, PostgreSQL and Oracle databases.
 
-![A form on the same site: order fields in a responsive layout, file attachments, and editable order lines](docs/images/form.png)
+![A form on the same site: order fields in a responsive layout, file attachments and editable order lines](https://raw.githubusercontent.com/auroris/AurorisNet.Umbraco.AppBlocks/main/docs/images/form.png)
 
-This is an alpha targeting Umbraco **18.3** and **.NET 10**. No NuGet release has been created yet.
+## Install
+
+| Package | Adds |
+|---|---|
+| `AurorisNet.Umbraco.AppBlocks` | Forms, field blocks, attachments, tabular forms, schedules, anti-spam, SQL data sources, API endpoints and connections |
+| `AurorisNet.Umbraco.AppBlocks.InteractiveReports` | The Interactive Report block and saved views. Depends on AppBlocks |
+| `AurorisNet.Umbraco.AppBlocks.Documents` | Documents as HTML or PDF, and printing through Pressroom. Depends on AppBlocks |
+| `AurorisNet.Umbraco.AppBlocks.Testing` | HTTP clients that drive the blocks' endpoints from a site's tests |
+
+The assemblies, namespaces and settings use the name `AppBlocks`.
+
+AppBlocks is an alpha, version `0.1.0-alpha.1`, and is not on nuget.org yet. Until it is, reference the project from a checkout of this repository, or build the packages and install them from a local folder:
+
+```powershell
+# In this repository
+dotnet pack src/AppBlocks -c Release -o artifacts/packages
+
+# In the site's project folder
+dotnet nuget add source <path to artifacts/packages> --name appblocks-local
+dotnet add package AurorisNet.Umbraco.AppBlocks --version 0.1.0-alpha.1
+```
+
+Each package registers itself through an Umbraco composer. When the site restarts, AppBlocks adds its services, routes and backoffice screens, and installs its element types and data types through Umbraco's package migrations. The types appear in **AppBlocks** folders in the backoffice trees, and **Settings → AppBlocks** opens the administration screens.
 
 ## Quick start
 
-AppBlocks isn't on NuGet yet, so reference `src/AppBlocks/AppBlocks.csproj` or install a locally built package. Its package ids are `AurorisNet.Umbraco.AppBlocks`, `AurorisNet.Umbraco.AppBlocks.InteractiveReports` and `AurorisNet.Umbraco.AppBlocks.Documents`; the assemblies, namespaces and settings keep the `AppBlocks` name. It registers itself and installs its definitions on startup. Add `AppBlocks.InteractiveReports` for reports and `AppBlocks.Documents` for documents, each of which brings in AppBlocks. A site's test project can add `AurorisNet.Umbraco.AppBlocks.Testing`, whose clients drive the forms, attachments, tabular, report and paper-report endpoints over HTTP the way the browser runtime does.
+1. In **Settings → Data Types**, add **Forms container** to the allowed blocks of the site's Block Grid or Block List. Add **Interactive Report** when its package is installed. A site or package can also [allow a block from code](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md#pages-built-from-code).
+2. Create the application's tables in the **AppBlocks database** (`AppBlocksDb`), or add another database under **Settings → AppBlocks → Connections**.
+3. Give a form something to read and write. Register a C# class with `services.AddScoped<IFormResource, YourFormClass>()`, or publish a **SQL data source** node under **Data sources** in the content tree.
+4. Add a **Forms container** to a page and add a **Form** to it. Select the class or the data source in the form's **Form Interface**, then add field blocks and bind each to a field.
+5. For a report, add an **Interactive Report** block and choose a table or enter a SELECT.
 
-1. In **Settings → Data Types**, add **Forms container** (and **Interactive Report** when its companion is installed) to the allowed blocks of your existing Block Grid or Block List. **HTML**, **CSS** and **JavaScript** are installed too, and offered nowhere until a site adds them to a grid of its own, because they run whatever an editor writes. A site or package can allow a block in a Block Grid from code instead, as [Adding AppBlocks to a site](docs/site-integration.md#pages-built-from-code) describes.
-2. Configure application data sources in **Settings → AppBlocks → Connections** and create your application tables. **AppBlocks database** is available as `AppBlocksDb` by default.
-3. Register a C# class implementing `IFormResource` with dependency injection (`AddScoped<IFormResource, YourFormClass>()`), or publish a SQL data source under **Data sources**. Add a **Forms container** to any page, add a Form, and select the class or the data source in Form Interface, whose picker lists them in separate groups. Field pickers use its fields. A class owns persistence, validation and authorization; a data source applies its access settings, row restriction, backing class and policies.
-4. With `AppBlocks.InteractiveReports` installed, add an **Interactive Report** and choose **Table** or **SQL query**. Tables are listed as `DataSourceName.TableName` (including the schema where applicable). For SQL, select a configured data source and enter a SELECT query. Configure the starting view to save columns, sorting, filters, paging and presentation on that block. No data-source content nodes or report definition in `appsettings.json` are needed.
+A site that renders blocks with Umbraco's `blockgrid/Components` or `blocklist/Components` partials shows the blocks with no template change. [Adding AppBlocks to a site](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md) covers other rendering conventions, styling and caching.
 
-Sites using Umbraco's conventional `blockgrid/Components` or `blocklist/Components` partials pick up the packaged components automatically. [Adding AppBlocks to a site](docs/site-integration.md) covers other rendering conventions, what anonymous visitors can do, and caching.
+**Check each form class before it goes on a public page.** On a page without Public Access, an anonymous visitor reaches the class, so a class with no check of its own is public. The [business rules guide](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/business-rules.md) has the checks.
 
-**Check your form classes before putting them on a public page.** On a page without Public Access, an anonymous visitor reaches your class, so a class with no check of its own is public. The [business rules guide](docs/business-rules.md) has the checks, and a recipe for a public contact form.
+## Settings
+
+AppBlocks runs with no configuration. [Adding AppBlocks to a site](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md#settings) lists every setting of the `AppBlocks` and `Attachments` sections with its default. The [Interactive Reports](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/interactive-reports.md#settings) and [Documents](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/documents.md#settings) guides list the settings of those packages.
+
+## Supported versions
+
+| Umbraco | Supported releases | Runtime |
+|---|---|---|
+| 18 | <!-- umbraco-releases 18 -->18.3.1<!-- /umbraco-releases --> | .NET 10 |
+
+The packages reference `Umbraco.Cms` 18.3.1, the release the tests run on.
+
+| Database | Driver |
+|---|---|
+| SQLite, SQL Server | Comes with Umbraco |
+| PostgreSQL | The site installs `Npgsql` |
+| Oracle 11.2, and 12c or later | The site installs `Oracle.ManagedDataAccess.Core` |
 
 ## Documentation
 
 | Guide | What it covers |
-| --- | --- |
-| [Adding AppBlocks to a site](docs/site-integration.md) | Installation, rendering, styling, backoffice previews, access and caching, every setting, and companion packages' blocks, Member controllers, generated nodes and pages built from code |
-| [Business rules](docs/business-rules.md) | Identity, groups, ownership, validation, and authorization scenarios. Also under **Settings → AppBlocks → Business rules** |
-| [Backing Classes](docs/csharp-editor.md) | Writing form classes and backing classes in the backoffice on a development site, compiled while it runs, and the wizard that writes them for a table |
-| [Connections](docs/connections.md) | The default database, extra connections, application databases and their schema scripts, upload storage and Oracle modes |
-| [API endpoints](docs/api-endpoints.md) | Rows of a data source as JSON over GET at a route you define: parameters, access without a page, shapes and limits |
-| [Database setup](docs/database-setup.md) | The tables AppBlocks creates, and what to do when the database account may not |
-| [Anti-spam](docs/anti-spam.md) | The Anti-spam block, its keys, privacy and rate limits |
-| [Display value](docs/display-value.md) | Read-only values, and values shown as links to a page, a mail message or a phone number |
-| [Shuttle field](docs/shuttle.md) | Two lists, ordered selections, and single-line CSV values |
-| [Schedule block](docs/schedule.md) | Rows, bars, markers across the top, colours, descriptions and the window |
-| [Color picker](docs/color-picker.md) | Hex color fields, defaults, clearing and validation |
-| [Worked example: a multi-tenant activity schedule](docs/activity-schedule-example.md) | The page tree, tables, data sources, blocks and C# of one application, end to end |
-| [Interactive Reports companion](src/AppBlocks.InteractiveReports/README.md) | Report blocks, saved views and report access |
-| [Documents companion](src/AppBlocks.Documents/README.md) | HTML and PDF documents, and printing through Pressroom |
-| [Localisation](docs/localisation.md) | The blocks' texts in the site's languages: English and French shipped, other languages from the Umbraco dictionary, a source of your own or translation files of your own, the dictionary still overriding the shipped French; and every text id |
-| [Developing AppBlocks](docs/developing.md) | Building, testing, the demo and who owns the definitions |
-| [Renamed identifiers](docs/renamed-identifiers.md) | Old and new namespaces, editor aliases, definition keys, settings and removed members |
+|---|---|
+| [Adding AppBlocks to a site](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md) | Rendering, styling, backoffice previews, access and caching, every setting, and the extension points for companion packages |
+| [Business rules](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/business-rules.md) | Identity, groups, data source access, backing classes, attachments, validation and concurrency. Also shown under **Settings → AppBlocks → Business rules** |
+| [Connections](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/connections.md) | The default database, extra connections, application databases with schema scripts, upload storage and database drivers |
+| [Database setup](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/database-setup.md) | The tables AppBlocks creates, and what to do when the database account may not create them |
+| [API endpoints](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/api-endpoints.md) | Rows of a data source as JSON over GET: routes, parameters, access and the browser client |
+| [Backing Classes](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/csharp-editor.md) | Writing form classes and backing classes in the backoffice of a development site |
+| [Anti-spam](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/anti-spam.md) | The Anti-spam block and its keys |
+| [Display value](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/display-value.md) | Read-only values, and values shown as links |
+| [Shuttle field](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/shuttle.md) | Ordered selections stored as one line of CSV |
+| [Color picker](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/color-picker.md) | Hex color fields |
+| [Schedule block](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/schedule.md) | Rows, bars and markers from two data sources |
+| [Localisation](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/localisation.md) | The blocks' texts in the site's languages, and every text id |
+| [Worked example](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/activity-schedule-example.md) | A multi-tenant activity schedule: pages, tables, data sources, blocks and C# |
+| [Interactive Reports package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/interactive-reports.md) | Report blocks, saved views, printing and report access |
+| [Documents package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/documents.md) | Document nodes, templates, Pressroom configurations and the output service |
+| [Testing package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/src/AppBlocks.Testing/README.md) | The endpoint clients and the helpers for running Umbraco in a test process |
+| [Developing AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/developing.md) | Building, testing, the demo site and how definitions change between versions |
 
-**Settings → AppBlocks → Forms** also lists every saved form, each with a read-only C# sample to download. AppBlocks never compiles or runs that sample. On a development site with the `Umbraco.Cms.DevelopmentMode.Backoffice` package, **Settings → AppBlocks → Backing Classes** is where code is compiled into the running site: see [Backing Classes](docs/csharp-editor.md).
+## Developing
+
+Building needs the .NET 10 SDK. The clean-install test also needs PowerShell 7 and Node.js.
+
+```powershell
+dotnet build AppBlocks.slnx
+dotnet run --project tests/AppBlocks.Tests -- -noLogo
+dotnet run --project tests/AppBlocks.InteractiveReports.Tests -- -noLogo
+dotnet run --project tests/AppBlocks.Documents.Tests -- -noLogo
+dotnet pack src/AppBlocks -c Release -o artifacts/packages
+```
+
+The three test projects and `tests/clean-install/Invoke-CleanInstall.ps1` together are the full test run. Run them on a developer's machine before a release that changes the code. [Developing AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/developing.md) describes each of them, the live database tests and the demo site.
+
+## Releases
+
+AppBlocks follows Umbraco. `umbraco-releases.yml` tests each new Umbraco 18 release with the three test projects. When they pass, it commits the release to `UmbracoReleases` in `Directory.Build.props` and starts `release.yml`. Dependabot covers the other packages.
+
+Versions are `MAJOR.MINOR.PATCH` with a prerelease series: `0.1.0-alpha.1`, then `0.1.0-alpha.2`. The four packages publish together under one version. The first release is started by hand, because there is no release tag to raise yet.
+
+The [release guide](https://github.com/auroris/AurorisNet.Build/blob/main/docs/releasing.md) describes the workflows.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/LICENSE)

@@ -1,12 +1,26 @@
 # Connections
 
-**Settings → AppBlocks → Connections** supplies **AppBlocks database** (`AppBlocksDb`) as the default for forms and reports. On SQLite installations, its `AppBlocks.sqlite.db` file sits beside Umbraco's SQLite database. Application data, saved report views and uploaded file contents share this file by default. It is created on first use with foreign keys and write-ahead logging enabled. The site supplies its business tables; saved-report and upload tables are created by their stores, or by hand where the database account may not (see [Database setup](database-setup.md)).
+The databases AppBlocks reads and writes: the default application database, the upload store, connections added in the backoffice or in code, application databases with schema scripts, and the driver each database type needs.
 
-Use this separate database for application work. SQLite permits only one writer per database, so keeping form submissions and uploads out of Umbraco's file avoids competing with CMS saves. `UmbracoDb` remains available for sources that specifically read CMS data. AppBlocks opens its own connections; it does not share Umbraco's scope or transaction.
+## The AppBlocks database
 
-If Umbraco has no file-backed SQLite database, the default file is under `App_Data` in `AppBlocks:DataRoot`, or the site's content root when that is not set. A configured `ConnectionStrings:AppBlocksDb` and `ConnectionStrings:AppBlocksDb_ProviderName` override the default file and provider. Back up the application database as well as Umbraco's database, using a SQLite-aware backup when the application is running.
+**Settings → AppBlocks → Connections** lists **AppBlocks database** (`AppBlocksDb`) as the default connection for forms and reports. On a site whose Umbraco database is a SQLite file, it is the file `AppBlocks.sqlite.db` beside that file. AppBlocks creates it on first use, with foreign keys and write-ahead logging turned on.
 
-Uploads can use their own store by setting:
+Application data, saved report views and uploaded files share this database by default. The site creates its business tables. The saved-view and upload tables are created by their stores, or by hand where the database account may not create tables (see [Database setup](database-setup.md)).
+
+Keep application data in this database. SQLite permits one writer per database, so form submissions and uploads in a file of their own never wait on Umbraco's saves. AppBlocks opens its own connections, separate from Umbraco's scope and transaction. `UmbracoDb` is available for a source that reads Umbraco's own data.
+
+| Situation | Where the default database is |
+|---|---|
+| Umbraco uses a SQLite file | `AppBlocks.sqlite.db` beside Umbraco's file |
+| Umbraco uses another database | `App_Data/AppBlocks.sqlite.db` under `AppBlocks:DataRoot`, or under the content root when that is not set |
+| `ConnectionStrings:AppBlocksDb` is set | That connection, with the provider in `ConnectionStrings:AppBlocksDb_ProviderName` |
+
+Back up the application database with Umbraco's database. Use a SQLite-aware backup while the site is running.
+
+## The upload store
+
+Uploaded files are stored in database tables. They go in `AppBlocksDb` unless `Attachments:Connection` names another connection:
 
 ```json
 {
@@ -16,17 +30,58 @@ Uploads can use their own store by setting:
 }
 ```
 
-This selects the optional `Attachments.sqlite.db` beside Umbraco's SQLite file. Set `Attachments:Connection` to another registered connection to use another database, or configure `ConnectionStrings:AttachmentsDb` and its `_ProviderName` to override that optional store. Leave `Attachments:Connection` empty or use `AppBlocksDb` to share the default application database. Uploaded bytes are stored in database tables, not loose files.
+| `Attachments:Connection` | Upload store |
+|---|---|
+| Empty, or `AppBlocksDb` | The AppBlocks database |
+| `AttachmentsDb` | `Attachments.sqlite.db` beside Umbraco's SQLite file, or the connection in `ConnectionStrings:AttachmentsDb` with its `_ProviderName` |
+| Another name | That registered, configured or saved connection |
 
-The upload store runs on SQLite, SQL Server, PostgreSQL and Oracle 12c or later (**Oracle 12+** mode). Its PostgreSQL and Oracle tables and statements are written from each database's documentation and have not yet been run against a live server, so test uploads on those databases before relying on them. An **Oracle 11.2** connection cannot hold uploads: select a separate store for them.
+The upload store runs on SQLite, SQL Server, PostgreSQL and Oracle 12c or later. A connection in **Oracle 11.2** mode cannot hold uploads, so select a separate store for them.
 
-The reports companion defaults `InteractiveReport:SavedReports:Connection` to `AppBlocksDb`. An explicit `SavedReports:Connection` or `SavedReports:DataSource` takes precedence. See the [companion guide](../src/AppBlocks.InteractiveReports/README.md).
+**The PostgreSQL and Oracle upload tables and statements have not been run against a live server.** Test uploads on those databases before relying on them.
 
-Named applications registered with `AddApplicationDatabase` also get their own SQLite file beside Umbraco's SQLite database by default. The default filename is `<connectionName>.sqlite.db`, or the registration's `defaultFile`. Existing default files under App_Data remain in use until deliberately moved, so upgrading does not substitute an empty database. Explicit named connection settings still win. Without a file-backed SQLite CMS, the fallback is App_Data.
+## Saved report views
+
+The reports companion stores saved views on `AppBlocksDb`. `InteractiveReport:SavedReports:Connection` or `InteractiveReport:SavedReports:DataSource` names another connection. See the [Interactive Reports guide](interactive-reports.md).
+
+## Adding connections
+
+### In the backoffice
+
+Administrators add, edit and test SQL Server, SQLite, PostgreSQL, **Oracle 11.2** and **Oracle 12+** connections on the Connections screen.
+
+- A connection string entered there is protected with ASP.NET Core Data Protection and stored in `App_Data/AppBlocks/connections.json`. It is kept out of blocks, the listing API and content exports.
+- AppBlocks reads the file again whenever its size or modification time changes, so a save on another instance or a restored backup takes effect without a restart.
+- Keep that file and the site's Data Protection keys together when backing up or moving an installation.
+- A saved connection whose string this installation can no longer decrypt is listed with that problem. This happens after the Data Protection keys change or the file is copied from another server. Everything that opens the connection fails with the same message until the connection is saved again with its connection string.
+- Several application instances need a shared, durable store for the file and the keys. Administration from several instances at once is not coordinated.
+
+Changing a connection selects another database. It copies no tables or files.
+
+### In configuration
+
+The screen lists a `ConnectionStrings` entry when AppBlocks can open it: an entry whose `_ProviderName` names a database AppBlocks knows, or an entry with no provider name that reads as a SQL Server connection string. Other entries, such as a job store on MySQL, are left out of the list and the pickers.
+
+Configured connections are read-only on the screen. A connection cannot be saved under a name that `ConnectionStrings` already has, because the configured one would always be opened.
+
+### In code
+
+Register a site's business connections with `AddAppBlocks`:
+
+```csharp
+using AppBlocks;
+
+builder.AddAppBlocks(connections =>
+    connections.AddConnection("Business", services => new SqlConnection(connectionString)));
+```
+
+Registered connections are read-only on the screen, and forms, data sources and the report source picker offer them like any other. The screen shows the database type from the `DatabaseDialect` passed to `AddConnection`, or from the type of the connection the factory creates. A custom connection type with no dialect shows as `unknown`. A saved connection with the same name takes precedence and stays editable.
+
+A connection added directly to Interactive Reports' builder, through `AddAppBlocksInteractiveReports`, stays off this list. Configured reports, report definition nodes and forms can open it by name, and a report block refuses it.
 
 ## Application databases
 
-An application with tables of its own registers its database and its schema together, and AppBlocks brings the schema up to date the first time the process opens the connection, before the caller's first statement:
+An application with tables of its own registers its database and its schema together. AppBlocks brings the schema up to date the first time the process opens the connection, before the caller's first statement:
 
 ```csharp
 builder.AddAppBlocks(connections => connections.AddApplicationDatabase("NoticesDb",
@@ -34,33 +89,50 @@ builder.AddAppBlocks(connections => connections.AddApplicationDatabase("NoticesD
         .Once("seed-categories", (connection, transaction, dialect) => SeedCategories(connection, transaction))));
 ```
 
-The schema is a folder per dialect (`sqlite`, `sqlserver`, `postgresql`, `oracle`), on disk with `ApplicationSchema.FromDirectory` or embedded with `FromEmbedded`. Each open of a new process works through it in this order:
+The connection string is a connection saved under that name, or `ConnectionStrings:<name>` with its `_ProviderName`. Without either, the database is a SQLite file beside Umbraco's SQLite file, named `<name>.sqlite.db` or the registration's `defaultFile`. When Umbraco has no SQLite file, the file goes under `App_Data`. A file that already exists under `App_Data` stays in use when no file exists beside Umbraco's.
 
-1. The version table, `APP_SCHEMA` (`SCRIPT`, `HASH`, `APPLIED_AT`) unless `RecordIn("ORDERS_SCHEMA")` names another, is created if it is missing.
-2. **Ensure scripts**, the `*.sql` files of the dialect folder, run in file-name order at every process start, each in its own transaction with its row. Write them to be safe to repeat: `CREATE TABLE IF NOT EXISTS`, or a check before each change. On SQLite an `ALTER TABLE ... ADD` whose column is already there counts as applied.
-3. **Run-once scripts**, the `*.sql` files of the dialect folder's `migrations` folder, run in file-name order, each exactly once per database. Each runs in one transaction with its row, recorded as `<schema>/migrations/<file>` with the script's SHA-256. A later start finds the row and skips the script. Use them for changes that cannot be repeated, such as moving data or renaming a column.
-4. **C# steps** run in the order they were added. `Then(step)` runs at every start. `Once(name, step)` runs once per database, recorded as `<schema>/once/<name>`, inside the transaction that records it: its commands set `command.Transaction` to the transaction it receives.
+### Schema scripts
 
-Every row starts with the schema's `Name`, so two application databases whose connections reach one physical database keep their own rows in one version table. `FromDirectory` names a schema after its folder, such as `Schema`, and `FromEmbedded` after the assembly and the folder, such as `Notices:Schema`; pass `name` to either to choose it, and keep it once a database has rows under it. A row written before rows carried the name, such as `migrations/001-init.sql`, is taken over by the first schema that expects it, so an existing database runs nothing again.
+The schema is one folder per dialect: `sqlite`, `sqlserver`, `postgresql` and `oracle`. Read it from disk with `ApplicationSchema.FromDirectory`, or from embedded resources with `FromEmbedded`. The first open in a process works through it in this order:
 
-A run-once script that has run must stay as it ran. When its text no longer matches its recorded hash, the ensure stops with an `ApplicationSchemaException` naming the script, and every open of the connection fails with it until someone decides. Restore the script and put the change in a new file, or check the database by hand and delete the script's row in the version table so it runs again. The hash ignores a byte order mark and reads CRLF line endings as LF, so a checkout that converts line endings is the same script. A recorded script whose file is gone is ignored.
+1. **The version table.** `APP_SCHEMA`, with the columns `SCRIPT`, `HASH` and `APPLIED_AT`, is created when it is missing. `RecordIn("ORDERS_SCHEMA")` names another table.
+2. **Ensure scripts.** The `*.sql` files of the dialect folder run in file-name order at every process start, each in its own transaction. Write them to be safe to repeat: `CREATE TABLE IF NOT EXISTS`, or a check before each change. On SQLite, an `ALTER TABLE ... ADD` whose column already exists counts as applied.
+3. **Run-once scripts.** The `*.sql` files of the dialect folder's `migrations` folder run in file-name order, each once per database. Each runs in one transaction with its row, recorded as `<schema>/migrations/<file>` with the script's SHA-256 hash. Use them for changes that cannot be repeated, such as moving data or renaming a column.
+4. **C# steps.** They run in the order they were added. `Then(step)` runs at every start. `Once(name, step)` runs once per database, recorded as `<schema>/once/<name>`, inside the transaction that records it. Its commands set `command.Transaction` to the transaction the step receives.
 
-A script or step that fails throws an `ApplicationSchemaException` naming it, leaves no row, and runs again on the next open. Each run-once script records its row before its statements, so a second process starting at the same moment waits for the first and then skips the script. Oracle commits around DDL, so there the row is written after the statements instead: a run-once script that fails partway on Oracle may leave part of its work behind, and two processes starting together against an empty Oracle schema may both try it. Start one process first after deploying a run-once script to Oracle.
+### Schema names
+
+Every row starts with the schema's `Name`, so two application databases whose connections reach one physical database keep separate rows in one version table. `FromDirectory` names a schema after its folder, such as `Schema`. `FromEmbedded` names it after the assembly and the folder, such as `Notices:Schema`. Pass `name` to either to choose the name, and keep it once a database has rows under it.
+
+### Changed and failed scripts
+
+**A run-once script that has run must stay as it ran.** When its text no longer matches its recorded hash, AppBlocks throws an `ApplicationSchemaException` that names the script, and every open of the connection fails until someone resolves it:
+
+- Restore the script and put the change in a new file, or
+- check the database by hand and delete the script's row in the version table, so the script runs again.
+
+The hash ignores a byte order mark and reads CRLF line endings as LF, so a checkout that converts line endings produces the same hash. A recorded script whose file is gone is ignored.
+
+A script or step that fails throws an `ApplicationSchemaException` that names it. It leaves no row and runs again on the next open.
+
+Each run-once script records its row before its statements run. A second process that starts at the same moment waits for the first and then skips the script.
+
+**Oracle commits around DDL, so on Oracle the row is written after the statements.** A run-once script that fails partway may leave part of its work behind, and two processes that start together against an empty Oracle schema may both try it. After deploying a run-once script to Oracle, start one process first.
 
 ## Database drivers
 
-AppBlocks ships no database driver. SQLite and SQL Server need nothing more, because Umbraco itself brings `Microsoft.Data.Sqlite` and `Microsoft.Data.SqlClient` into every site. For the other databases, the site installs the driver package and AppBlocks finds it by name at run time, as Interactive Reports does:
+AppBlocks ships no database driver. Umbraco brings `Microsoft.Data.Sqlite` and `Microsoft.Data.SqlClient` into every site. For the other databases, the site installs the driver package and AppBlocks finds it by name at run time.
 
 | Database | Package the site installs |
 | --- | --- |
-| SQLite | none; comes with Umbraco |
-| SQL Server | none; comes with Umbraco |
+| SQLite | None. It comes with Umbraco |
+| SQL Server | None. It comes with Umbraco |
 | PostgreSQL | `Npgsql` |
 | Oracle 11.2 and Oracle 12+ | `Oracle.ManagedDataAccess.Core` |
 
-Without the package, saving or testing a PostgreSQL or Oracle connection fails with a message naming it, and a configured or code-registered connection of that type fails the same way when first opened. Install the package and restart the site.
+Without the package, saving or testing a PostgreSQL or Oracle connection fails with a message that names it. A configured or registered connection of that type fails the same way when it is first opened. Install the package and restart the site.
 
-The Oracle driver needs one more setting. Umbraco's startup scan loads every assembly beside the site and whatever those reference, and `Oracle.ManagedDataAccess` references optional cloud assemblies its package does not ship, so the site cannot start until the scan leaves the driver alone:
+**The Oracle driver needs one more setting.** Umbraco's startup scan loads every assembly beside the site and the assemblies those reference. `Oracle.ManagedDataAccess` references optional cloud assemblies that its package leaves out, so the site cannot start until the scan skips the driver:
 
 ```json
 {
@@ -74,20 +146,19 @@ The Oracle driver needs one more setting. Umbraco's startup scan loads every ass
 }
 ```
 
-AppBlocks still finds the driver by name when a connection opens. Npgsql needs no such setting.
+AppBlocks still finds the driver by name when a connection opens. `Npgsql` needs no such setting.
 
-Administrators can add, edit and test extra SQL Server, SQLite, PostgreSQL, **Oracle 11.2** or **Oracle 12+** connections. The screen links to [connection string examples](https://www.connectionstrings.com/). Report table choices come from database metadata; SQL queries are authored on the report block. Changing a connection selects a database; it does not copy existing tables or files.
+## Oracle modes
 
-Connection strings entered here are protected with ASP.NET Core Data Protection and stored in `App_Data/AppBlocks/connections.json`; they are never stored in blocks, returned by the listing API or included in content exports. A saved connection whose string this installation can no longer decrypt, after its Data Protection keys changed or the file was copied from another server, is listed with that problem, and everything that opens it fails with the same message until it is saved again with its connection string. AppBlocks keeps the parsed file in memory and reads it again whenever its size or modification time changes, so a save on another instance or a restored backup takes effect without a restart. Keep that file and the site's Data Protection keys together when backing up or moving an installation. Multiple application instances need a shared, durable file/key store; concurrent administration across multiple instances is not yet coordinated.
+**Oracle 11.2** and **Oracle 12+** are SQL compatibility modes shared with Interactive Reports. The mode controls the SQL that AppBlocks generates for the connection. Both use the site's `Oracle.ManagedDataAccess.Core` driver.
 
-The screen lists a `ConnectionStrings` entry of the site's configuration when AppBlocks can open it: one whose `_ProviderName` names a database AppBlocks knows, or one with no provider name that reads as a SQL Server connection string. Entries that belong to something else on the site, such as a job store on MySQL or a cache, are left out of the list and the pickers. A connection cannot be saved under a name `ConnectionStrings` already has, since the configured one would always be opened instead.
+| Mode | `_ProviderName` for a configured connection | Dialect for `AddConnection` |
+|---|---|---|
+| Oracle 11.2 | `oracle11g` | `DatabaseDialect.Oracle11g` |
+| Oracle 12+ | `oracle`, `Oracle.ManagedDataAccess.Client` or `Oracle.ManagedDataAccess.Core` | `DatabaseDialect.Oracle` |
 
-Register a site's business connections with `AddAppBlocks(connections => connections.AddConnection(...))`, or `AddApplicationDatabase` for a database with its own schema. Connections registered this way and those supplied by the site configuration are read-only in this screen, and forms, data sources and the report source picker offer them like any other. A registered connection has no connection string to show: its database type is the dialect passed to `AddConnection`, or else what its unopened connection's type says, and `unknown` for a custom connection type that declares no dialect. A saved connection of the same name keeps precedence and stays editable.
+- Oracle 11.2 mode uses 11.2-compatible metadata and row limits. Generated keys need an explicit sequence in the data source's **Key sequences**, such as `{"ID":"ORDERS_SEQ"}`.
+- Oracle 12+ mode also discovers identity columns. On first use it detects a server older than 12 and switches to Oracle 11.2 mode.
+- The upload store needs Oracle 12+ mode, or a separate store.
 
-Connections added directly to Interactive Reports' builder through the companion's `AddAppBlocksInteractiveReports` are outside this list. Configured reports, report definition nodes and forms can still open one by name, but this screen does not show it and a report block refuses it.
-
-**Oracle 11.2** and **Oracle 12+** are Oracle SQL compatibility modes shared with Interactive Reports. The choice controls the SQL generated for the connection. Both modes open the site's `Oracle.ManagedDataAccess.Core` driver (see [Database drivers](#database-drivers)). For configured connections, set `ConnectionStrings:<name>_ProviderName` to `oracle11g` for Oracle 11.2 mode or `oracle` for Oracle 12+ mode; existing `Oracle.ManagedDataAccess.Client` and `Oracle.ManagedDataAccess.Core` provider names still work. Code registrations can pass `DatabaseDialect.Oracle11g` or `DatabaseDialect.Oracle` to `AddConnection`. Oracle 12+ mode also detects pre-12 server versions on first use and switches to Oracle 11.2 mode, as Interactive Reports does.
-
-Oracle 11.2 mode uses 11.2-compatible metadata and row limits, with explicit key sequences for generated keys (`keySequences`, for example `{"ID":"ORDERS_SEQ"}`). Oracle 12+ mode additionally discovers identity columns. The reports companion preserves the selected compatibility mode. Upload storage needs Oracle 12+ mode or a separate store.
-
-AppBlocks is tested with the `Oracle.ManagedDataAccess.Core` version Interactive Reports' live tests use. Oracle's [current driver certification](https://docs.oracle.com/en/database/oracle/oracle-database/26/odpnt/InstallSystemRequirements.html) lists Database 19c and later; connectivity to older servers requires verification independently of the selected SQL compatibility mode.
+AppBlocks' tests use the `Oracle.ManagedDataAccess.Core` version that `tests/AppBlocks.Tests/AppBlocks.Tests.csproj` references. Oracle's [driver certification](https://docs.oracle.com/en/database/oracle/oracle-database/26/odpnt/InstallSystemRequirements.html) lists Database 19c and later, so verify connectivity to an older server yourself, whichever mode is selected.

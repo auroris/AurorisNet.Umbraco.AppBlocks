@@ -17,7 +17,7 @@ for (const file of ['appsettings.json', 'appsettings.Development.json']) {
 const account = JSON.parse(await readFile(resolve(site, 'test-account.json'), 'utf8'));
 const output = resolve(site, '../results');
 await mkdir(output, {recursive:true});
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { chromium } = require('playwright');
 const browser = await chromium.launch({headless:true, ...(existsSync(chromium.executablePath()) ? {} : {executablePath:process.env.BROWSER_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'})});
 const page = await browser.newPage({viewport:{width:1280,height:900}});

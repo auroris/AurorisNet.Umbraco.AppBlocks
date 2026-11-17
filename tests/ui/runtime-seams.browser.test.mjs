@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 // strings and language, the blocks' API root and the Member's antiforgery helper, a new record's files sent ahead of its
 // save, sign-in on 401, a delete answered with a body, the server's own words for a refusal, and the schedule's link rule.
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../Interactive-Reports'), 'package.json'));
+const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
 const { chromium } = require('playwright');
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true, ...(existsSync(chromium.executablePath()) ? {} : { executablePath: process.env.BROWSER_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' }) }); });

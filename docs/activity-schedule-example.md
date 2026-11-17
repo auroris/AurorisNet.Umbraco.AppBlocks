@@ -1,8 +1,8 @@
 # Worked example: a multi-tenant activity schedule
 
-One application, several clubs of a sailing association, each with its own schedule and its own editors, every club's pages living inside its own part of the site. This guide puts the pieces of AppBlocks together for it: the page tree, the tables, three data source nodes, a Schedule block, two form pages, and the C# that holds every rule. It is the [business rules guide](business-rules.md) applied end to end, so that guide explains each rule; this one shows where it goes.
+This example builds one application for several clubs of a sailing association. Each club has its own schedule and its own editors, and its pages sit in its own part of the site. The example shows where each piece goes: the page tree, the tables, three data source nodes, a Schedule block, two form pages and the C# that holds every rule. The [business rules guide](business-rules.md) explains each rule.
 
-The shape of the rules is short:
+The application has three rules:
 
 - **The page tree decides the tenant.** A club's home page carries a Tenant id. Every page below it, the schedule and its administration pages, belongs to that tenant, and nothing in a URL parameter or a form field says otherwise.
 - **One C# class decides who may edit.** A backoffice User allowed to edit the calling page may change its tenant's schedule. Anyone else needs to be a Member of that tenant's editors group. Anyone signed in may read.
@@ -25,9 +25,11 @@ Home                                    (/en/)
         └── Activity
 ```
 
-The club home pages use a document type with a text property aliased `tenantId`. That property is the whole definition of a tenant: the C# below walks up from the calling page to the nearest page that has one. Depth, naming and language do not matter, which is why Harbour Club can sit at the root and Northgate under Clubs.
+The club home pages use a document type with a text property aliased `tenantId`. That property defines a tenant: the C# below walks up from the calling page to the nearest page that has one. The page's depth, name and language play no part, so Harbour Club can sit at the root and Northgate under Clubs.
 
-No page needs Public Access for the rules to work. The Schedule block, the categories report and the category form read through the data source engine, which shows a sign-in notice to anyone it does not know, and the activity form's class refuses anyone it does not know. Protecting the subtree with Public Access as well keeps the pages out of the menu for visitors, but Umbraco then refuses a backoffice User who has no Member session, editors included, unless the site registers an `IProtectedPageAdmission` that admits them.
+The rules work with no Public Access on any page. The Schedule block, the categories report and the category form read through the data source engine, which shows a sign-in notice to a visitor without an account. The activity form's class refuses the same visitor.
+
+Protecting the subtree with Public Access as well keeps the pages out of the menu for visitors. Umbraco then refuses a backoffice User who has no Member session, editors included, unless the site registers an `IProtectedPageAdmission` that admits them.
 
 ## The tables
 
@@ -71,7 +73,8 @@ Three nodes under **Data sources**, each on the `AppBlocksDb` connection. Their 
 
 | Setting | Value |
 | --- | --- |
-| Source | `EVENT_CATEGORY` |
+| Access | Not public, as on all three nodes: any signed-in Member or backoffice User may read |
+| Row source | `EVENT_CATEGORY` |
 | Key columns | `ID` |
 | Row restriction | `TENANT_ID = :APP.tenant` |
 | Insert defaults | `TENANT_ID = :APP.tenant` |
@@ -126,7 +129,7 @@ The Activity page holds a Forms container with one form. Its Form Interface sele
 
 ## The C#
 
-Four small classes and a composer. The tenant rule, the bind variable provider, the data source policy and the form class each do one thing, and the form class checks its rules on every operation.
+The code is four classes and a composer: the tenant rule, the bind variable provider, the data source policy and the form class. The form class checks its rules on every operation.
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -401,7 +404,7 @@ public sealed class EventsComposer : IComposer
 }
 ```
 
-A few things in that code are deliberate.
+Points to keep when adapting the code:
 
 - **`AdmitAsync` runs first in every operation**, and `Load` admits with `change: false` so a signed-in reader can open an activity while the returned capabilities say whether this person may change it. The capabilities only shape the buttons; `Update` and `Delete` admit with `change: true` and check again.
 - **The tenant is in every predicate.** `WHERE ID = @id AND TENANT_ID = @tenant` means a key from another club's schedule is a missing record, not a leak, even if someone types it into the address.
@@ -425,7 +428,7 @@ A few things in that code are deliberate.
 | Is the activity's category real, and are its dates in order? | `ActivityResource.ValidateAsync` |
 | Has someone else saved this activity meanwhile? | `ActivityResource.StaleAsync`, which compares a checksum of the activity's values with the locked row inside the update or delete transaction |
 
-Nothing on this list is decided by a URL parameter, a hidden field or a block setting.
+Every item on this list is decided on the server, from the page, the account and the database. A URL parameter, a hidden field or a block setting decides none of them.
 
 ## Adding a club
 

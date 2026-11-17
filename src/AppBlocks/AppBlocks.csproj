@@ -36,6 +36,7 @@
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="../../docs/business-rules.md" Pack="true" PackagePath="docs/" />
     <!-- Keeps a site's C# folder out of its own compilation; the demo imports it directly, as a project reference brings no build files. -->
+    <!-- NuGet imports a build file only when it is named after the package id. -->
     <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
     <EmbeddedResource Include="../../docs/business-rules.md" LogicalName="AppBlocks.BusinessRules.md" />
     <EmbeddedResource Include="Views/**/*.cshtml;Schema/**/*.config;Attachments/Schema/**/*.sql" />

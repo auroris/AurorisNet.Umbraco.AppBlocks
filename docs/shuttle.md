@@ -1,20 +1,34 @@
 # Shuttle field
 
-The **Shuttle** form field (`appShuttle`) shows available items on the left and selected items on the right. Visitors can add or remove highlighted items, move all items at once, and reorder the selected list with **Top**, **Up**, **Down**, and **Bottom**. Multiple highlighted items retain their relative order. The lists use native multi-select controls and the buttons work with the keyboard. On narrow screens the lists stack.
+The **Shuttle** field (`appShuttle`) stores an ordered selection as one line of CSV. It shows the available items in a list on the left and the selected items in a list on the right.
 
-Add a Shuttle inside a Form in the Forms container, including inside a fieldset or layout. Bind it to a **text** field on the registered form class. Supply either that field's `Choices` or a published **List of values**, as with Select:
+A visitor adds or removes highlighted items, moves all items at once, and reorders the selected list with **Top**, **Up**, **Down** and **Bottom**. Several highlighted items keep their relative order. The lists are native multi-select controls, the buttons work with the keyboard, and the lists stack on narrow screens.
+
+## Adding one
+
+Add a Shuttle inside a Form in a Forms container. It can sit inside a fieldset or a layout. Bind it to a `text` field of the form class. Supply the items through that field's `Choices` or through a published **List of values**, as with Select:
 
 ```csharp
 new FormField("steps", "Steps", "text", MaxLength: 2000,
     Choices: [new("review", "Review"), new("approve", "Approve"), new("publish", "Publish")])
 ```
 
-The form class receives the entire right-hand list as one CSV string, using item **values**, in displayed order. Highlighting an item only selects it for the next transfer or reorder operation; it does not determine what is saved. For example, Publish above Review submits `publish,review`. An empty list submits `""`.
+## The stored value
 
-Values containing commas or double quotes use CSV escaping. The two values `north,east` and `say "yes"` become `"north,east","say ""yes"""`. Item values must be unique, non-empty, and contain no line breaks, so output stays on one line. Labels can differ from values. The field's maximum length applies to the complete CSV string.
+The form class receives the whole right-hand list as one CSV string of item values, in the order shown. Publish above Review submits `publish,review`. An empty list submits `""`. Highlighting an item only selects it for the next move, so it has no effect on what is saved.
 
-Use `ShuttleValue.TryParse(csv, out var items)` and `ShuttleValue.Serialize(items)` from `AppBlocks.Forms` to read or create ordered selections in your class. The server rejects malformed CSV, duplicate values, and unavailable choices before calling the class. A published list uses the same access checks as Select. Values already saved on a record remain visible if retired from that list, and can be reordered or removed; they cannot be added to new records.
+- A value that contains a comma or a double quote is CSV-escaped. The two values `north,east` and `say "yes"` become `"north,east","say ""yes"""`.
+- Item values must be unique, non-empty and free of line breaks, so the output stays on one line. Labels can differ from values.
+- The field's maximum length applies to the whole CSV string.
 
-**Default value** accepts ordered CSV, including a bind variable such as `:APP.steps` or `:PARAM.steps`. It applies only when a new record has no value. Required, read-only, hidden, help text, and width settings work as for other form fields. A required shuttle needs at least one item on the right. Read-only fields and records without create/update permission disable both lists and all transfer/reorder controls.
+`ShuttleValue.TryParse(csv, out var items)` and `ShuttleValue.Serialize(items)`, in `AppBlocks.Forms`, read and write ordered selections in a class.
 
-Fresh sites offer Shuttle automatically. On an existing site, startup installs the new element type but preserves the site's existing grid configuration. In **Settings → Data Types → AppBlocks: Forms container**, add **Shuttle** to the **Content** block group, allow it in areas, and leave it disallowed at the root, matching Select. See [who owns the definitions](developing.md#who-owns-the-definitions).
+The server rejects malformed CSV, duplicate values and values that are not among the choices before it calls the class. A published list applies the same access checks as it does for Select.
+
+A value saved on a record stays visible after it is retired from the list. It can be reordered or removed on that record, and it cannot be added to another.
+
+## Settings
+
+- **Default value** accepts ordered CSV or a bind variable such as `:APP.steps` or `:PARAM.steps`. It applies when a new record has no value.
+- Required, read-only, hidden, help text and width work as for other fields. A required shuttle needs at least one item on the right.
+- A read-only field, and a record the caller cannot create or update, disables both lists and every button.

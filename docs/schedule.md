@@ -1,6 +1,8 @@
-# The Schedule block
+# Schedule block
 
-A Schedule block draws resources against time: the rows of one data source down the side, the bars of another across a window of days or hours. It is a Gantt chart whose content comes entirely from two queries, so the block itself has few settings. Anything that varies per row or per bar is a column of a source, colours come from the site's theme or from the data, and a bar's behaviour is a link or a description. The block is in the base package and renders through the data source engine. Set each source's required Access value to Public to follow page access; a source that requires an account shows anonymous visitors a sign-in notice.
+The **Schedule** block (`appSchedule`) draws resources against time, as a Gantt chart does: the rows of one data source down the side, and the rows of another as bars across a window of days or hours.
+
+Two queries supply the content. Anything that varies per row or per bar is a column of a source. Colours come from the site's theme or from the data, and a bar leads to a link or opens a description. The block reads both sources through the data source engine, so each source's [Access](#access) setting applies.
 
 ## Settings
 
@@ -50,11 +52,22 @@ The same sources may carry four more columns. None is required.
 | `description` | both | Text a reader opens from the bar or from the row's label, with the bar's dates and its link. A bar with a description is a button rather than a link, so its link is offered inside the details. Line breaks are kept. |
 | `orientation` | rows | `true`, `1` or `vertical` makes the row a band of markers. See below. |
 
-A bar's `link` is held to a rule for the same reason as its colours, so a value from a row never runs script in a reader's browser. It is used only when it is a path from the site's root, which starts with one `/` (a value starting `//` or `/\` names another host), or an address whose scheme is `http`, `https`, `mailto` or `tel`. Every other value counts as no value, so the link template applies, or the bar has no link when the block has no template: other schemes, `javascript:` among them, relative paths such as `./`, `../` and bare names, a value starting with `?` or `#`, and any value holding a control character such as a tab or a line break. The link template is the editor's and is used as written.
+### Which links a bar may have
+
+A bar's `link` comes from a row, so the block holds it to a rule that keeps script out of a reader's browser. The block uses the value when it is one of these:
+
+- A path from the site's root, which starts with one `/`. A value that starts with `//` or `/\` names another host and is refused.
+- An address whose scheme is `http`, `https`, `mailto` or `tel`.
+
+Every other value counts as empty: another scheme such as `javascript:`, a relative path such as `./`, `../` or a bare name, a value that starts with `?` or `#`, and a value that holds a control character such as a tab or a line break. The link template then applies, or the bar has no link when the block has no template.
+
+The link template is written by the editor and is used as written.
 
 ## Vertical rows and markers
 
-A row whose `orientation` is true is drawn across the top of the schedule instead of down the side. Each of its bars becomes a marker: its label is written top to bottom in a band as tall as its lanes, and its columns are shaded with its colour through every row below, behind the horizontal bars. That is what a statutory holiday, a shutdown or an exercise looks like on everyone's schedule at once. A marker is a bar in every other way. It can span several columns, it is packed into lanes when two markers share a day, and it carries the same link, colours and description. The one difference is that a marker without an end covers its start column only, since a holiday has no "onward".
+A row whose `orientation` is true is drawn across the top of the schedule. Each of its bars becomes a marker: its label is written top to bottom in a band as tall as its lanes, and its columns are shaded with its colour through every row below, behind the horizontal bars. Use it for something that applies to every row, such as a statutory holiday or a shutdown.
+
+A marker behaves as a bar does. It can span several columns, it is packed into lanes when two markers share a day, and it carries the same link, colours and description. A marker without an end covers its start column only.
 
 A rows source of activity categories, with holidays as a vertical category, looks like this:
 
@@ -66,7 +79,9 @@ ORDER BY ordering, name
 
 ## One schedule for every tenant
 
-When each branch of an organisation gets its own copy of the schedule page under its own part of the site, as `/en/harbour/activity-schedule/` and `/en/clubs/northgate/activity-schedule/`, the data sources need no copy. The application decides what a tenant is, in one registered `IBindVariableProvider` that reads the page from the execution context, and a SELECT binds the answer as `:APP.tenant`. A bars source filtered with `WHERE tenant_id = :APP.tenant AND enddate >= :PARAM.from AND startdate <= :PARAM.to` serves every copy, and a new tenant is a page copy and nothing else. The [worked example](activity-schedule-example.md) builds the whole application around it, provider included.
+An organisation can give each branch its own copy of the schedule page under its own part of the site, such as `/en/harbour/activity-schedule/` and `/en/clubs/northgate/activity-schedule/`, and keep one pair of data sources for all of them.
+
+The application decides what a tenant is in one registered `IBindVariableProvider`, which reads the page from the execution context. A SELECT binds the answer as `:APP.tenant`. A bars source filtered with `WHERE tenant_id = :APP.tenant AND enddate >= :PARAM.from AND startdate <= :PARAM.to` serves every copy, so adding a tenant means copying the page. The [worked example](activity-schedule-example.md) builds a whole application this way, provider included.
 
 ## Colours and styling
 
@@ -126,4 +141,8 @@ The block also draws a toolbar, an empty message and a legend: `.app-schedule-to
 
 ## Access
 
-The sources are read through the data source engine, so each source's Access setting, read groups, row restriction and policies decide what each reader sees. On a page without Public Access an anonymous visitor can see a schedule when both sources are Public and neither query nor row restriction uses `:USER_*` binds. Otherwise they see a sign-in notice, as the [site integration guide](site-integration.md) describes. A source whose data cannot be read shows a short message in place of the table and never fails the page.
+Each source's Access setting, read groups, row restriction and policies decide what each reader sees.
+
+On a page without Public Access, an anonymous visitor sees a schedule when both sources are **Public** and no query or row restriction uses a `:USER_*` value. Otherwise the visitor sees a sign-in notice. The [business rules guide](business-rules.md#data-source-access) describes the Access settings.
+
+A source whose data cannot be read shows a short message in place of the table, and the rest of the page renders.

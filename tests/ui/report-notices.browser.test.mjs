@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const reportsRoot = process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, "../Interactive-Reports");
+const reportsRoot = process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, "../AurorisNet.InteractiveReports");
 const require = createRequire(resolve(reportsRoot, "package.json"));
 const { chromium } = require("playwright");
 const { reportState, hydratedResult } = await import(pathToFileURL(resolve(reportsRoot, "tests/ui/report-state-fixture.js")));

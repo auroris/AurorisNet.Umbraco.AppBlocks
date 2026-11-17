@@ -1,14 +1,18 @@
 # Localisation
 
-Every text the blocks show a visitor, from a button's label to a refusal, has an id and an English default, and AppBlocks ships a French translation of each. A site replaces any of them, per language, from its Umbraco dictionary or from a source of its own, and the server-rendered markup and the browser runtime both show the replacement. Texts an editor types on a block, such as a heading, a field's label or an Actions block's button labels, are content, and Umbraco's own language variants translate them.
+How to translate or reword the texts the blocks show a visitor, and the list of every text id.
+
+Each text, from a button's label to a refusal, has an id and an English default, and AppBlocks ships a French translation of each. A site replaces any text, per language, from its Umbraco dictionary, from a source of its own or from translation files of its own. The server-rendered markup and the browser runtime both show the replacement.
+
+Texts that an editor types on a block, such as a heading, a field's label or an Actions block's button labels, are content. Umbraco's language variants translate them.
 
 The ids cover the base package's blocks on the website: forms and their fields, attachments, tabular forms, schedules and the anti-spam honeypot.
 
 ## Shipped languages
 
-AppBlocks ships French (`fr`) for every id listed below. A page Umbraco serves in French, or in a regional French such as `fr-CA` or `fr-FR`, shows it in the server-rendered markup and in the page's `data-appblocks-strings` script, with nothing to install: AppBlocks creates no dictionary items and leaves the backoffice as it is. A page in any other language keeps the English.
+AppBlocks ships French (`fr`) for every id listed below. A page that Umbraco serves in French, or in a regional French such as `fr-CA` or `fr-FR`, shows the French texts with nothing to install. A page in any other language keeps the English.
 
-The shipped texts are the last source asked. A dictionary item, or a source of your own, that answers the same id in the page's culture still wins, so a site rewords one French text by adding that one item.
+The shipped texts are the last source asked. A dictionary item, or a source of your own, that answers the same id in the page's culture wins. A site therefore rewords one French text by adding that one item.
 
 Each language is a JSON object of id to text, one file per culture, embedded in the assembly that ships it:
 
@@ -30,7 +34,9 @@ A site or a package adds a language, or a regional variant, the same way: it emb
 builder.Services.AddAppBlocksTranslations(typeof(MySiteComposer).Assembly, "MySite.AppBlocksTexts.");
 ```
 
-Registering an assembly twice is harmless. Without a prefix, `AddAppBlocksTranslations` reads files named `AppBlocks.Localisation.<culture>.json`, as AppBlocks names its own. A companion ships the ids its own blocks use; when two assemblies translate the same id for the same culture, the first registered wins, so reword a shipped text with the dictionary or a source of your own rather than with another file.
+Registering an assembly twice has no further effect. Without a prefix, `AddAppBlocksTranslations` reads files named `AppBlocks.Localisation.<culture>.json`, as AppBlocks names its own.
+
+A companion ships the ids its own blocks use. When two assemblies translate the same id for the same culture, the first registered wins. To reword a shipped text, use the dictionary or a source of your own.
 
 ## From the Umbraco dictionary
 
@@ -77,7 +83,12 @@ The runtime takes the ids it knows from it and keeps its English for the rest. A
 
 ## Placeholders
 
-Some texts carry values. The browser runtime's texts name them in braces, such as `{count}` and `{name}`, and a replacement writes the same names wherever its language puts them. In `uploaderDropOrBrowse`, `{browse}` is where the `uploaderBrowse` link goes. A text with a count has one id for one and another for any other number, such as `uploaderFileSelected` and `uploaderFilesSelected`. The schedule's server-rendered texts number them, `{0}` and `{1}`, as .NET composite formatting does; a replacement whose placeholders do not match falls back to the English, so a typo never breaks the page.
+Some texts carry values.
+
+- The browser runtime's texts name them in braces, such as `{count}` and `{name}`. A replacement writes the same names wherever its language puts them.
+- In `uploaderDropOrBrowse`, `{browse}` is where the `uploaderBrowse` link goes.
+- A text with a count has one id for one and another id for any other number, such as `uploaderFileSelected` and `uploaderFilesSelected`.
+- The schedule's server-rendered texts number their values, `{0}` and `{1}`, as .NET composite formatting does. A replacement whose placeholders differ from the English falls back to the English.
 
 ## Dates, times and sizes
 
