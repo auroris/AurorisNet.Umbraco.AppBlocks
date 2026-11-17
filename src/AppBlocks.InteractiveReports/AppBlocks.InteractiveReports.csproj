@@ -10,7 +10,7 @@
     <RazorCompileOnPublish>true</RazorCompileOnPublish>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
-    <InteractiveReportsRoot Condition="'$(InteractiveReportsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\Interactive-Reports</InteractiveReportsRoot>
+    <InteractiveReportsRoot Condition="'$(InteractiveReportsRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\AurorisNet.InteractiveReports</InteractiveReportsRoot>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

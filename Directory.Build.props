@@ -7,8 +7,14 @@
     <Authors>auroris</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
-    <!-- UmbracoAppHost pins the same version in its Directory.Packages.props, and its build fails if the two differ. -->
-    <AppBlocksUmbracoVersion>18.3.0</AppBlocksUmbracoVersion>
+    <PackageProjectUrl>https://github.com/auroris/AurorisNet.Umbraco.AppBlocks</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/auroris/AurorisNet.Umbraco.AppBlocks</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- The Umbraco releases the tests have run on. The New Umbraco releases workflow adds each new release that passes. -->
+    <UmbracoReleases>18.3.1</UmbracoReleases>
+    <!-- The Umbraco release the packages reference and the tests run on. UmbracoAppHost pins the same version in its
+         Directory.Packages.props, and its build fails if the two differ. -->
+    <UmbracoVersion>18.3.1</UmbracoVersion>
   </PropertyGroup>
   <!-- One icon for the whole package family; the SVG beside it is the editable source. -->
   <ItemGroup>
