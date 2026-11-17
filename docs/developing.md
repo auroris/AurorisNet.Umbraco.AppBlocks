@@ -19,8 +19,18 @@ dotnet run --project samples/AppBlocks.Demo --urls http://localhost:5079
 dotnet pack src/AppBlocks -c Release -o artifacts/packages
 dotnet pack src/AppBlocks.InteractiveReports -c Release -o artifacts/packages
 dotnet pack src/AppBlocks.Documents -c Release -o artifacts/packages
+dotnet pack src/AppBlocks.Testing -c Release -o artifacts/packages
 pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
 ```
+
+`src/AppBlocks.Testing` (package `AurorisNet.Umbraco.AppBlocks.Testing`) holds the HTTP clients
+that site tests use to drive the forms, attachments, tabular, report and paper-report endpoints
+the way the browser runtime does, with `TestSiteException` and the `UmbracoTestSupport` helpers
+for running Umbraco in a test process. It moved here from UmbracoAppHost's
+`tests/UmbracoAppHost.Testing`, which now depends on it, so the clients change together with the
+endpoints they drive. `AppBlocks.Tests` references the project and tests the clients against
+the endpoints; a change to an endpoint's protocol changes its client in the same commit. The
+package references no test framework; keep it that way, because hosts test with different runners.
 
 The SQL Server live tests reuse the LocalDB scenarios for form data sources, application schema installation and attachment storage. Supply an empty, disposable SQL Server database with `db_owner` access:
 
