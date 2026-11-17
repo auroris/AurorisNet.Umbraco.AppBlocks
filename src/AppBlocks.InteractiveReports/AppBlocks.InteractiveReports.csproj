@@ -28,7 +28,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../AppBlocks/AppBlocks.csproj" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseInteractiveReportsSource)' == 'true'">
     <ProjectReference Include="$(InteractiveReportsRoot)/src/InteractiveReport.AspNetCore/InteractiveReport.AspNetCore.csproj" />
