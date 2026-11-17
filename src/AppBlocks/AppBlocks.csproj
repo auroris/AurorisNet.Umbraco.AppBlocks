@@ -28,7 +28,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Umbraco.Cms" Version="$(UmbracoVersion)" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="11.0.0" />
     <!-- No database driver: Microsoft.Data.Sqlite and Microsoft.Data.SqlClient come with Umbraco.Cms, and a site installs
          Npgsql or Oracle.ManagedDataAccess.Core itself, which Connections/DatabaseDrivers.cs loads by name. -->
   </ItemGroup>

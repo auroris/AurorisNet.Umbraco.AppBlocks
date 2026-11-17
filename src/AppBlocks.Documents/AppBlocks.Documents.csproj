@@ -14,7 +14,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../AppBlocks/AppBlocks.csproj" />
     <PackageReference Include="HtmlAgilityPack" Version="1.13.1" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="11.0.0" />
     <ProjectReference Include="$(PressroomRoot)/src/Pressroom.Client/Pressroom.Client.csproj" Condition="'$(UsePressroomSource)' == 'true'" />
     <PackageReference Include="AurorisNet.Pressroom.Client" Version="1.2.0" Condition="'$(UsePressroomSource)' != 'true'" />
     <Using Include="Microsoft.AspNetCore.Builder" />
