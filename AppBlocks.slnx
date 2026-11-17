@@ -6,6 +6,7 @@
     <Project Path="src/AppBlocks.Documents/AppBlocks.Documents.csproj" />
     <Project Path="src/AppBlocks/AppBlocks.csproj" />
     <Project Path="src/AppBlocks.InteractiveReports/AppBlocks.InteractiveReports.csproj" />
+    <Project Path="src/AppBlocks.Testing/AppBlocks.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AppBlocks.Documents.Tests/AppBlocks.Documents.Tests.csproj" />

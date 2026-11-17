@@ -40,7 +40,7 @@ Beside the stylesheet, two runtime modules are public for a site's own scripts. 
 
 A form whose **Label position** is `left` puts its labels in a column beside the inputs. A field narrower than about 26rem, and every field on a phone, stacks its label above the input again.
 
-The blocks' own texts, such as **Saved.**, **Delete this record?** and the schedule's toolbar, come in English and can be replaced per language from the site's Umbraco dictionary; [Localisation](localisation.md) lists every text and how dates follow the page's language.
+The blocks' own texts, such as **Saved.**, **Delete this record?** and the schedule's toolbar, come in English and French, chosen by the culture Umbraco serves the page in, and can be replaced per language from the site's Umbraco dictionary; [Localisation](localisation.md) lists every text and how dates follow the page's language.
 
 ## Previews in the backoffice
 

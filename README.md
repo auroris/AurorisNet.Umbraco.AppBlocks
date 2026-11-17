@@ -35,7 +35,7 @@ This is an alpha targeting Umbraco **18.3** and **.NET 10**. No NuGet release ha
 
 ## Quick start
 
-AppBlocks isn't on NuGet yet, so reference `src/AppBlocks/AppBlocks.csproj` or install a locally built package. It registers itself and installs its definitions on startup. Add `AppBlocks.InteractiveReports` for reports and `AppBlocks.Documents` for documents, each of which brings in AppBlocks.
+AppBlocks isn't on NuGet yet, so reference `src/AppBlocks/AppBlocks.csproj` or install a locally built package. Its package ids are `AurorisNet.Umbraco.AppBlocks`, `AurorisNet.Umbraco.AppBlocks.InteractiveReports` and `AurorisNet.Umbraco.AppBlocks.Documents`; the assemblies, namespaces and settings keep the `AppBlocks` name. It registers itself and installs its definitions on startup. Add `AppBlocks.InteractiveReports` for reports and `AppBlocks.Documents` for documents, each of which brings in AppBlocks. A site's test project can add `AurorisNet.Umbraco.AppBlocks.Testing`, whose clients drive the forms, attachments, tabular, report and paper-report endpoints over HTTP the way the browser runtime does.
 
 1. In **Settings → Data Types**, add **Forms container** (and **Interactive Report** when its companion is installed) to the allowed blocks of your existing Block Grid or Block List. **HTML**, **CSS** and **JavaScript** are installed too, and offered nowhere until a site adds them to a grid of its own, because they run whatever an editor writes. A site or package can allow a block in a Block Grid from code instead, as [Adding AppBlocks to a site](docs/site-integration.md#pages-built-from-code) describes.
 2. Configure application data sources in **Settings → AppBlocks → Connections** and create your application tables. **AppBlocks database** is available as `AppBlocksDb` by default.
@@ -64,7 +64,7 @@ Sites using Umbraco's conventional `blockgrid/Components` or `blocklist/Componen
 | [Worked example: a multi-tenant activity schedule](docs/activity-schedule-example.md) | The page tree, tables, data sources, blocks and C# of one application, end to end |
 | [Interactive Reports companion](src/AppBlocks.InteractiveReports/README.md) | Report blocks, saved views and report access |
 | [Documents companion](src/AppBlocks.Documents/README.md) | HTML and PDF documents, and printing through Pressroom |
-| [Localisation](docs/localisation.md) | The blocks' texts in the site's languages, from the Umbraco dictionary or a source of your own, and every text id |
+| [Localisation](docs/localisation.md) | The blocks' texts in the site's languages: English and French shipped, other languages from the Umbraco dictionary, a source of your own or translation files of your own, the dictionary still overriding the shipped French; and every text id |
 | [Developing AppBlocks](docs/developing.md) | Building, testing, the demo and who owns the definitions |
 | [Renamed identifiers](docs/renamed-identifiers.md) | Old and new namespaces, editor aliases, definition keys, settings and removed members |
 

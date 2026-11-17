@@ -3,7 +3,7 @@
 Optional Interactive Reports companion for **AppBlocks** on Umbraco 18.3 / .NET 10. This package requires AppBlocks; NuGet installs that dependency automatically.
 
 ```powershell
-dotnet add package AppBlocks.InteractiveReports --version 0.1.0-alpha.1
+dotnet add package AurorisNet.Umbraco.AppBlocks.InteractiveReports --version 0.1.0-alpha.1
 ```
 
 This is an unpublished alpha. Use the locally built packages until a public release is available.

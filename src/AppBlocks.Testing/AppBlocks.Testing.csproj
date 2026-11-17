@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>AurorisNet.Umbraco.AppBlocks.Testing</PackageId>
+    <Title>AppBlocks Testing for Umbraco</Title>
+    <Description>HTTP clients that drive AppBlocks' forms, attachments, tabular, report and paper-report endpoints the way the browser runtime does, and helpers for running Umbraco in a test process. No test framework dependency; failures throw TestSiteException.</Description>
+    <PackageTags>umbraco;appblocks;testing</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- FormsClient builds query strings with Microsoft.AspNetCore.WebUtilities. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- The clients drive AppBlocks' endpoints, so the package carries the AppBlocks version they were written against. -->
+    <ProjectReference Include="../AppBlocks/AppBlocks.csproj" />
+    <InternalsVisibleTo Include="AppBlocks.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <!-- Umbraco's build targets copy these into every project folder; they stay out of the package. -->
+    <None Update="appsettings-schema*.json;umbraco-package-schema.json" Pack="false" />
+  </ItemGroup>
+</Project>

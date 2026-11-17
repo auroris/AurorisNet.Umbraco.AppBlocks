@@ -13,11 +13,13 @@ public interface IAppBlocksTextSource
 
 /// <summary>
 /// The texts the server-rendered blocks show, each with its English default beside it in the view:
-/// <c>Text["saved", "Saved."]</c>. The first registered <see cref="IAppBlocksTextSource"/> that answers an id wins.
+/// <c>Text["saved", "Saved."]</c>. The first registered <see cref="IAppBlocksTextSource"/> that answers an id wins, except that the
+/// translations AppBlocks and its companions ship (<see cref="ShippedTextSource"/>) are asked after every other source.
 /// </summary>
 public sealed class AppBlocksText(IEnumerable<IAppBlocksTextSource> sources)
 {
-    private readonly IAppBlocksTextSource[] sources = sources.ToArray();
+    // OrderBy is stable, so the other sources keep their registration order.
+    private readonly IAppBlocksTextSource[] sources = sources.OrderBy(source => source is ShippedTextSource).ToArray();
 
     public string this[string id, string english]
     {
@@ -29,7 +31,7 @@ public sealed class AppBlocksText(IEnumerable<IAppBlocksTextSource> sources)
         }
     }
 
-    /// <summary>Every override the sources know, first source winning, for the runtime script to read.</summary>
+    /// <summary>Every text the sources know for the current culture, first source winning, for the runtime script to read.</summary>
     public IReadOnlyDictionary<string, string> Overrides()
     {
         var all = new Dictionary<string, string>(StringComparer.Ordinal);

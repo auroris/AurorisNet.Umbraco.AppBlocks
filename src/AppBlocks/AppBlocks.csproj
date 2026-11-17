@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <PackageId>AppBlocks</PackageId>
+    <PackageId>AurorisNet.Umbraco.AppBlocks</PackageId>
     <Title>AppBlocks for Umbraco</Title>
     <Description>Forms and database-backed application blocks for Umbraco.</Description>
     <PackageTags>umbraco;forms;blocks;database</PackageTags>
@@ -39,6 +39,10 @@
     <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
     <EmbeddedResource Include="../../docs/business-rules.md" LogicalName="AppBlocks.BusinessRules.md" />
     <EmbeddedResource Include="Views/**/*.cshtml;Schema/**/*.config;Attachments/Schema/**/*.sql" />
+    <!-- The shipped languages, one file per culture, read by AppBlocksTranslations; WithCulture keeps fr.json out of a satellite assembly. -->
+    <Content Remove="Localisation/**" />
+    <None Remove="Localisation/**" />
+    <EmbeddedResource Include="Localisation/*.json" LogicalName="AppBlocks.Localisation.%(Filename)%(Extension)" WithCulture="false" />
     <Content Update="**/*.cshtml;appsettings-schema*.json;umbraco-package-schema.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="Never" />
     <!-- Embedded above, so a site's project must not receive them as well. -->
     <Content Update="Schema/**/*.config;appsettings-schema*.json;umbraco-package-schema.json" Pack="false" />

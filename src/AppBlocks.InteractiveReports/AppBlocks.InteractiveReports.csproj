@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <PackageId>AppBlocks.InteractiveReports</PackageId>
+    <PackageId>AurorisNet.Umbraco.AppBlocks.InteractiveReports</PackageId>
     <Title>Interactive Reports for AppBlocks</Title>
     <Description>Optional Interactive Reports companion for AppBlocks on Umbraco. Requires AppBlocks.</Description>
     <PackageTags>umbraco;forms;reports;blocks;database</PackageTags>

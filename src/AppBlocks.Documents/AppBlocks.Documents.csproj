@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <PackageId>AppBlocks.Documents</PackageId>
+    <PackageId>AurorisNet.Umbraco.AppBlocks.Documents</PackageId>
     <Title>AppBlocks Documents for Umbraco</Title>
     <Description>Generate templated HTML and PDF documents from AppBlocks data sources. PDF conversion optionally uses Pressroom.</Description>
     <PackageTags>umbraco;appblocks;documents;pdf</PackageTags>

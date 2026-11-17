@@ -1,8 +1,36 @@
 # Localisation
 
-Every text the blocks show a visitor, from a button's label to a refusal, has an id and an English default. A site replaces any of them, per language, from its Umbraco dictionary or from a source of its own, and the server-rendered markup and the browser runtime both show the replacement. Texts an editor types on a block, such as a heading, a field's label or an Actions block's button labels, are content, and Umbraco's own language variants translate them.
+Every text the blocks show a visitor, from a button's label to a refusal, has an id and an English default, and AppBlocks ships a French translation of each. A site replaces any of them, per language, from its Umbraco dictionary or from a source of its own, and the server-rendered markup and the browser runtime both show the replacement. Texts an editor types on a block, such as a heading, a field's label or an Actions block's button labels, are content, and Umbraco's own language variants translate them.
 
 The ids cover the base package's blocks on the website: forms and their fields, attachments, tabular forms, schedules and the anti-spam honeypot.
+
+## Shipped languages
+
+AppBlocks ships French (`fr`) for every id listed below. A page Umbraco serves in French, or in a regional French such as `fr-CA` or `fr-FR`, shows it in the server-rendered markup and in the page's `data-appblocks-strings` script, with nothing to install: AppBlocks creates no dictionary items and leaves the backoffice as it is. A page in any other language keeps the English.
+
+The shipped texts are the last source asked. A dictionary item, or a source of your own, that answers the same id in the page's culture still wins, so a site rewords one French text by adding that one item.
+
+Each language is a JSON object of id to text, one file per culture, embedded in the assembly that ships it:
+
+```json
+{ "saved": "Enregistré.", "uploaderFilesSelected": "{count} fichiers sélectionnés" }
+```
+
+A culture reads its own file and then its parent's for the ids its own leaves out, so a `fr-CA.json` needs only the texts where Canadian French differs from `fr.json`. Placeholders keep the names or numbers the English gives them, as described under [Placeholders](#placeholders).
+
+A site or a package adds a language, or a regional variant, the same way: it embeds its files under a name prefix of its own and registers its assembly.
+
+```xml
+<ItemGroup>
+  <EmbeddedResource Include="Localisation/*.json" LogicalName="MySite.AppBlocksTexts.%(Filename)%(Extension)" WithCulture="false" />
+</ItemGroup>
+```
+
+```csharp
+builder.Services.AddAppBlocksTranslations(typeof(MySiteComposer).Assembly, "MySite.AppBlocksTexts.");
+```
+
+Registering an assembly twice is harmless. Without a prefix, `AddAppBlocksTranslations` reads files named `AppBlocks.Localisation.<culture>.json`, as AppBlocks names its own. A companion ships the ids its own blocks use; when two assemblies translate the same id for the same culture, the first registered wins, so reword a shipped text with the dictionary or a source of your own rather than with another file.
 
 ## From the Umbraco dictionary
 
@@ -33,13 +61,13 @@ public sealed class SiteTexts(SiteTranslations translations) : IAppBlocksTextSou
 builder.Services.AddScoped<IAppBlocksTextSource, SiteTexts>();
 ```
 
-AppBlocks registers `UmbracoDictionaryTextSource` the same way. The sources are asked in the order they were registered, and the first that answers an id with text wins. Both members answer for the current request's culture.
+AppBlocks registers `UmbracoDictionaryTextSource` the same way. The sources are asked in the order they were registered, and the first that answers an id with text wins; the [shipped languages](#shipped-languages) are asked after all of them. Both members answer for the current request's culture.
 
 ## How the texts reach the page
 
 Server-rendered views ask `AppBlocksText`, a scoped service, with the id and its English: `Text["saved", "Saved."]`. A companion's own views can inject it and use their own ids the same way.
 
-For the browser runtime, the page carries every replacement the sources know in a JSON script element at the end of the body:
+For the browser runtime, the page carries every replacement the sources know, the shipped languages' included, in a JSON script element at the end of the body:
 
 ```html
 <script type="application/json" data-appblocks-strings>{"saved":"Enregistré.","confirmDelete":"Supprimer cet enregistrement?"}</script>
