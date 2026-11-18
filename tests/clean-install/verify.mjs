@@ -19,21 +19,21 @@ const assets = JSON.parse(await readFile(resolve(site, 'obj/project.assets.json'
 const libraries = Object.keys(assets.libraries);
 assert.ok(!libraries.some(name => /usync|UmbracoAppHost|StarterKit/i.test(name)), 'No non-AppBlocks CMS plugins.');
 assert.ok(Object.values(assets.libraries).every(library => library.type === 'package'), 'Consume NuGet packages, not project references.');
-const companions = libraries.some(name => name.startsWith('AppBlocks.InteractiveReports/'));
-const documents = libraries.some(name => name.startsWith('AppBlocks.Documents/'));
+const companions = libraries.some(name => name.startsWith('AurorisNet.Umbraco.AppBlocks.InteractiveReports/'));
+const documents = libraries.some(name => name.startsWith('AurorisNet.Umbraco.AppBlocks.Documents/'));
 const output = resolve(site, '../results');
 const stage = process.env.APPBLOCKS_CLEAN_STAGE || (companions ? 'companions' : 'core');
 await mkdir(output, { recursive: true });
 const results = [];
 function passed(message) { results.push(message); console.log('PASS ' + message); }
 function key(name) {
-  const bytes = createHash('sha256').update('UmbracoAppHost.Blocks.v1:standalone-demo:' + name).digest().subarray(0, 16);
+  const bytes = createHash('sha256').update('AppBlocks.Blocks.v1:standalone-demo:' + name).digest().subarray(0, 16);
   return [Buffer.from(bytes.subarray(0, 4)).reverse().toString('hex'), Buffer.from(bytes.subarray(4, 6)).reverse().toString('hex'), Buffer.from(bytes.subarray(6, 8)).reverse().toString('hex'), bytes.subarray(8, 10).toString('hex'), bytes.subarray(10).toString('hex')].join('-');
 }
 
 const anonymous = await request.newContext({ baseURL: url });
 const security = '/umbraco/management/api/v1/security/back-office';
-// The backoffice shell can respond while unattended package migrations are still running.
+// The backoffice shell can respond before unattended installation has finished.
 let login;
 for (let attempt = 0; attempt < 90; attempt++) {
   login = await anonymous.post(security + '/login', { data: { username: unattended.UnattendedUserEmail, password: unattended.UnattendedUserPassword } });
@@ -78,7 +78,8 @@ for (const name of packages) {
       }
       if (key === '0ec4f87b-ecaf-9c30-dbce-df5a5ade88f4') {
         const expectedChildren = ['6a79805a-4170-811d-64a8-83ee1422bade',
-          ...(companions ? ['e9054289-9e09-1611-f0d7-022d87544f77'] : []), '82c174da-0007-7152-7971-05a4936aed08'];
+          ...(companions ? ['e9054289-9e09-1611-f0d7-022d87544f77'] : []), '82c174da-0007-7152-7971-05a4936aed08',
+          '299d9d6d-c1f6-4391-914d-38141159a69b'];
         assert.deepEqual(definition.allowedDocumentTypes.sort((a, b) => a.sortOrder - b.sortOrder).map(child => child.documentType.id), expectedChildren);
         passed('Fresh Data sources structure includes exactly the installed child types');
       }
@@ -117,7 +118,7 @@ for (const name of packages) {
 }
 passed('Every packaged JavaScript, CSS and extension manifest is served and matches source');
 
-const appBlocksLibraries = Object.entries(Object.values(assets.targets)[0]).filter(([name]) => name.startsWith('AppBlocks'));
+const appBlocksLibraries = Object.entries(Object.values(assets.targets)[0]).filter(([name]) => name.startsWith('AurorisNet.Umbraco.AppBlocks'));
 assert.deepEqual(appBlocksLibraries.flatMap(([, library]) => Object.keys(library.contentFiles ?? {})), [], 'The packages add no content files to a site project');
 const installedDrivers = !!settings.AppBlocksDemo?.SeedContent;
 const drivers = [
@@ -187,7 +188,8 @@ if (settings.AppBlocksDemo?.SeedContent) {
     assert.ok(changed.ok(), await changed.text());
     const updated = (await changed.json()).record;
     assert.equal(updated.values.title, 'Clean install update');
-    assert.equal((await admin.put(endpoint + '/1', { headers, data: body })).status(), 409, 'Optimistic concurrency protection');
+    const expectedStatus = original.record.checksum ? 409 : 200;
+    assert.equal((await admin.put(endpoint + '/1', { headers, data: body })).status(), expectedStatus, 'The form honors its data source concurrency mode');
     const restored = await admin.put(endpoint + '/1', { headers, data: { ...body, checksum: updated.checksum } });
     assert.ok(restored.ok(), await restored.text());
     passed(`Native ${prefix === 'main' ? 'Block List' : 'Block Grid'} form reads and updates; validation, CSRF and concurrency checks work`);
@@ -314,26 +316,48 @@ try {
   await page.getByRole('tab', { name: 'Connections', exact: true }).click();
   await page.getByRole('row').filter({ hasText: 'AppBlocks database' }).waitFor();
   if (settings.AppBlocksDemo?.SeedContent) {
-    const response = await page.goto(url + '/a-normal-content-page/?mainId=1&sideId=1');
+    const formUrl = url + '/a-normal-content-page/?mainId=1&sideId=1#app-form-' + key('main-form').replaceAll('-', '');
+    const response = await page.goto(formUrl);
     assert.match((await response.allHeaders())['set-cookie'] || '', /\.AspNetCore\.Antiforgery\./,
       'The first page response establishes the antiforgery cookie before parallel form loads');
-    const field = page.locator('[data-app-form]').first().locator('[data-field="title"]');
+    const openedForm = page.locator('dialog[open][data-app-form-panel] [data-app-form]');
+    const field = openedForm.locator('[data-field="title"]');
     await field.waitFor();
-    await page.waitForFunction(() => document.querySelector('[data-app-form] [data-field="title"]')?.value === 'A task from a normal content page');
+    await page.waitForFunction(() => document.querySelector('dialog[open] [data-field="title"]')?.value === 'A task from a normal content page');
     await field.fill('Browser edit from clean installation');
-    await page.locator('[data-app-form]').first().locator('[data-save]').click();
-    await page.locator('[data-app-form]').first().getByText('Saved.', { exact: true }).waitFor();
-    await page.reload();
-    await page.waitForFunction(() => document.querySelector('[data-app-form] [data-field="title"]')?.value === 'Browser edit from clean installation');
+    await openedForm.locator('[data-save]').click();
+    await page.locator('dialog[open][data-app-form-panel]').waitFor({ state: 'hidden' });
+    await page.waitForURL(current => current.hash === '');
+    await page.goto(formUrl);
+    await page.waitForFunction(() => document.querySelector('dialog[open] [data-field="title"]')?.value === 'Browser edit from clean installation');
     await field.fill('A task from a normal content page');
-    await page.locator('[data-app-form]').first().locator('[data-save]').click();
-    await page.locator('[data-app-form]').first().getByText('Saved.', { exact: true }).waitFor();
+    await openedForm.locator('[data-save]').click();
+    await page.locator('dialog[open][data-app-form-panel]').waitFor({ state: 'hidden' });
+    await page.waitForURL(current => current.hash === '');
     await page.reload();
     if (companions) await page.locator('interactive-report').first().getByRole('cell', { name: 'A task from a normal content page', exact: true }).waitFor();
     await page.screenshot({ path: resolve(output, 'native-blocks.png'), fullPage: true });
     await page.getByRole('link', { name: 'Open AppBlocks' }).click();
     await page.locator('appblocks-dashboard').waitFor();
     passed('Browser form edits persist across reload; both native reports render');
+
+    await page.goto(url + '/umbraco/section/content/workspace/document/edit/' + key('page'));
+    // The Edit actions in the native grids are shown on hover. Follow their Umbraco workspace links.
+    for (const name of ['main-container', 'main-form']) {
+      const edit = page.locator('a[href*="/' + key(name) + '/view/content"]').first();
+      await edit.evaluate(link => link.click());
+    }
+    await page.locator('app-parent-form-picker option[value="' + key('side-form') + '"]').waitFor({ state: 'attached' });
+    await page.locator('app-field-picker option[value="title"]').waitFor({ state: 'attached' });
+    for (const name of ['Field rule', 'Field condition']) {
+      await page.getByRole('link', { name: 'Add ' + name, exact: true }).click();
+      await page.getByRole('link', { name, exact: true }).click();
+    }
+    const ruleFields = page.locator('app-rule-field-picker');
+    for (let i = 0; i < 3; i++) {
+      await ruleFields.nth(i).locator('option[value="title"]').waitFor({ state: 'attached' });
+    }
+    passed('The native form workspace offers the other form on the page and its nested rule and condition editors list the bound resource fields');
   }
   assert.deepEqual(errors, [], 'Backoffice JavaScript errors');
   passed('Real backoffice sign-in and AppBlocks Connections dashboard render without JavaScript errors');

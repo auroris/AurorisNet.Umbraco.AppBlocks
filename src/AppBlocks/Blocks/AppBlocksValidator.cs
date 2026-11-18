@@ -161,6 +161,19 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             foreach (var nested in BlockValueSets.Children(item)) Visit(nested, depth + 1);
         }
         Visit(layout, 0);
+        errors.AddRange(FieldRule.Problems(FieldRule.Authored(Text(block, "fieldRules"), resource.Fields), fields.Keys));
+        var parent = Text(block, "parentForm");
+        var linkField = Text(block, "linkField");
+        if (parent.Length > 0 || linkField.Length > 0 || Text(block, "parentPage").Length > 0) {
+            if (!Guid.TryParse(parent, out var parentKey) || !resource.Fields.Any(f => f.Key == linkField && !f.ReadOnly)) errors.Add("Choose a parent form and a writable detail link field.");
+            if (parentKey == block.Key) errors.Add("Choose a different form as the parent.");
+            if (data.TryGetValue(parentKey, out var master) && Alias(master) == "appForm") {
+                var masterInterface = BlockValueSets.Parse(Text(master, "formInterface")).ContentData.FirstOrDefault();
+                string Parameter(BlockItemData item, bool detail) => Text(item, "keyParameter") is { Length: > 0 } name ? name : detail ? "detailId" : "id";
+                if (masterInterface is not null && Parameter(masterInterface, Text(master, "parentForm").Length > 0).Equals(Parameter(configuration, true), StringComparison.OrdinalIgnoreCase))
+                    errors.Add("Give the parent and detail forms different record key query parameters.");
+            }
+        }
         if (actions > 1) errors.Add("Use one Form actions block per form.");
         if (checks > 1) errors.Add("Use one Anti-spam block per form.");
         // A link is built in the browser from the record the form loaded, which holds the form's own fields and no others.
@@ -173,7 +186,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         // still updates, and a create is refused at run time, where FormDefinition.Validate asks for every required field.
         if (!Flag(configuration, "viewOnly")) {
             var missing = resource.Fields.Where(f => f.Required && !f.ReadOnly && !f.HasServerDefault)
-                .Where(f => !fields.TryGetValue(f.Key, out var item) || Flag(item, "readOnly") || Alias(item) == "appDisplay").Select(f => f.Key).ToArray();
+                .Where(f => f.Key != linkField).Where(f => !fields.TryGetValue(f.Key, out var item) || Flag(item, "readOnly") || Alias(item) == "appDisplay").Select(f => f.Key).ToArray();
             if (missing.Length > 0) warnings?.Add($"This form cannot create records: the required field{(missing.Length == 1 ? "" : "s")} {string.Join(", ", missing.Select(m => "'" + m + "'"))} {(missing.Length == 1 ? "is" : "are")} not editable in it.");
         }
     }

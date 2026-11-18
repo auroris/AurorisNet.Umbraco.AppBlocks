@@ -51,33 +51,52 @@ else if (alias == "appForm")
     else if (Model.Anonymous && await FormAccess.RefusesAnonymousAsync(definition, Model.Page.Key, Context))
     {
         @* The class said no before the runtime asked, so there is no form to show and nothing to flash. *@
-        <p class="app-block-signin" role="status">@Text["signInToUseForm", "Sign in to use this form."]</p>
+        <p id="@FormDefinition.Anchor(item.ContentKey)" class="app-block-signin" role="status">@Text["signInToUseForm", "Sign in to use this form."]</p>
     }
     else
     {
-        var destination = definition.ReturnUrl(Context.Request.PathBase);
-        var api = Context.Request.PathBase + AppBlocks.AppBlocksRoutes.Under(Configuration, $"forms/{Model.Page.Key}/{item.ContentKey}") + apiQuery;
-        <form class="app-form" data-label-position="@(string.Equals(block.Value<string>("labelPosition")?.Trim(), "left", StringComparison.OrdinalIgnoreCase) ? "left" : "top")" data-app-form data-api="@api"
-            data-key-parameter="@definition.KeyParameter" data-return="@destination" data-anonymous="@(Model.Anonymous ? "true" : null)" novalidate>
-            @if (!string.IsNullOrWhiteSpace(heading)) { <h2>@heading</h2> }
-            <div class="app-form-message" role="status" aria-live="polite"></div>
-            <div class="app-form-errors" role="alert" tabindex="-1" hidden></div>
-            @if (printUrl is not null && !Model.Anonymous)
-            {
-                <p><a href="@printUrl" target="_blank" rel="noopener" data-print data-print-url="@printUrl" data-print-key-parameter="@definition.KeyParameter" hidden>@Text["print", "Print"]</a></p>
-            }
-            <fieldset class="app-form-body" disabled>
-                @foreach (var area in item.Areas)
+        var panel = block.Value<bool>("sidePanel");
+        var anchor = FormDefinition.Anchor(item.ContentKey);
+        async Task RenderForm()
+        {
+            var destination = definition.ReturnUrl(Context.Request.PathBase);
+            var api = Context.Request.PathBase + AppBlocks.AppBlocksRoutes.Under(Configuration, $"forms/{Model.Page.Key}/{item.ContentKey}") + apiQuery;
+            <form id="@(panel ? null : anchor)" class="app-form" data-label-position="@(string.Equals(block.Value<string>("labelPosition")?.Trim(), "left", StringComparison.OrdinalIgnoreCase) ? "left" : "top")" data-app-form data-api="@api"
+                data-field-rules="@(definition.Rules.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(definition.Rules, System.Text.Json.JsonSerializerOptions.Web))"
+                data-key-parameter="@definition.KeyParameter" data-return="@destination" data-anonymous="@(Model.Anonymous ? "true" : null)" novalidate>
+                @if (!panel && !string.IsNullOrWhiteSpace(heading)) { <h2>@heading</h2> }
+                <div class="app-form-message" role="status" aria-live="polite"></div>
+                <div class="app-form-errors" role="alert" tabindex="-1" hidden></div>
+                @if (printUrl is not null && !Model.Anonymous)
                 {
-                    @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Items.cshtml", new AppBlockItems(Model.Page, area, area.ColumnSpan, definition,
-                        Model.MemberId, string.IsNullOrWhiteSpace(heading) ? Model.HeadingLevel : Model.HeadingLevel + 1, Model.Variables))
+                    <p><a href="@printUrl" target="_blank" rel="noopener" data-print data-print-url="@printUrl" data-print-key-parameter="@definition.KeyParameter" hidden>@Text["print", "Print"]</a></p>
                 }
-                @if (!AppBlockContent.Flatten(item.Areas.SelectMany(a => a)).Any(b => b.Content.ContentType.Alias == "appActions"))
-                {
-                    <div class="app-form-actions"><button type="submit" data-save>@Text["save", "Save"]</button><a href="@destination">@Text["cancel", "Cancel"]</a><button type="button" data-delete hidden>@Text["delete", "Delete"]</button></div>
-                }
-            </fieldset>
-        </form>
+                <fieldset class="app-form-body" disabled>
+                    @foreach (var area in item.Areas)
+                    {
+                        @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Items.cshtml", new AppBlockItems(Model.Page, area, area.ColumnSpan, definition,
+                            Model.MemberId, string.IsNullOrWhiteSpace(heading) ? Model.HeadingLevel : Model.HeadingLevel + 1, Model.Variables))
+                    }
+                    @if (!AppBlockContent.Flatten(item.Areas.SelectMany(a => a)).Any(b => b.Content.ContentType.Alias == "appActions"))
+                    {
+                        <div class="app-form-actions"><button type="submit" data-save>@Text["save", "Save"]</button><a href="@destination" data-app-cancel>@Text["cancel", "Cancel"]</a><button type="button" data-delete hidden>@Text["delete", "Delete"]</button></div>
+                    }
+                </fieldset>
+            </form>
+        }
+        @if (panel)
+        {
+            var title = heading ?? Text["openForm", "Open form"];
+            <div class="app-form-actions app-panel-launcher"><button type="button" data-open-panel="@anchor" aria-controls="@anchor" aria-haspopup="dialog">@title</button></div>
+            <dialog class="app-form-panel" id="@anchor" data-app-form-panel data-render-query="@(definition.RendersQueryValues ? "true" : null)" aria-labelledby="@(anchor + "-title")">
+                <header class="app-panel-header">
+                    <h2 id="@(anchor + "-title")">@title</h2>
+                    <button type="button" data-panel-close aria-label="@Text["closeForm", "Close form"]">×</button>
+                </header>
+                @{ await RenderForm(); }
+            </dialog>
+        }
+        else { await RenderForm(); }
     }
 }
 else if (alias == "appFieldset")
@@ -142,7 +161,7 @@ else if (alias == "appActions" && Model.Form is not null)
     var destination = Model.Form.ReturnUrl(Context.Request.PathBase);
     <div class="app-form-actions">
         <button type="submit" data-save>@(Property("saveLabel") ?? Text["save", "Save"])</button>
-        <a href="@destination">@(Property("cancelLabel") ?? Text["cancel", "Cancel"])</a>
+        <a href="@destination" data-app-cancel>@(Property("cancelLabel") ?? Text["cancel", "Cancel"])</a>
         <button type="button" data-delete hidden>@(Property("deleteLabel") ?? Text["delete", "Delete"])</button>
     </div>
 }
@@ -153,7 +172,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
     if (field is not null)
     {
         var id = "field-" + item.ContentKey.ToString("N");
-        var readOnly = field.ReadOnly || block.Value<bool>("readOnly") || alias == "appDisplay";
+        var readOnly = Model.Form.Relationship?.LinkField == key || field.ReadOnly || block.Value<bool>("readOnly") || alias == "appDisplay";
         var required = field.Required || block.Value<bool>("required");
         var label = Property("label") ?? field.Label;
         var placeholder = Property(AppBlockField.PlaceholderAlias);
@@ -172,7 +191,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
             // A Display value with a link template shows its value as a link, which no label can point at; the link names the label instead.
             var linkTemplate = alias == "appDisplay" ? Property(AppBlockField.LinkTemplateAlias) : null;
             <div class="app-form-field">
-                <label id="@id-label" for="@(linkTemplate is not null ? null : alias == AppBlockSchema.ShuttleAlias ? id + "-available" : id)">@(label)@if (required) { <span aria-hidden="true"> *</span> }</label>
+                <label id="@id-label" for="@(linkTemplate is not null ? null : alias == AppBlockSchema.ShuttleAlias ? id + "-available" : id)">@(label)@if (required || Model.Form.Rules.Any(rule => rule.Field == key && rule.Action == "Require")) { <span data-required-mark aria-hidden="true" hidden="@(!required)"> *</span> }</label>
                 @if (alias == "appTextArea")
                 {
                     <textarea id="@id" name="@key" data-field="@key" data-kind="@field.Kind" data-readonly="@readOnly.ToString().ToLowerInvariant()"

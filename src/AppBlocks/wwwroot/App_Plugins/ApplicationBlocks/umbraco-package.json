@@ -3,6 +3,30 @@
   "extensions": [
     {
       "type": "propertyEditorUi",
+      "alias": "AppBlocks.RuleFieldPicker",
+      "name": "RuleFieldPicker",
+      "element": "/App_Plugins/ApplicationBlocks/rule-field-picker.js",
+      "meta": {
+        "label": "Rule field",
+        "icon": "icon-list",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.ParentFormPicker",
+      "name": "ParentFormPicker",
+      "element": "/App_Plugins/ApplicationBlocks/parent-form-picker.js",
+      "meta": {
+        "label": "Parent form",
+        "icon": "icon-list",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
       "alias": "AppBlocks.FormClassPicker",
       "name": "Application form class",
       "element": "/App_Plugins/ApplicationBlocks/form-class-picker.js",

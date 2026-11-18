@@ -9,7 +9,9 @@ $run = Join-Path $repository ('artifacts/clean-install-' + [DateTime]::UtcNow.To
 $feed = New-Item -ItemType Directory -Path (Join-Path $run 'feed')
 $address = "http://localhost:$Port"
 $password = 'Clean!AppBlocks-' + [guid]::NewGuid().ToString('N')
-$version = ([xml](Get-Content (Join-Path $repository 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
+$packageProperties = ([xml](Get-Content (Join-Path $repository 'Directory.Build.props') -Raw)).Project.PropertyGroup
+$version = $packageProperties.Version
+$umbracoVersion = $packageProperties.UmbracoVersion
 function Invoke-Checked([string] $Log, [scriptblock] $Command) {
     & $Command *> (Join-Path $run $Log)
     if ($LASTEXITCODE -ne 0) {
@@ -58,7 +60,7 @@ Push-Location $repository
 $previous = @{}
 foreach ($name in @('APPBLOCKS_CLEAN_SITE', 'APPBLOCKS_CLEAN_URL', 'APPBLOCKS_CLEAN_STAGE', 'INTERACTIVE_REPORTS_ROOT')) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 try {
-    Invoke-Checked 'template.log' { dotnet new install Umbraco.Templates@18.3.0 --force }
+    Invoke-Checked 'template.log' { dotnet new install "Umbraco.Templates@$umbracoVersion" --force }
     $projects = @(
         (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.Core'),
         (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.AspNetCore'),

@@ -45,14 +45,14 @@ dotnet nuget add source <path to artifacts/packages> --name appblocks-local
 dotnet add package AurorisNet.Umbraco.AppBlocks --version 0.1.0-alpha.1
 ```
 
-Each package registers itself through an Umbraco composer. When the site restarts, AppBlocks adds its services, routes and backoffice screens, and installs its element types and data types through Umbraco's package migrations. The types appear in **AppBlocks** folders in the backoffice trees, and **Settings → AppBlocks** opens the administration screens.
+Each package registers itself through an Umbraco composer. When the site restarts, AppBlocks adds its services, routes and backoffice screens, and installs its element types and data types through Umbraco's package importer. The types appear in **AppBlocks** folders in the backoffice trees, and **Settings → AppBlocks** opens the administration screens.
 
 ## Quick start
 
 1. In **Settings → Data Types**, add **Forms container** to the allowed blocks of the site's Block Grid or Block List. Add **Interactive Report** when its package is installed. A site or package can also [allow a block from code](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md#pages-built-from-code).
 2. Create the application's tables in the **AppBlocks database** (`AppBlocksDb`), or add another database under **Settings → AppBlocks → Connections**.
 3. Give a form something to read and write. Register a C# class with `services.AddScoped<IFormResource, YourFormClass>()`, or publish a **SQL data source** node under **Data sources** in the content tree.
-4. Add a **Forms container** to a page and add a **Form** to it. Select the class or the data source in the form's **Form Interface**, then add field blocks and bind each to a field.
+4. Add a **Forms container** to a page and add a **Form** to it. Select the class or the data source in the form's **Form Interface**, then add field blocks and bind each to a field. Use **Field rules** for conditional visibility, required fields and validation. To edit report rows in place, turn on **Form is a sidebar** and configure the report’s [Form links](docs/interactive-reports.md#linking-a-report-to-a-form).
 5. For a report, add an **Interactive Report** block and choose a table or enter a SELECT.
 
 A site that renders blocks with Umbraco's `blockgrid/Components` or `blocklist/Components` partials shows the blocks with no template change. [Adding AppBlocks to a site](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md) covers other rendering conventions, styling and caching.

@@ -90,10 +90,11 @@ export function mountAttachments(root) {
     }
     // Whether the files shown are a new record's, sent ahead of its save.
     const pending = () => !!form && !recordKey && newUploads;
+    const search = () => root.closest("[data-app-form]")?.dataset.panelQuery;
     const requestUrl = (id = null) => {
         const below = id === null ? [] : [id];
-        if (pending()) return endpointUrl(api, ["new", pendingKey, ...below]);
-        return endpointUrl(api, below, form && recordKey ? { [keyParameter]: recordKey } : {});
+        if (pending()) return endpointUrl(api, ["new", pendingKey, ...below], {}, search());
+        return endpointUrl(api, below, form && recordKey ? { [keyParameter]: recordKey } : {}, search());
     };
     // The block's notice, beside the list, says what last went wrong with anything the block did. The upload dialog's notice
     // says only what went wrong uploading, and which file it was about when it was about one; the block's notice repeats it
@@ -174,6 +175,7 @@ export function mountAttachments(root) {
     function prepareUploader() {
         if (!upload) return Promise.resolve();
         return uploaderReady ??= loadUppy().then(({ Uppy, Dashboard, XHRUpload }) => {
+            if (!root.isConnected) return;
             const limit = state?.maxFileSize || maxSize || null;
             uploader = new Uppy({
                 id: root.id || api, autoProceed: false,
@@ -321,7 +323,7 @@ export function mountAttachments(root) {
     // tell the reader when they could not; the files then stay where they are, and the form's next save tries again.
     async function adopt(key) {
         try {
-            await request(endpointUrl(api, ["new", pendingKey, "adopt"]), {
+            await request(endpointUrl(api, ["new", pendingKey, "adopt"], {}, search()), {
                 method: "POST", headers: { RequestVerificationToken: state?.antiforgeryToken }, body: { key },
             });
             pendingKey = null; pendingFiles = false;
@@ -383,10 +385,15 @@ export function mountAttachments(root) {
                 recordKey = key;
                 await load();
                 if (problem) fail(problem);
+                return !problem;
             } finally { busy = false; syncBusy(); }
         };
         form.addEventListener("app-form:loaded", follow);
-        form.addEventListener("app-form:saved", follow);
+        form.addEventListener("app-form:saved", event => {
+            const done = follow(event);
+            event.detail.waitUntil?.(done);
+        });
         render();
     } else load();
+    return () => uploader?.destroy();
 }

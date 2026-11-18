@@ -48,12 +48,19 @@ async function mountReports() {
     await import(`${pathBase}/api/reports/ui/ir.js`);
     for (const template of templates) {
         const report = template.content.querySelector("interactive-report").cloneNode(true);
-        for (const attribute of ["api-base", "download-base"]) {
-            const base = report.getAttribute(attribute);
-            if (!base) continue;
-            const url = new URL(base, location.href);
-            url.searchParams.set("appPageQuery", location.search);
-            report.setAttribute(attribute, url.toString());
+        const setPageQuery = () => {
+            for (const attribute of ["api-base", "download-base"]) {
+                const base = report.getAttribute(attribute);
+                if (!base) continue;
+                const url = new URL(base, location.href);
+                url.searchParams.set("appPageQuery", location.search);
+                report.setAttribute(attribute, url.toString());
+            }
+        };
+        setPageQuery();
+        if (template.dataset.parentParameter) {
+            const parent = [...document.querySelectorAll("form[data-app-form]")].find(f => f.dataset.keyParameter === template.dataset.parentParameter);
+            parent?.addEventListener("app-form:saved", setPageQuery);
         }
         const stateKey = `app-report:${template.dataset.stateKey}`;
         try {
@@ -63,8 +70,23 @@ async function mountReports() {
         const remember = () => {
             try { sessionStorage.setItem(stateKey, JSON.stringify(report.getReportDocument())); } catch { /* No persistence required. */ }
         };
-        report.addEventListener("ir-edit", remember);
-        report.addEventListener("ir-create", remember);
+        const openForm = event => {
+            if (event.defaultPrevented) return;
+            const url = new URL(event.detail.url, location.href);
+            const id = url.hash.slice(1);
+            if (id && url.origin === location.origin && report.closest("[data-form-panels]")?.dataset.formPanels.split(" ").includes(id)) {
+                const panel = document.getElementById(id);
+                const opened = panel?.matches("dialog[data-app-form-panel]") && !panel.dispatchEvent(new CustomEvent("app-form:open", { cancelable: true, detail: {
+                    url, afterSave: () => report.submitReportDocument(report.getReportDocument()),
+                } }));
+                event.preventDefault();
+                if (!opened) { remember(); location.assign(url); }
+                return;
+            }
+            remember();
+        };
+        report.addEventListener("ir-edit", openForm);
+        report.addEventListener("ir-create", openForm);
         if (template.dataset.printUrl) report.addEventListener("ir-action", event => {
             if (event.detail?.command !== "app-print") return;
             const key = Object.entries(event.detail.row ?? {}).find(([name]) => name.toLowerCase() === (template.dataset.printKeyColumn ?? "").toLowerCase())?.[1];

@@ -1,15 +1,24 @@
 import { ApiError, errorText, request } from "./data-api.js";
 import { t } from "./runtime-text.js";
 import { blank, truthy, newSubmissionKey, signInNotice, signInNeeded, endpointUrl, toLocalInput, fromLocalInput, plain, recordAddress, retiredOption, otherControls } from "./runtime-controls.js";
+import { mountFieldRules } from "./field-rules.js";
 import { mountAntiSpam } from "./anti-spam.js";
 import { mountShuttle, mountColor } from "./field-controls.js";
 import { detailsFor, attachmentsFor, setSubmissionKey } from "./form-coordination.js";
 
-export function mountForm(form) {
+export function mountForm(form, panel) {
     const fields = [...form.querySelectorAll("[data-field]")];
     const dateTimes = new Map();
     const shuttles = new Map([...form.querySelectorAll("[data-app-shuttle]")].map(root => [root.querySelector("[data-field]"), mountShuttle(root)]));
     const colors = new Map([...form.querySelectorAll("[data-app-color]")].map(root => [root.querySelector("[data-field]"), mountColor(root)]));
+    const applyRules = mountFieldRules(form, fields, shuttles, colors, field => {
+        if (field.type === "checkbox") return field.checked;
+        if (field.type === "datetime-local" && field.value) {
+            const original = dateTimes.get(field);
+            return original?.shown === field.value ? original.value : fromLocalInput(field.value);
+        }
+        return field.value;
+    });
     const errors = form.querySelector(".app-form-errors");
     const message = form.querySelector(".app-form-message");
     const body = form.querySelector(".app-form-body");
@@ -19,8 +28,8 @@ export function mountForm(form) {
     let submissionKey = newSubmissionKey();
     const antiSpam = [...form.querySelectorAll("[data-app-antispam]")].map(root => mountAntiSpam(root, form));
     // A hidden field has no message element of its own.
-    const errorOf = field => document.getElementById(`${field.id}-error`);
-    const requestUrl = (key = null) => endpointUrl(form.dataset.api, key ? [key] : []);
+    const errorOf = field => form.querySelector(`#${CSS.escape(field.id)}-error`);
+    const requestUrl = (key = null) => endpointUrl(form.dataset.api, key ? [key] : [], {}, form.dataset.panelQuery);
     setSubmissionKey(form, () => submissionKey);
     function showErrors(values) {
         errors.replaceChildren(); errors.hidden = !values || !Object.keys(values).length;
@@ -76,17 +85,20 @@ export function mountForm(form) {
             link.hidden = !record.key;
             if (record.key) {
                 const url = new URL(link.dataset.printUrl, location.origin);
-                url.search = location.search;
+                url.search = form.dataset.panelQuery ?? location.search;
                 url.searchParams.set(link.dataset.printKeyParameter || "id", record.key);
                 link.href = url.toString();
             }
         }
+        applyRules(record);
         body.disabled = false;
     }
     async function load() {
         message.textContent = t("loading");
         try {
-            state = await request(requestUrl()); display(state.record); message.textContent = "";
+            state = await request(requestUrl());
+            if (!form.isConnected) return;
+            display(state.record); message.textContent = "";
             // Blocks that follow the record, such as Attachments, learn which record is shown.
             form.dispatchEvent(new CustomEvent("app-form:loaded", { bubbles: true, detail: { record: state.record, definitionVersion: state.definitionVersion } }));
         } catch (error) {
@@ -129,11 +141,12 @@ export function mountForm(form) {
             if (pending) details.push(pending);
         }
         busy = true;
+        if (panel) form.setAttribute("aria-busy", "true");
         for (const block of attachments) block.saving(true);
         // Deleting needs no check. A service that shows no widget hands over its token only now.
         if (!remove) for (const widget of antiSpam) {
             const problem = await widget.prepare();
-            if (problem) { showErrors({ "": [problem] }); busy = false; for (const block of attachments) block.saving(false); return; }
+            if (problem) { showErrors({ "": [problem] }); busy = false; form.removeAttribute("aria-busy"); for (const block of attachments) block.saving(false); return; }
         }
         // Read before the form is disabled below, which would take every control with it.
         const formData = otherControls(form);
@@ -154,13 +167,22 @@ export function mountForm(form) {
             }
             // No record in the answer, whether it has no content or a body without one: the record is gone, or a public
             // form keeps nothing to come back to, so the visitor goes back.
-            if (!result?.record) { location.assign(form.dataset.return); return; }
+            if (!result?.record) {
+                if (panel) panel.saved(); else location.assign(form.dataset.return);
+                return;
+            }
             keep(result.record); message.textContent = t("saved");
             // Blocks that saved with the record take their rows from the answer; the others reload.
-            form.dispatchEvent(new CustomEvent("app-form:saved", { bubbles: true, detail: { record: result.record, definitionVersion: state.definitionVersion, details: result.details ?? [] } }));
+            const followUp = [];
+            form.dispatchEvent(new CustomEvent("app-form:saved", { bubbles: true, detail: {
+                record: result.record, definitionVersion: state.definitionVersion, details: result.details ?? [],
+                waitUntil: task => followUp.push(task),
+            } }));
+            // Pending uploads must join a newly created record before the panel can be dismissed.
+            if (panel && (await Promise.all(followUp)).every(ok => ok !== false)) panel.saved();
         } catch { showErrors({ "": [t("requestFailedRetained")] }); message.textContent = ""; }
         finally {
-            busy = false; body.disabled = false;
+            busy = false; form.removeAttribute("aria-busy"); body.disabled = false;
             for (const block of attachments) block.saving(false);
             // Whatever the answer was, the server has seen this token and it will not work again.
             if (!remove) for (const widget of antiSpam) widget.reset();
@@ -190,11 +212,19 @@ export function mountForm(form) {
     // A saved record: shown, a new key for the next submission, and its key on the address.
     function keep(record) {
         display(record); submissionKey = newSubmissionKey();
+        panel?.changed();
         // A public form may keep nothing to come back to, so a record with no key leaves the address alone.
-        if (record.key) { const url = new URL(location.href); url.searchParams.set(form.dataset.keyParameter, record.key); history.replaceState(null, "", url); }
+        if (record.key) {
+            const url = new URL(location.href);
+            url.search = form.dataset.panelQuery ?? url.search;
+            url.searchParams.set(form.dataset.keyParameter, record.key);
+            if (panel) form.dataset.panelQuery = url.search;
+            else history.replaceState(null, "", url);
+        }
     }
     form.addEventListener("submit", event => { event.preventDefault(); submit(); });
     form.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => submit(true)));
     load();
+    return () => { for (const widget of antiSpam) widget.dispose(); };
 }
 // Opening an Attachments block's Upload dialog fetches the locally packaged Uppy modules and stylesheet once.

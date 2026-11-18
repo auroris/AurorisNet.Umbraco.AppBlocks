@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Configuration.Models;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
@@ -36,7 +35,7 @@ public sealed class SchemaInstallerRetryTests
 
     private static void Fail(WebApplicationBuilder builder)
     {
-        // Boot a usable empty site, then exercise a failing installation explicitly. A failed startup migration now fails boot.
+        // Boot a usable empty site, then exercise a failing installation explicitly. A failed startup install fails boot.
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
             ["Umbraco:CMS:PackageMigration:RunSchemaAndContentMigrations"] = "false",
         });
@@ -47,7 +46,6 @@ public sealed class SchemaInstallerRetryTests
     private static void EnableInstallation(IServiceProvider services)
     {
         services.GetRequiredService<IOptions<PackageMigrationSettings>>().Value.RunSchemaAndContentMigrations = true;
-        services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-02-data-source-backing-class");
     }
 
     [Fact]
@@ -107,7 +105,7 @@ public sealed class SchemaInstallerRetryTests
         await using var site = await BlockSite.BootAsync(root);
         using (var scope = site.CreateScope())
         {
-            // The pending package migration retries the installation on this boot.
+            // Startup retries the schema installation on this boot.
             var types = scope.ServiceProvider.GetRequiredService<IContentTypeService>();
             for (var i = 0; i < 100 && types.Get(DataSourceSchema.SqlAlias) is null; i++) await Task.Delay(100);
             await AssertInstalledAsync(scope.ServiceProvider);

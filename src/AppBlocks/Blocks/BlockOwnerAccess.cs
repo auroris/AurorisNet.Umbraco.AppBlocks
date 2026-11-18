@@ -70,6 +70,12 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
         var formBlock = flat.FirstOrDefault(b => b.Content.ContentType.Alias == "appForm" && AppBlockContent.Flatten(b.Areas.SelectMany(a => a)).Any(c => c.ContentKey == blockKey));
         var form = formBlock is null ? null : await FormDefinition.ResolveAsync(page, formBlock.ContentKey, resources, catalog, culture, request.RequestServices.GetServices<IAppBlockPlugin>());
 
+        var formContext = new FormExecutionContext(user, pageKey, form?.Block.ContentKey ?? blockKey, form?.Revision ?? definition, Parameters: parameters);
+        if (form?.Relationship is { } relation) {
+            var resolved = await relation.ResolveAsync(form, formContext, request.RequestServices, ct);
+            if (resolved.Refusal is { } refusal) return BlockOwnerScope.Refused(refusal.Status, "The parent record is unavailable.");
+            formContext = formContext with { ParentScope = resolved.Scope };
+        }
         IFormResource resource; string? key;
         if (string.IsNullOrWhiteSpace(ownerResource))
         {
@@ -90,11 +96,12 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
             if (await resources.FindAsync(ownerResource.Trim()) is not { } named) return BlockOwnerScope.Refused(422, $"The owner resource {ownerResource} is not registered.");
             resource = named;
             if (FormResourceAccess.Refusal(resource, user) is { } refused) return BlockOwnerScope.Refused(refused, $"Sign in as a member to use {words.These}.");
-            key = await OwnerKeyAsync(ownerKey, form, parameters, user, pageKey, request, ct);
+            key = await OwnerKeyAsync(ownerKey, form, formContext, request, ct);
             if (key is null) return BlockOwnerScope.Refused(404, $"The record {words.These} belong to is not known yet.");
         }
         var context = new FormExecutionContext(user, pageKey, blockKey, definition, Parameters: parameters);
-        var loaded = await resource.LoadAsync(key, context, ct);
+        if (string.IsNullOrWhiteSpace(ownerResource)) context = context with { ParentScope = formContext.ParentScope };
+        var loaded = context.ParentScope is null ? await resource.LoadAsync(key, context, ct) : await form!.LoadAsync(key, context, ct);
         if (loaded.Record is null) return BlockOwnerScope.Refused(loaded.Status is 403 or 404 ? loaded.Status : 403,
             loaded.Status == 404 ? $"The record {words.These} belong to was not found." : $"You do not have access to {words.These}.");
         return new(200, null, user, item, form, resource, loaded.Record, key, parameters);
@@ -105,17 +112,16 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
     /// field of the enclosing form's record, which the form's resource loads for this caller first; anything else is
     /// the key itself. Null when the value is not there yet, such as a form record that has not been saved.
     /// </summary>
-    private static async Task<string?> OwnerKeyAsync(string? expression, FormDefinition? form, IReadOnlyDictionary<string, string> parameters,
-        ClaimsPrincipal user, Guid pageKey, HttpContext request, CancellationToken ct)
+    private static async Task<string?> OwnerKeyAsync(string? expression, FormDefinition? form, FormExecutionContext context, HttpContext request, CancellationToken ct)
     {
         var text = expression?.Trim();
         if (string.IsNullOrEmpty(text)) return null;
         if (text.StartsWith(":PARAM.", StringComparison.OrdinalIgnoreCase))
-            return parameters.FirstOrDefault(p => p.Key.Equals(text[7..], StringComparison.OrdinalIgnoreCase)).Value is { Length: > 0 } value ? value : null;
+            return context.Parameters?.GetValueOrDefault(text[7..]) is { Length: > 0 } value ? value : null;
         if (text.StartsWith(":FIELD.", StringComparison.OrdinalIgnoreCase))
         {
-            if (form is null || Single(request.Request.Query[form.KeyParameter]) is not { } recordKey || FormResourceAccess.Refusal(form.Resource, user) is not null) return null;
-            var record = await form.Resource.LoadAsync(recordKey, new FormExecutionContext(user, pageKey, form.Block.ContentKey, form.Revision, Parameters: parameters), ct);
+            if (form is null || Single(request.Request.Query[form.KeyParameter]) is not { } recordKey || FormResourceAccess.Refusal(form.Resource, context.Member) is not null) return null;
+            var record = await form.LoadAsync(recordKey, context, ct);
             // Publishing accepts the alias in any letter case, as editors' names are matched everywhere else, so the record is read the same way.
             if (record.Record is null) return null;
             var alias = text[7..];

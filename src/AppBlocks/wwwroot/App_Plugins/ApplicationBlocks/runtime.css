@@ -493,3 +493,25 @@
 @media (prefers-reduced-motion: reduce) {
     .application-blocks *, .application-blocks *::before { transition: none !important; }
 }
+
+/* A public form uses the side-panel layout familiar from Umbraco's backoffice. */
+.app-form-panel {
+    position: fixed; inset: 0 0 0 auto; margin: 0; padding: 0;
+    box-sizing: border-box; width: min(38rem, 100%); height: 100dvh; max-height: none; max-width: none;
+    border: 0; border-left: 1px solid var(--app-border); background: var(--app-surface);
+    color: var(--app-text); box-shadow: var(--app-shadow-lg); overscroll-behavior: contain;
+}
+.ah-grid__item:has(> dialog.app-form-panel:only-child) { display: contents; }
+.app-form-panel::backdrop { background: rgb(15 23 42 / 45%); }
+.app-panel-header {
+    position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 1rem 1.5rem; background: var(--app-surface); border-bottom: 1px solid var(--app-border);
+}
+.app-panel-status { padding: 1rem 1.5rem; }
+.app-panel-header h2 { margin: 0; font-size: 1.2rem; }
+.app-panel-header button { font: inherit; font-size: 1.5rem; line-height: 1; padding: .45rem; color: inherit; border: 0; background: transparent; cursor: pointer; }
+.app-form-panel .app-form { margin: 0; border: 0; box-shadow: none; }
+@media (prefers-reduced-motion: no-preference) {
+    .app-form-panel[open] { animation: app-form-slide-in .18s ease-out; }
+    @keyframes app-form-slide-in { from { transform: translateX(100%); } to { transform: none; } }
+}

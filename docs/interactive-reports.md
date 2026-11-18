@@ -52,13 +52,31 @@ Report administrators keep their access, and an authorization policy named in th
 
 These routes stay under `/api` whatever `AppBlocks:ApiRoot` says. That setting moves the base package's endpoints only.
 
-## Links to a form page
+## Linking a report to a form
 
-A report block with a **Form page** links its rows to that page:
+On the Interactive Report block, open **Form links** and choose where the buttons go.
 
-- The **Open link** on each row opens the page with the row's **Record key column** value in a query parameter. The parameter is `id` unless **Record key query parameter** names another.
-- The **Create button** above the report opens the page for a new record.
-- **Open label** and **Create label** name the link and the button. Left blank, the report's own labels apply.
+| Workflow | Settings |
+|---|---|
+| Edit beside the report | Add a Form block to a Forms container on the same page. Turn on **Form is a sidebar** on the form and **Form on this page** on the report. |
+| Open a separate form page | Use the **Form page** picker. Both actions open that Umbraco page. If the target form is a sidebar, it opens on arrival. |
+| Create on a different page | Set **Create form page**. This overrides the destination for Create only. |
+
+Set **Record key column** to the report column that identifies the row, such as `LINE_ID`. **Open** passes that value to the form. **Create** opens a new record. **Open label** and **Create label** change the text shown by the report.
+
+A report automatically targets the only sidebar on a page, even beside an inline master form. A single form also supplies its own **Record key query parameter**. To select a different form or choose between sidebars, give each Form Interface a distinct parameter and enter the intended one on the report. Same-page form links and links to sidebars require an unambiguous match. Leave the destinations empty and **Form on this page** off for a report without form links.
+
+### Master and detail on one page
+
+On the detail Form block, open **Master/detail**. Choose the **Parent form** and the **Link field** on the detail resource. If the parent lives on another page, choose its **Parent page** first. The parent key defaults to `id` and the detail key to `detailId`. You can give either Form Interface a different **Record key query parameter**. Configure the report’s form links to target the detail form.
+
+For an order and its lines, the parent form might use `orderId` and the line form `lineId`. Pick the order form and the line resource’s `orderId` field. At `/orders/?orderId=42` the report lists lines for order 42. Create assigns that order to the new line. Open, Save and Delete check that an existing line belongs to it. The report source must expose the link field or its mapped database column. It can still be a custom SELECT. A form needs no field block for the link. If one is added, the value is read only.
+
+The parent form must be able to load a saved record for this visitor before the report offers detail rows or actions. The detail resource applies its own access checks. A sidebar save writes the detail immediately. For a new master and draft lines that should save together, use a Tabular form block inside the master. Existing reports with a manually configured parameter filter can keep using it.
+
+The sidebar keeps the master’s unsaved fields in place. Saving or deleting closes it and refreshes the originating report with its current view. Cancel, Close and Escape dismiss it. A validation error leaves the sidebar open. A form used on its own has a launcher labeled with its heading. On a page where a report targets the sidebar, the report supplies the controls.
+
+### Button visibility
 
 Each of the two has a setting for who sees it:
 
@@ -81,9 +99,9 @@ The create button appears for a caller the form page lets add a record, and the 
 |---|---|
 | Selects a SQL data source | From the source's **Allow insert** or **Allow update**, its write groups, its anonymous-writes setting and any `:USER_` binding in its writes |
 | Is marked **Read only** | Offers neither |
-| Selects a C# form class | Asks the class's `InitializeAsync` for that caller, with no query parameters. The button shows when the new record it returns allows `Create`. The link shows whenever it answers with a record |
+| Selects a C# form class | Asks the class's `InitializeAsync` for that caller, with the master page’s parameters for a same-page target. The button shows when the new record it returns allows `Create`. The link shows whenever it answers with a record |
 
-A C# class decides about changing an existing record when that record loads, so the link cannot know in advance. A class that refuses the caller hides both, and a class that throws keeps both. On a page with several forms, one form that allows the action is enough. A page whose forms do not resolve keeps the link.
+A C# class decides about changing an existing record when that record loads, so the link cannot know in advance. A class that refuses the caller hides both, and a class that throws keeps both. A link to a particular form asks that form. For an ordinary page link with several inline forms, one form that allows the action is enough. A page whose forms do not resolve keeps the link.
 
 Registered `IDataSourcePolicy` rules and a data source's backing class decide at the write itself. A caller that only they refuse sees the link, and the form then refuses the save. **The form endpoints check every write, so these settings are a convenience for readers and the form remains the rule.**
 

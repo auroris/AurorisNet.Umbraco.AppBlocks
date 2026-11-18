@@ -33,19 +33,27 @@ public sealed class DataSourceReadQuery
 
     /// <summary>Binds one caller's values using one clock reading and the data source's date-time mode.</summary>
     public DataSourceQueryCommand Bind(DataSourceUser user, IReadOnlyDictionary<string, string>? parameters = null,
-        IReadOnlyDictionary<string, object?>? applicationValues = null)
+        IReadOnlyDictionary<string, object?>? applicationValues = null, string? linkField = null, string? parentKey = null)
     {
         var values = new BindVariableValues(user, parameters, now(), applicationValues);
-        return Build(variable => values.Bind(variable, plan.Dialect));
+        return Build(variable => values.Bind(variable, plan.Dialect), linkField, parentKey);
     }
 
-    private DataSourceQueryCommand Build(Func<BindVariable, object?> value)
+    private DataSourceQueryCommand Build(Func<BindVariable, object?> value, string? linkField = null, string? parentKey = null)
     {
         var parameters = plan.Parameters();
         var from = plan.From(parameters, value);
         var restriction = plan.Restriction?.Render(parameters, value);
         var where = predicate is null ? restriction : predicate + (restriction is null ? "" : " AND (" + restriction + ")");
-        var sql = plan.Dialect.Select(from, plan.ReadColumns, [], where);
+        var match = new List<(string Column, string Marker)>();
+        if (linkField is not null) {
+            var column = plan.Field(linkField) ?? plan.Columns.FirstOrDefault(c => c.Column.Equals(linkField, StringComparison.OrdinalIgnoreCase));
+            if (column is null) throw new DataSourceException($"The report source has no detail link field '{linkField}'.");
+            var typed = FieldValues.FromValue(parentKey, column.Kind, out var valid, plan.Definition.DateTimes);
+            var bound = valid ? plan.Dialect.ToDatabase(typed, column.Kind, column.Target, plan.Definition.DateTimes) : null;
+            match.Add((column.Column, parameters.Add(bound)));
+        }
+        var sql = plan.Dialect.Select(from, plan.ReadColumns, match, where);
         return new(sql, parameters.Bindings.ToDictionary(parameter => parameter.Name,
             parameter => parameter.Value is TypedValue typed ? typed.Value : parameter.Value));
     }

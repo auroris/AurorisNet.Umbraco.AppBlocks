@@ -61,7 +61,7 @@ export function renderAppBlock(alias, content = {}, settings = {}, nested = () =
         case "appFieldset": return title + help;
         case "appForm": {
             const config = listItems(content.formInterface, culture)[0] ?? {};
-            return title + note(`Form · ${config.resource || "Choose a form class"}${config.viewOnly ? " · View only" : ""}`);
+            return title + note(`Form${[true, 1, "1", "true"].includes(content.sidePanel) ? " · Sidebar" : ""} · ${config.resource || "Choose a form class"}${config.viewOnly ? " · View only" : ""}`);
         }
         case "appFormInterface": return `<dl><dt>Form class</dt><dd>${escape(content.resource || "Not selected")}</dd><dt>Record key parameter</dt><dd>${escape(content.keyParameter || "id")}</dd><dt>Mode</dt><dd>${content.viewOnly ? "View only" : "Edit"}</dd></dl>`;
         case "appFormsContainer": return nested(content.forms) || note("Add forms to this container.");

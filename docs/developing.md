@@ -119,25 +119,11 @@ Saved block values are read through Umbraco's Block Grid, Block List and Single 
 
 ## Who owns the definitions
 
-The `Schema/` folder of each package is the only source of its element types, data types and document types. Change a definition there. A new site installs every definition through Umbraco's package importer, which a package migration starts.
-
-Installation imports only the definitions a site lacks. A change to a definition reaches an existing site in one of two ways.
-
-### A migration step
-
-Use a step for a change that a released version carries to every site. Each package has an Umbraco package migration plan: `AppBlocksMigrationPlan`, `InteractiveReportsMigrationPlan` and `DocumentsMigrationPlan`. At startup Umbraco runs the steps a site has not reached and records the last one in its key-value table under the plan's name. A new site runs every step.
-
-- A step is a class deriving from `AsyncMigrationBase`. It takes the Umbraco services it needs in its constructor and changes the definition, or rewrites block values, through them. `AddDataSourceBackingClass` is the example to follow.
-- Add the step after the last one in `DefinePlan`, as `To<TheStep>("yyyy-MM-dd-what-it-does")`. Once a site may have run a step, keep its name and its place in the plan.
-- A step before `InstallPackageDefinitions` runs before the definitions exist on a new site, so it must accept that. Later steps run after the missing definitions are imported.
-- Every schema step follows `Umbraco:CMS:PackageMigration:RunSchemaAndContentMigrations`. When the setting is `false`, the steps change nothing.
-- A schema step takes Umbraco's key-value write lock before it reads. Each step writes its migration state when it completes, and taking the lock first avoids upgrading a SQLite read transaction while other startup work is writing.
-
-Check a new step as the clean-install test does: install the previous package, start the new one, and compare each definition with a new install of the new package.
+Each package’s `Schema/` folder defines its current element types, data types and document types. Startup installs missing definitions through Umbraco’s package importer. To apply edited definitions on an existing installation, use Reinstall.
 
 ### Reinstall
 
-**Settings → AppBlocks → Definitions → Reinstall** resets every definition to the installed package, by key, in one transaction: names, properties, allowed children, data type settings and folders. Use it for a change that no step carries, and during development after editing a schema file.
+**Settings → AppBlocks → Definitions → Reinstall** resets every definition to the installed package, by key, in one transaction: names, properties, allowed children, data type settings and folders. Use it after upgrading or during development after editing a schema file.
 
 - Content keeps its values, because each property is matched by alias. Values of a property the package no longer has are removed.
 - A type of the site's own that has taken one of the package's aliases is left as it is, and the screen says so.
@@ -148,6 +134,6 @@ Check a new step as the clean-install test does: install the previous package, s
 
 ### Definition keys
 
-`AppBlockSchema.Key` derives each definition's key from its name and a fixed seed, so a definition keeps its key across versions. Changing the seed changes every key, and no migration step can carry that change to an existing site.
+`AppBlockSchema.Key` derives each definition's key from its name and a fixed seed, so a definition keeps its key across versions. Changing the seed changes every key.
 
-A site that imports definitions before Umbraco's package migrations run can call `SchemaInstaller.EnsureAsync` from a service scope first. The call is safe to repeat and follows the schema migration setting.
+A site that imports definitions before AppBlocks starts can call `SchemaInstaller.EnsureAsync` from a service scope first. The call is safe to repeat and follows the schema migration setting.

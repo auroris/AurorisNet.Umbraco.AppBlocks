@@ -14,7 +14,14 @@ public static class FormAccess
         var query = http.Request.Query[form.KeyParameter];
         if (query.Count > 1 || query.Count == 1 && string.IsNullOrWhiteSpace(query[0])) return false;
         var context = new FormExecutionContext(http.User, pageKey, form.Block.ContentKey, form.Revision, Parameters: FormRequestValues.Parameters(http.Request.Query));
-        try { return (query.Count == 0 ? await form.Resource.InitializeAsync(context, http.RequestAborted) : await form.Resource.LoadAsync(query[0]!, context, http.RequestAborted)).Status == 403; }
+        try {
+            if (form.Relationship is { } relation) {
+                var resolved = await relation.ResolveAsync(form, context, http.RequestServices, http.RequestAborted);
+                if (resolved.Refusal is { } refusal) return refusal.Status is 401 or 403;
+                context = context with { ParentScope = resolved.Scope };
+            }
+            return (await form.LoadAsync(query.Count == 0 ? null : query[0], context, http.RequestAborted)).Status == 403;
+        }
         catch (Exception error) when (error is not OperationCanceledException)
         {
             http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("ApplicationForms").LogWarning(error, "Form resource {Resource} failed while the page rendered for an anonymous visitor.", form.Resource.Alias);

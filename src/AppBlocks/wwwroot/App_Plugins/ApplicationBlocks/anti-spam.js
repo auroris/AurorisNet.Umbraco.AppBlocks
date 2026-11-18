@@ -26,11 +26,12 @@ export function mountAntiSpam(root, form) {
         if (widget !== undefined) { try { api().reset(widget); } catch { /* A widget that will not reset leaves no token, and the server says so. */ } }
     }
     // A token works once, and one that sits too long expires.
-    if (!action) loaded.then(ok => { if (ok) widget = api().render(root, { sitekey: siteKey, ...JSON.parse(root.dataset.options || "{}"), "expired-callback": reset }); });
+    if (!action) loaded.then(ok => { if (ok && root.isConnected) widget = api().render(root, { sitekey: siteKey, ...JSON.parse(root.dataset.options || "{}"), "expired-callback": reset }); });
     const hasToken = () => [...form.elements].some(control => control.name === field && control.value);
     const unavailable = t("antiSpamUnavailable");
     return {
         reset,
+        dispose() { if (widget !== undefined) api()?.remove?.(widget); },
         // Returns what to tell the visitor when the form is not ready to send, or nothing when it is.
         async prepare() {
             if (!action) return hasToken() ? null : blocked ? unavailable : t("antiSpamIncomplete");

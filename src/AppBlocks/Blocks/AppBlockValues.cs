@@ -85,15 +85,15 @@ public sealed class AppBlockValues
     /// an Actions block with <paramref name="actions"/> (its labels, say) in its actions area. <paramref name="values"/> are the form
     /// block's own, such as its heading; <paramref name="formInterface"/> adds to the interface's, such as <c>viewOnly</c>.
     /// </summary>
-    public AppBlockItem Form(string resource, IEnumerable<AppBlockItem> fields, Guid? returnPage = null, string keyParameter = "id", object? actions = null,
+    public AppBlockItem Form(string resource, IEnumerable<AppBlockItem> fields, Guid? returnPage = null, string? keyParameter = null, object? actions = null,
         object? values = null, object? formInterface = null, string? id = null, int columnSpan = 12)
     {
         var settings = Properties(formInterface);
         settings["resource"] = resource;
-        settings["keyParameter"] = keyParameter;
+        var properties = Properties(values);
+        settings["keyParameter"] = keyParameter ?? (properties["parentForm"] is null ? "id" : "detailId");
         if (returnPage is { } page) settings["returnPage"] = "umb://document/" + page.ToString("N");
         var interfaceKey = id is null ? Guid.NewGuid() : AppBlockSchema.Key("block:" + id + ":interface");
-        var properties = Properties(values);
         properties["formInterface"] = new JsonObject {
             ["contentData"] = new JsonArray(Element("appFormInterface", interfaceKey, settings)), ["settingsData"] = new JsonArray(),
             ["expose"] = new JsonArray(Expose(interfaceKey)),

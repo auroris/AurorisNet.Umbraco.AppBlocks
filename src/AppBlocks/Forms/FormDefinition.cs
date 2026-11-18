@@ -11,13 +11,28 @@ namespace AppBlocks.Forms;
 public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block, IPublishedElement Interface,
     IFormResource Resource, IReadOnlyList<BlockGridItem> Fields)
 {
+    public static string Anchor(Guid blockKey) => $"app-form-{blockKey:N}";
     public string ListsRevision { get; init; } = "";
     public string? Culture { get; init; }
     /// <summary>The form's Anti-spam blocks, wherever they sit inside it. They come from the published page, so no request can leave them out.</summary>
     public IReadOnlyList<BlockGridItem> AntiSpam { get; init; } = [];
     public string Revision => $"{Page.UpdateDate.Ticks}:{Culture}{ListsRevision}:{Resource.ContractVersion}";
+    public IReadOnlyList<FieldRule> Rules { get; init; } = [];
+    public FormRelationship? Relationship { get; init; }
     public bool ViewOnly => Interface.Value<bool>("viewOnly");
-    public string KeyParameter => Interface.Value<string>("keyParameter") is { Length: > 0 } key ? key : "id";
+    public string KeyParameter => ReadKeyParameter(Interface, Relationship is not null);
+    public static string ReadKeyParameter(IPublishedElement? formInterface, bool detail = false)
+        => formInterface?.Value<string>("keyParameter") is { Length: > 0 } key ? key : detail ? "detailId" : "id";
+    public static string KeyParameterFor(BlockGridItem form) => ReadKeyParameter(form.Content.Value<BlockListItem>("formInterface")?.Content,
+        !string.IsNullOrWhiteSpace(form.Content.Value<string>("parentForm")));
+
+    /// <summary>Field defaults, lists of values and child blocks that use the page query while Razor renders them.</summary>
+    public bool RendersQueryValues => Fields.Any(item =>
+        !string.IsNullOrWhiteSpace(item.Content.Value<string>("listOfValues"))
+        || item.Content.Value<string>(AppBlockField.DefaultValueAlias)?.TrimStart().StartsWith(':') == true)
+        || AppBlockContent.Flatten(Block.Areas.SelectMany(area => area)).Any(item =>
+            item.Content.ContentType.Alias is AppBlockSchema.AttachmentsAlias or AppBlockSchema.ScheduleAlias);
+
     /// <summary>Where Save and Cancel return to: the Form interface's return page, or the site's root under <paramref name="pathBase"/>.</summary>
     public string ReturnUrl(PathString pathBase) => Interface.Value<IPublishedContent>("returnPage")?.Url() ?? pathBase + "/";
     /// <summary>
@@ -47,8 +62,24 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         if (selected.Length > 0 && definitions is not null) await definitions.LoadAsync();
         var lists = selected.Select(s => definitions?.FindList(s)).ToArray();
         if (lists.Any(list => list is null)) return null;
-        return new(page, block, configuration, resource, fields) { Culture = culture, AntiSpam = children.Where(b => b.Content.ContentType.Alias == AppBlockSchema.AntiSpamAlias).ToArray(), ListsRevision = string.Concat(lists.Select(list => ":" + list!.Key + ":" + list.DataSource.ComputeFingerprint() + ":" + list.DisplayColumn + ":" + list.ValueColumn + ":" + list.MaximumRows)) };
+        var rules = FieldRule.Published(block.Content, resource.Fields);
+        if (FieldRule.Problems(rules, bindings).Any()) return null;
+        return new(page, block, configuration, resource, fields) { Rules = rules, Relationship = FormRelationship.Read(block.Content, page, culture), Culture = culture, AntiSpam = children.Where(b => b.Content.ContentType.Alias == AppBlockSchema.AntiSpamAlias).ToArray(), ListsRevision = string.Concat(lists.Select(list => ":" + list!.Key + ":" + list.DataSource.ComputeFingerprint() + ":" + list.DisplayColumn + ":" + list.ValueColumn + ":" + list.MaximumRows)) };
     }
+
+    public async Task<FormResult> LoadAsync(string? key, FormExecutionContext context, CancellationToken ct)
+    {
+        var result = key is null ? await Resource.InitializeAsync(context, ct) : await Resource.LoadAsync(key, context, ct);
+        if (context.ParentScope is not { } scope || result.Record is not { } record) return result;
+        if (key is not null) {
+            if (Resource is SqlDataSource) return result; // SQL checks the stored row before its Load hook.
+            return record.Values.TryGetValue(scope.Field, out var value) && Convert.ToString(value, CultureInfo.InvariantCulture) == scope.Value ? result : FormResult.Missing();
+        }
+        var values = new Dictionary<string, object?>(record.Values) { [scope.Field] = scope.Value };
+        return result with { Record = record with { Values = values } };
+    }
+
+    internal bool HasAccessRule(string field) => Rules.Any(rule => rule.Field == field && rule.Action is "Show" or "Hide" or "Make read only");
 
     public Dictionary<string, string[]> Validate(JsonElement input, bool creating)
     {
@@ -75,7 +106,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
             }
             var empty = value.ValueKind == JsonValueKind.Null || value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString());
             if (empty) {
-                if (field.Required || block.Content.Value<bool>("required")) errors[field.Key] = ["A value is required."];
+                if (field.Required || block.Content.Value<bool>("required") && !HasAccessRule(field.Key)) errors[field.Key] = ["A value is required."];
                 continue;
             }
             var valid = field.Kind switch {
@@ -97,8 +128,8 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         }
         if (creating) {
             foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly))
-                if ((field.Required || bindings.TryGetValue(field.Key, out var block) && block.Content.Value<bool>("required"))
-                    && !input.TryGetProperty(field.Key, out _)) errors[field.Key] = ["A value is required."];
+                if ((field.Required || bindings.TryGetValue(field.Key, out var block) && block.Content.Value<bool>("required") && !HasAccessRule(field.Key))
+                    && field.Key != Relationship?.LinkField && !input.TryGetProperty(field.Key, out _)) errors[field.Key] = ["A value is required."];
         }
         return errors;
     }

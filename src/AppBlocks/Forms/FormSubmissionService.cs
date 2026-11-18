@@ -27,7 +27,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
         if (operation == FormOperation.Delete) {
             // Nothing to check on a delete, which only ever acts on a record the class allows; its token still stops here.
             context = context with { FormData = antiSpam.WithoutChecks(form, context.FormData) };
-            var current = await form.Resource.LoadAsync(key!, context, ct);
+            var current = await form.LoadAsync(key!, context, ct);
             if (current.Record is null) return Result(current);
             if (current.Record.Checksum is { } expected && expected != submission.Checksum) return Result(FormResult.Conflict());
             var deletion = await form.Resource.DeleteAsync(key!, submission.Checksum, context, ct);
@@ -55,7 +55,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
         var values = submission.Values;
         FormRecord? stored = null;
         if (key is not null) {
-            var current = await form.Resource.LoadAsync(key, context, ct);
+            var current = await form.LoadAsync(key, context, ct);
             if (current.Record is null) return Result(current);
             stored = current.Record;
             if (stored.Checksum is { } expected && expected != submission.Checksum) return Result(FormResult.Conflict());
@@ -68,10 +68,32 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
             if (mergedErrors.Count > 0) return Result(new(422, Errors: mergedErrors));
             values = JsonSerializer.SerializeToElement(merged);
         }
+        if (context.ParentScope is { } scope) {
+            if (submission.Values.TryGetProperty(scope.Field, out var supplied) && supplied.ToString() != scope.Value)
+                return Result(FormResult.Invalid(scope.Field, "The parent record cannot be changed through this form."));
+            var linked = values.Deserialize<Dictionary<string, JsonElement>>()!;
+            linked[scope.Field] = JsonSerializer.SerializeToElement(scope.Value);
+            values = JsonSerializer.SerializeToElement(linked);
+        }
         foreach (var processor in processors ?? []) {
             var processed = await processor.ProcessAsync(form, values, stored, context, ct);
             if (processed.Refusal is { } denied) return Result(denied);
             values = processed.Values;
+        }
+        if (context.ParentScope is { } verified && (!values.TryGetProperty(verified.Field, out var parent) || parent.ToString() != verified.Value))
+            return Result(FormResult.Invalid(verified.Field, "The parent record cannot be changed through this form."));
+        if (form.Rules.Count > 0) {
+            var baseline = stored;
+            if (baseline is null) {
+                var initial = await form.LoadAsync(null, context, ct);
+                if (initial.Record is null) return Result(initial);
+                baseline = initial.Record;
+            }
+            var effective = new Dictionary<string, object?>(baseline.Values);
+            foreach (var property in values.EnumerateObject()) effective[property.Name] = property.Value;
+            var required = form.Fields.Where(b => b.Content.Value<bool>("required")).Select(b => b.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
+            var ruleErrors = FieldRule.Validate(form.Rules, JsonSerializer.SerializeToElement(effective), submission.Values, baseline, required);
+            if (ruleErrors.Count > 0) return Result(new(422, Errors: ruleErrors));
         }
         var choiceErrors = await lists.ValidateAsync(form, values, context, ct, stored?.Values);
         if (choiceErrors.Count > 0) return Result(new(422, Errors: choiceErrors));

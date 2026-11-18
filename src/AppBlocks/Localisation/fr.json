@@ -101,6 +101,8 @@
   "signInToUseForm": "Ouvrez une session pour utiliser ce formulaire.",
   "formInvalid": "La ressource ou la configuration des champs de ce formulaire est invalide.",
   "save": "Enregistrer",
+  "openForm": "Ouvrir le formulaire",
+  "closeForm": "Fermer le formulaire",
   "cancel": "Annuler",
   "delete": "Supprimer",
   "print": "Imprimer",

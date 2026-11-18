@@ -987,12 +987,30 @@ Use field settings for required values, lengths and numeric limits. A SQL data s
 
 A form may edit only some of a record's fields, such as a status or a note on existing records. When a required field without a server default is missing from the form, read-only in it or shown as display text, publishing warns that the form cannot create records and publishes it: updates merge the fields the form leaves out, and a create through it is refused at run time for the missing values. Mark the Form Interface **Read only** for a form that changes nothing.
 
-Use a resource for rules involving several fields or database records:
+### Conditional field rules
+
+On the **Form** block, open **Field rules** and add a rule. Choose its target field and an action. **Show**, **Hide**, **Require** and **Make read only** apply when the conditions match. **Validate** runs for a filled-in field and displays your **Validation message** when the conditions fail. Choose **All** or **Any** and add comparisons. Each comparison names a field and either a fixed value or a second field on the form.
+
+- To ask for a cancellation reason, add a **Show** rule and a **Require** rule on **Reason**, both with the condition **Status Is Cancelled**.
+- To check dates, add a **Validate** rule on **End date**. Choose **End date**, **Is at least**, and **Start date** as the comparison field. Enter “End date must be on or after start date.”
+
+The browser updates the fields as the visitor types. The server evaluates the published rules again before saving, including stored values on an update. Hiding or locking a field preserves its saved value. Resource and database requirements still apply.
+
+### Adding a rule in C#
+
+Register a validation in the site’s Umbraco composer to add a server-side rule to forms using one resource. Return a field error to stop the save, or `null` to continue. The configured rules and the normal data source save still run on accepted input.
 
 ```csharp
-if (input.EndDate < input.StartDate)
-    return FormResult.Invalid("endDate", "The end date must follow the start date.");
+using AppBlocks.Forms;
+
+// In Compose(IUmbracoBuilder builder)
+builder.Services.AddFormValidation("orders.lines", (values, context) =>
+    values.TryGetProperty("item", out var item) && item.GetString() == "Discontinued"
+        ? FormResult.Invalid("item", "Choose a stocked item.")
+        : null);
 ```
+
+A rule needing asynchronous services can implement `IFormSubmissionProcessor` and register it with scoped dependency injection. A database rule that must run in the write transaction belongs in the data source’s backing class. For C# detail resources, `context.ParentScope` supplies the verified link field and parent key. Include them in the update and delete predicates alongside the record key. SQL data sources do this automatically.
 
 Set audit values on the server after resolving the signed-in account:
 

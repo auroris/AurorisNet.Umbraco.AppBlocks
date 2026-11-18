@@ -205,6 +205,8 @@ The browser runtime formats dates, times and file sizes for the page's language,
 | `signInToUseForm` | Sign in to use this form. |
 | `formInvalid` | This form has an invalid resource or field configuration. |
 | `save` | Save |
+| `openForm` | Open form |
+| `closeForm` | Close form |
 | `cancel` | Cancel |
 | `delete` | Delete |
 | `print` | Print |

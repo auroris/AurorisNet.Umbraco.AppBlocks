@@ -15,10 +15,6 @@ namespace AppBlocks.Tests;
 public sealed class InstallationSafetyTests
 {
     [Fact]
-    public void Package_plan_should_resume_from_its_recorded_state()
-        => Assert.False(new AppBlocksMigrationPlan().IgnoreCurrentState);
-
-    [Fact]
     public async Task Uninstall_should_refuse_embedded_blocks_in_a_site_owned_grid()
     {
         await using var site = await BlockSite.BootAsync();

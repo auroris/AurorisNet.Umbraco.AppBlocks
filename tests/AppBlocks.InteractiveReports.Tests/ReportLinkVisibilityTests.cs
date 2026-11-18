@@ -51,6 +51,7 @@ public sealed class ReportLinkVisibilityTests
         using var reading = await site.SignedIn("member", reader.Id.ToString(), reader.Username);
         using var editing = await site.SignedIn("backoffice", editor.ToString(), "reviewing-editor");
         using var visitor = site.Anonymous();
+        await CheckFormTargets(visitor, writing);
         var callers = new Dictionary<string, HttpClient> {
             ["writer"] = writing, ["reviewer"] = reviewing, ["member outside the groups"] = reading, ["backoffice editor"] = editing, ["anonymous"] = visitor,
         };
@@ -95,11 +96,28 @@ public sealed class ReportLinkVisibilityTests
         Assert.True(Has(signedInSchema, "createLink"));
         Assert.True(Has(signedInSchema, "editLink"));
 
-        await An_existing_site_gains_the_settings(site);
-        await Record_links_choices_become_link_visibility(site, writing);
         await A_block_published_without_its_key_column_omits_the_open_link(site, writing);
         await A_report_definition_set_to_specific_groups_admits_their_members(site, writing, reviewing);
-        await An_existing_site_gains_the_later_steps(site);
+    }
+
+    private static async Task CheckFormTargets(HttpClient visitor, HttpClient writing)
+    {
+        var anchor = "#" + Forms.FormDefinition.Anchor(PublicSite.LinePanel);
+        Task<JsonElement> LineLinks(Guid key) => Load(visitor, "/api/reports/" + PublicSite.ReportName(PublicSite.LinesPage, key) + "/schema?appPageQuery=%3ForderId%3D7%26lineId%3Dold");
+        var local = await LineLinks(PublicSite.LocalLinks);
+        Assert.Equal("/lines/?orderId=7" + anchor, local.GetProperty("createLink").GetProperty("url").GetString());
+        Assert.Equal("/lines/?orderId=7&lineId={id}" + anchor, local.GetProperty("editLink").GetProperty("urlTemplate").GetString());
+        Assert.Equal("event", local.GetProperty("createLink").GetProperty("mode").GetString());
+        Assert.Equal("event", local.GetProperty("editLink").GetProperty("mode").GetString());
+        var split = await LineLinks(PublicSite.SplitLinks);
+        Assert.Equal("/contact/", split.GetProperty("createLink").GetProperty("url").GetString());
+        Assert.Equal(local.GetProperty("editLink").GetProperty("urlTemplate").GetString(), split.GetProperty("editLink").GetProperty("urlTemplate").GetString());
+        var picked = await Load(visitor, "/api/reports/" + PublicSite.ReportName(PublicSite.PickedPage, PublicSite.PickedLinks) + "/schema?appPageQuery=%3Fprivate%3D7");
+        Assert.Equal("/lines/" + anchor, picked.GetProperty("createLink").GetProperty("url").GetString());
+        Assert.Equal("/lines/?lineId={id}" + anchor, picked.GetProperty("editLink").GetProperty("urlTemplate").GetString());
+        var rendered = await writing.GetStringAsync("/lines/");
+        Assert.Contains("data-app-form-panel", rendered);
+        Assert.Contains("data-form-panels=\"" + anchor[1..] + "\"", rendered);
     }
 
     /// <summary>A report definition node admits any signed-in account unless its Access is Specific groups, which admits the Members of its groups.</summary>
@@ -129,55 +147,6 @@ public sealed class ReportLinkVisibilityTests
         }
     }
 
-    private static readonly string[] RecordLinksChoices = ["Open and create", "Open only", "Create only", "None"];
-    private static Guid RecordLinksBlock(string choice) => PublicSite.LinkReport("create", PublicSite.LinkChoices[Array.IndexOf(RecordLinksChoices, choice)]);
-
-    /// <summary>
-    /// A site that ran the earlier Record links step still has that property and its choices in the blocks; the link visibility step,
-    /// reached from that step's state, hides what each choice left out.
-    /// </summary>
-    private static async Task Record_links_choices_become_link_visibility(PublicSite site, HttpClient writer)
-    {
-        await site.WithServices(async services => {
-            var types = services.GetRequiredService<IContentTypeService>();
-            var report = types.Get("appReport")!;
-            var text = (await services.GetRequiredService<IDataTypeService>().GetAsync(Umbraco.Cms.Core.Constants.DataTypes.Guids.TextstringGuid))!;
-            report.AddPropertyType(new PropertyType(services.GetRequiredService<Umbraco.Cms.Core.Strings.IShortStringHelper>(), text) {
-                Alias = AddReportLinkVisibility.RecordLinks, Name = "Record links" }, report.PropertyGroups.First().Alias);
-            Assert.True((await types.UpdateAsync(report, Umbraco.Cms.Core.Constants.Security.SuperUserKey)).Success);
-            // Four blocks as the earlier step left them: one choice each and no visibility of their own.
-            var contents = services.GetRequiredService<IContentService>();
-            var page = contents.GetById(PublicSite.LinksPage)!;
-            var value = System.Text.Json.Nodes.JsonNode.Parse((string)page.GetValue("content")!)!;
-            foreach (var choice in RecordLinksChoices)
-            {
-                var block = value["contentData"]!.AsArray().Single(b => Guid.Parse((string)b!["key"]!) == RecordLinksBlock(choice))!;
-                var values = block["values"]!.AsArray();
-                foreach (var stale in values.Where(v => ((string)v!["alias"]!).StartsWith("create") || ((string)v!["alias"]!).StartsWith("open")).ToArray()) values.Remove(stale);
-                values.Add(new System.Text.Json.Nodes.JsonObject { ["alias"] = AddReportLinkVisibility.RecordLinks, ["culture"] = null, ["segment"] = null, ["value"] = choice });
-            }
-            page.SetValue("content", value.ToJsonString());
-            Assert.True(contents.Save(page).Success);
-#pragma warning disable CS0618
-            var published = contents.Publish(page, ["*"]);
-#pragma warning restore CS0618
-            Assert.True(published.Success, string.Join("; ", published.EventMessages?.GetAll().Select(m => m.Message) ?? []));
-            var keyValues = services.GetRequiredService<IKeyValueService>();
-            keyValues.SetValue(PlanState, InteractiveReportsMigrationPlan.RecordLinksState);
-            await RunPlanAsync(services);
-            Assert.Equal(FinalState, keyValues.GetValue(PlanState));
-        });
-        var expected = new Dictionary<string, (bool Create, bool Open)> {
-            ["Open and create"] = (true, true), ["Open only"] = (false, true), ["Create only"] = (true, false), ["None"] = (false, false),
-        };
-        foreach (var (choice, (create, open)) in expected)
-        {
-            var schema = await Schema(writer, RecordLinksBlock(choice));
-            Assert.True(create == Has(schema, "createLink"), choice + ": create");
-            Assert.True(open == Has(schema, "editLink"), choice + ": open");
-        }
-    }
-
     /// <summary>
     /// Publishing refuses an Open link without a key column, but a block published before the setting existed can hold one: its
     /// report then answers without the Open link instead of failing.
@@ -188,7 +157,7 @@ public sealed class ReportLinkVisibilityTests
             var contents = services.GetRequiredService<IContentService>();
             var page = contents.GetById(PublicSite.LinksPage)!;
             var value = System.Text.Json.Nodes.JsonNode.Parse((string)page.GetValue("content")!)!;
-            var values = value["contentData"]!.AsArray().Single(b => Guid.Parse((string)b!["key"]!) == RecordLinksBlock("Open and create"))!["values"]!.AsArray();
+            var values = value["contentData"]!.AsArray().Single(b => Guid.Parse((string)b!["key"]!) == PublicSite.LinkReport("create", PublicSite.LinkChoices[0]))!["values"]!.AsArray();
             values.Remove(values.Single(v => (string)v!["alias"]! == "keyColumn"));
             page.SetValue("content", value.ToJsonString());
             // Past the publish check, as content saved before it was: without notifications, then the cache refreshed by hand.
@@ -207,96 +176,10 @@ public sealed class ReportLinkVisibilityTests
                 [new Umbraco.Cms.Core.Services.Changes.TreeChange<IContent>(contents.GetById(PublicSite.LinksPage)!, Umbraco.Cms.Core.Services.Changes.TreeChangeTypes.RefreshNode)]);
             return Task.CompletedTask;
         });
-        var schema = await Schema(writer, RecordLinksBlock("Open and create"));
+        var schema = await Schema(writer, PublicSite.LinkReport("create", PublicSite.LinkChoices[0]));
         Assert.False(Has(schema, "editLink"));
         Assert.True(Has(schema, "createLink"));
     }
-
-    /// <summary>The steps after link visibility: the starting view editor's new name, and the report definition's access properties.</summary>
-    private static Task An_existing_site_gains_the_later_steps(PublicSite site) => site.WithServices(async services => {
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        var types = services.GetRequiredService<IContentTypeService>();
-        var startingView = (await dataTypes.GetAsync(Guid.Parse("c1e9ddbb-de9e-21ac-6e8a-b82033fedc1e")))!;
-        Assert.Equal("AppBlocks.ReportState", startingView.EditorUiAlias);
-        startingView.EditorUiAlias = RenameReportStateEditor.EarlierAlias;
-        Assert.True((await dataTypes.UpdateAsync(startingView, Umbraco.Cms.Core.Constants.Security.SuperUserKey)).Success);
-        var reportDefinition = types.Get(DataSources.PublishedReportCatalog.ReportAlias)!;
-        var access = AddReportDefinitionAccess.Properties.Select(alias => reportDefinition.PropertyTypes.Single(p => p.Alias == alias)).ToArray();
-        foreach (var property in access) reportDefinition.RemovePropertyType(property.Alias);
-        Assert.True((await types.UpdateAsync(reportDefinition, Umbraco.Cms.Core.Constants.Security.SuperUserKey)).Success);
-        var accessType = access[0].DataTypeKey;
-        Assert.True((await dataTypes.DeleteAsync(accessType, Umbraco.Cms.Core.Constants.Security.SuperUserKey)).Success);
-        services.GetRequiredService<IKeyValueService>().SetValue(PlanState, "2026-11-04-report-link-visibility");
-        await RunPlanAsync(services);
-
-        Assert.Equal("AppBlocks.ReportState", (await dataTypes.GetAsync(startingView.Key))!.EditorUiAlias);
-        var restored = types.Get(DataSources.PublishedReportCatalog.ReportAlias)!;
-        foreach (var expected in access)
-        {
-            var added = restored.PropertyTypes.Single(p => p.Alias == expected.Alias);
-            Assert.Equal((expected.Key, expected.DataTypeKey), (added.Key, added.DataTypeKey));
-            Assert.Equal("access", restored.PropertyGroups.Single(g => g.PropertyTypes!.Contains(added.Alias)).Alias);
-        }
-        Assert.Equal(["Signed-in accounts", "Specific groups"], JsonSerializer.Deserialize<string[]>(JsonSerializer.Serialize((await dataTypes.GetAsync(accessType))!.ConfigurationData["items"]))!);
-    });
-
-    private static readonly string PlanState = Umbraco.Cms.Core.Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks.InteractiveReports";
-    private const string FinalState = "2026-11-08-report-definition-access";
-
-    private static async Task RunPlanAsync(IServiceProvider services)
-    {
-        var results = await services.GetRequiredService<Umbraco.Cms.Infrastructure.Install.PackageMigrationRunner>().RunPackagePlansAsync(["AppBlocks.InteractiveReports"]);
-        Assert.All(results, result => Assert.True(result.Successful, result.Exception?.ToString()));
-        Assert.Equal(FinalState, services.GetRequiredService<IKeyValueService>().GetValue(PlanState));
-    }
-
-    /// <summary>The companion's migration step gives a site installed before the settings their properties and data types, as a fresh install has them.</summary>
-    private static Task An_existing_site_gains_the_settings(PublicSite site) => site.WithServices(async services =>
-    {
-        var types = services.GetRequiredService<IContentTypeService>();
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        var report = types.Get("appReport")!;
-        var fresh = AddReportLinkVisibility.Properties.Select(alias => report.PropertyTypes.Single(p => p.Alias == alias)).ToArray();
-        var group = report.PropertyGroups.Single(g => g.PropertyTypes!.Contains(fresh[0].Alias)).Alias;
-        var visibility = (await dataTypes.GetAsync(fresh.Single(p => p.Alias == "createVisibility").DataTypeKey))!;
-        var userGroups = (await dataTypes.GetAsync(fresh.Single(p => p.Alias == "createUserGroups").DataTypeKey))!;
-
-        // The site as it was before the step: none of the properties, the companion's two data types gone, and the plan at the step before.
-        foreach (var property in fresh) report.RemovePropertyType(property.Alias);
-        Assert.True((await types.UpdateAsync(report, Umbraco.Cms.Core.Constants.Security.SuperUserKey)).Success);
-        foreach (var dataType in new[] { visibility, userGroups })
-            Assert.True((await dataTypes.DeleteAsync(dataType.Key, Umbraco.Cms.Core.Constants.Security.SuperUserKey)).Success);
-        var state = Umbraco.Cms.Core.Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks.InteractiveReports";
-        var keyValues = services.GetRequiredService<IKeyValueService>();
-        keyValues.SetValue(state, "2026-11-02-package-install");
-        await RunPlanAsync();
-
-        var restoredType = types.Get("appReport")!;
-        foreach (var expected in fresh)
-        {
-            var added = restoredType.PropertyTypes.Single(p => p.Alias == expected.Alias);
-            Assert.Equal((expected.Key, expected.Name, expected.Description, expected.SortOrder, expected.DataTypeKey), (added.Key, added.Name, added.Description, added.SortOrder, added.DataTypeKey));
-            Assert.Equal(group, restoredType.PropertyGroups.Single(g => g.PropertyTypes!.Contains(added.Alias)).Alias);
-        }
-        foreach (var dataType in new[] { visibility, userGroups })
-        {
-            var restored = (await dataTypes.GetAsync(dataType.Key))!;
-            Assert.Equal((dataType.Name, dataType.EditorAlias, dataType.EditorUiAlias, dataType.ParentId), (restored.Name, restored.EditorAlias, restored.EditorUiAlias, restored.ParentId));
-            Assert.Equal(JsonSerializer.Serialize(dataType.ConfigurationData), JsonSerializer.Serialize(restored.ConfigurationData));
-        }
-
-        // Run again over a site that has them: nothing changes.
-        keyValues.SetValue(state, "2026-11-02-package-install");
-        await RunPlanAsync();
-        Assert.Equal(AddReportLinkVisibility.Properties.Length, types.Get("appReport")!.PropertyTypes.Count(p => AddReportLinkVisibility.Properties.Contains(p.Alias)));
-
-        async Task RunPlanAsync()
-        {
-            var results = await services.GetRequiredService<Umbraco.Cms.Infrastructure.Install.PackageMigrationRunner>().RunPackagePlansAsync(["AppBlocks.InteractiveReports"]);
-            Assert.All(results, result => Assert.True(result.Successful, result.Exception?.ToString()));
-            Assert.Equal(FinalState, keyValues.GetValue(state));
-        }
-    });
 
     private static bool Has(JsonElement schema, string link) => schema.TryGetProperty(link, out var value) && value.ValueKind != JsonValueKind.Null;
 

@@ -52,7 +52,12 @@ public static class FormEndpoints
         var query = http.Request.Query[form.KeyParameter];
         if (query.Count > 1 || query.Count == 1 && string.IsNullOrWhiteSpace(query[0])) return Results.BadRequest();
         var context = new FormExecutionContext(member, pageKey, formKey, form.Revision, Parameters: FormRequestValues.Parameters(http.Request.Query));
-        var result = query.Count == 0 ? await form.Resource.InitializeAsync(context, ct) : await form.Resource.LoadAsync(query[0]!, context, ct);
+        if (form.Relationship is { } relation) {
+            var resolved = await relation.ResolveAsync(form, context, http.RequestServices, ct);
+            if (resolved.Refusal is { } refusal) return Result(refusal);
+            context = context with { ParentScope = resolved.Scope };
+        }
+        var result = await form.LoadAsync(query.Count == 0 ? null : query[0], context, ct);
         if (result.Record is null) return Result(result);
         var record = form.Project(result.Record);
         http.Response.Headers.CacheControl = "no-store";
@@ -94,6 +99,11 @@ public static class FormEndpoints
             FormData = FormRequestValues.FormData(submission.FormData, http.RequestServices.GetRequiredService<IOptions<AntiforgeryOptions>>().Value.FormFieldName),
         };
         http.Response.Headers.CacheControl = "no-store";
+        if (form.Relationship is { } relation) {
+            var resolved = await relation.ResolveAsync(form, context, http.RequestServices, ct);
+            if (resolved.Refusal is { } refusal) return Result(refusal);
+            context = context with { ParentScope = resolved.Scope };
+        }
         var result = await http.RequestServices.GetRequiredService<FormSubmissionService>().SubmitAsync(form, key, submission, operation, context,
             () => http.RequestServices.GetRequiredService<IAntiforgery>().GetAndStoreTokens(http).RequestToken, ct);
         return result.Body is null ? Results.StatusCode(result.Status) : Results.Json(result.Body, statusCode: result.Status);

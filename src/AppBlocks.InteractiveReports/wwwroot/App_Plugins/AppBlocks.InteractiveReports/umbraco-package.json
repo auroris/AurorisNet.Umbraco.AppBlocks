@@ -67,7 +67,7 @@
       "type": "blockEditorCustomView",
       "alias": "AppBlocks.Reports.Preview.appReport",
       "name": "appReport preview",
-      "element": "/App_Plugins/AppBlocks.InteractiveReports/block-preview.js",
+      "element": "/App_Plugins/AppBlocks.InteractiveReports/block-preview-entrypoint.js",
       "forContentTypeAlias": "appReport",
       "forBlockEditor": "block-grid"
     }

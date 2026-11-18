@@ -51,6 +51,16 @@ export const appBlockTypes = [
     "name": "Display value"
   },
   {
+    "alias": "appFieldCondition",
+    "key": "ef6200cb-540c-ab5a-e31f-fe04c2f8d10b",
+    "name": "Field condition"
+  },
+  {
+    "alias": "appFieldRule",
+    "key": "9a62a61f-6af7-f0b5-f891-4d4ee9da03a7",
+    "name": "Field rule"
+  },
+  {
     "alias": "appFieldset",
     "key": "3bb4998d-9a1a-e732-d6a0-2d6015596419",
     "name": "Fieldset"

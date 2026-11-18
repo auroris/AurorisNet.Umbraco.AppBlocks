@@ -36,7 +36,7 @@ export function mountTabular(root) {
     // What the table shows: each row's record, its cells' inputs and what they held when drawn.
     let rows = [];
     // A form's record not saved yet lists from /new: no rows, and what a new row starts from.
-    const requestUrl = (fresh = false) => endpointUrl(root.dataset.api, fresh ? ["new"] : [], form && recordKey ? { [keyParameter]: recordKey } : {});
+    const requestUrl = (fresh = false) => endpointUrl(root.dataset.api, fresh ? ["new"] : [], form && recordKey ? { [keyParameter]: recordKey } : {}, root.closest("[data-app-form]")?.dataset.panelQuery);
     const fieldOf = key => state?.fields.find(field => field.key === key);
     const maxRows = () => Number(state?.maxRows ?? root.dataset.maxRows) || 0;
     // The value an input holds, as the form runtime sends it: a number's text, ISO date-times, booleans, null for empty.

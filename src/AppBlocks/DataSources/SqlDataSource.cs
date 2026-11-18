@@ -40,7 +40,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
     public string? Problem => HandlerProblem ?? Entry.Problem;
 
     /// <summary>Each field with the column behind it and its kind, as a backing class sees them; empty while the plan is unavailable.</summary>
-    internal IReadOnlyList<DataSourceFieldColumn> FieldColumns => Entry.Plan?.Columns.Select(c => new DataSourceFieldColumn(c.Field, c.Column, c.Kind)).ToArray() ?? [];
+    public IReadOnlyList<DataSourceFieldColumn> FieldColumns => Entry.Plan?.Columns.Select(c => new DataSourceFieldColumn(c.Field, c.Column, c.Kind)).ToArray() ?? [];
 
     /// <summary>What the back-office catalogue shows: the columns behind the fields and what the data source allows.</summary>
     public object Describe() => new {
@@ -87,7 +87,8 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
         if (!TryParseKey(plan, key, out var keys)) return FormResult.Missing();
         var binder = new Binder(plan, user, context, runtime.Now(definition), null, await AppAsync(context, ct));
         return await RunAsync(plan, write: false, async (connection, _) => {
-            if (await ReadAsync(plan, connection, null, keys, binder, ct) is not { } row) return FormResult.Missing();
+            if (ParentMatch(plan, context, out var scope) is { } invalid) return invalid;
+            if (await ReadAsync(plan, connection, null, keys, binder, ct) is not { } row || !InScope(row, scope)) return FormResult.Missing();
             var stored = Json(plan, row.Values);
             var shown = stored;
             if (Handler is not null)
@@ -136,6 +137,8 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
         Dictionary<PlanColumn, object?> values, DateTimeOffset now, DbConnection connection, DbTransaction transaction, IReadOnlyDictionary<string, object?>? app, CancellationToken ct,
         IReadOnlyList<DataSourceDetail>? details = null)
     {
+        if (ParentMatch(plan, context, out var scope) is { } invalid) return invalid;
+        if (scope is not null) values[scope.Column] = scope.Value;
         // A blank for a column that must hold a value leaves it to its insert default or the database's default; the form required it otherwise.
         values = values.Where(v => v.Value is not null || !v.Key.NeedsValue).ToDictionary(v => v.Key, v => v.Value);
         var binder = new Binder(plan, user, context, now, values, app);
@@ -175,7 +178,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
                 ? await InsertCustomAsync(plan, statement, connection, transaction, row, binder.With(row), ct)
                 : await InsertAsync(plan, connection, transaction, row, ct));
         // The new row must be one the caller may see, or a write could place rows outside the restriction.
-        if (await ReadAsync(plan, connection, transaction, keys, binder, ct) is not { } created) return FormResult.Denied();
+        if (await ReadAsync(plan, connection, transaction, keys, binder, ct) is not { } created || !InScope(created, scope)) return FormResult.Denied();
         return FormResult.Ok(Record(plan, created, user));
     }
 
@@ -206,6 +209,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
         IReadOnlyList<DataSourceDetail>? details = null)
     {
         var binder = new Binder(plan, user, context, now, null, app);
+        if (scope is null && ParentMatch(plan, context, out scope) is { } invalid) return invalid;
         await LockAsync(plan, connection, transaction, keys, ct);
         if (await ReadAsync(plan, connection, transaction, keys, binder, ct) is not { } current || !InScope(current, scope)) return FormResult.Missing();
         if (Token(plan, current) is { } expected && expected != checksum) return FormResult.Conflict();
@@ -251,7 +255,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
             else if (!OneRow(plan, await UpdateRowAsync(plan, connection, transaction, keys, changes, user, now, binder, ct))) return FormResult.Conflict();
         }
         // The row must still be one the caller may see; an update cannot hand it to someone else.
-        if (await ReadAsync(plan, connection, transaction, keys, binder, ct) is not { } updated) return FormResult.Denied();
+        if (await ReadAsync(plan, connection, transaction, keys, binder, ct) is not { } updated || !InScope(updated, scope)) return FormResult.Denied();
         return FormResult.Ok(Record(plan, updated, user));
     }
 
@@ -276,6 +280,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
         string? checksum, DbConnection connection, DbTransaction transaction, ScopeMatch? scope, IReadOnlyDictionary<string, object?>? app, CancellationToken ct)
     {
         var binder = new Binder(plan, user, context, runtime.Now(definition), null, app);
+        if (scope is null && ParentMatch(plan, context, out scope) is { } invalid) return invalid;
         await LockAsync(plan, connection, transaction, keys, ct);
         if (await ReadAsync(plan, connection, transaction, keys, binder, ct) is not { } current || !InScope(current, scope)) return FormResult.Missing();
         if (Token(plan, current) is { } expected && expected != checksum) return FormResult.Conflict();
@@ -304,6 +309,15 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
     }
 
     /// <summary>The rows of one parent record: the column that links them to it and the parent's key as a canonical value.</summary>
+    private static FormResult? ParentMatch(DataSourcePlan plan, FormExecutionContext context, out ScopeMatch? match)
+    {
+        match = null;
+        if (context.ParentScope is not { } parent) return null;
+        if (Link(plan, parent, out var column, out var value) is { } problem) return problem;
+        match = new(column, value);
+        return null;
+    }
+
     private sealed record ScopeMatch(PlanColumn Column, object? Value);
 
     private static bool InScope(Row row, ScopeMatch? scope) => scope is null || FieldValues.Same(row.Values.GetValueOrDefault(scope.Column), scope.Value);

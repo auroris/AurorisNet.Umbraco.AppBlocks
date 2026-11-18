@@ -63,6 +63,7 @@ internal sealed class PublicSite : IAsyncDisposable
     public static readonly Guid SizesPage = Key("sizes"), UnsizedReport = Key("unsized-report"), ZeroSizedReport = Key("zero-sized-report"), EmptySizedReport = Key("empty-sized-report");
     public static readonly Guid FilesPage = Key("files"), ClosedFiles = Key("closed-files"), OpenFiles = Key("open-files"), HiddenFiles = Key("hidden-files");
     public static readonly Guid DataPage = Key("data"), Rows = Key("rows"), Schedule = Key("schedule");
+    public static readonly Guid DetailsPage = Key("related-details"), RelatedForm = Key("related-form"), RelatedReport = Key("related-report");
     public static readonly Guid OrderPage = Key("order"), OrderForm = Key("order-form"), OrderLines = Key("order-lines");
     public static readonly Guid MembersPage = Key("members"), ProtectedPage = Key("protected"), ProtectedForm = Key("protected-form"), ProtectedReport = Key("protected-report"), ProtectedFiles = Key("protected-files");
     /// <summary>
@@ -71,6 +72,7 @@ internal sealed class PublicSite : IAsyncDisposable
     /// group and the backoffice Editors group.
     /// </summary>
     public static readonly Guid WritersPage = Key("writers"), WritersForm = Key("writers-form"), LinksPage = Key("links"), RefusingLinks = Key("links:refusing");
+    public static readonly Guid LinesPage = Key("lines-page"), LinePanel = Key("line-panel"), LocalLinks = Key("local-links"), SplitLinks = Key("split-links"), PickedLinks = Key("picked-links"), PickedPage = Key("picked-page");
     public static readonly string[] LinkChoices = ["", "Public", "Form page decides", "Groups", "Hidden"];
     /// <param name="link"><c>create</c> or <c>open</c>.</param>
     public static Guid LinkReport(string link, string choice) => Key("links:" + link + ":" + choice);
@@ -170,6 +172,8 @@ internal sealed class PublicSite : IAsyncDisposable
             Key = Key("writers-source"), Name = "Writers", Alias = "public.writers", Connection = ConnectionCatalog.ApplicationConnection, Source = "PUBLIC_ROWS",
             Access = DataSourceAccess.Public, WriteGroups = [WritersGroup], KeyColumns = ["id"], AllowInsert = true, AllowUpdate = true,
         }, services.GetRequiredService<DataSourceRuntime>(), services.GetRequiredService<IDataSourceUserResolver>(), services.GetServices<IDataSourcePolicy>()));
+        builder.Services.AddFormValidation("public.orders.lines", (values, _) => values.TryGetProperty("item", out var item) && item.GetString() == "Discontinued"
+            ? FormResult.Invalid("item", "Choose a stocked item.") : null);
         builder.Services.AddSingleton<IDataSourcePolicy, SwitchedPolicy>();
         builder.Services.AddScoped<IProtectedPageAdmission, SwitchedAdmission>();
         builder.Services.Replace(ServiceDescriptor.Scoped<IReportAccessPolicy, SwitchedReportPolicy>());
@@ -275,6 +279,18 @@ internal sealed class PublicSite : IAsyncDisposable
         Page("Engine", EnginePage, home.Id, Container(FormBlock(EngineForm, "public.engine", Field("title", "Title"))));
         Page("Order", OrderPage, home.Id, Container(FormBlock(OrderForm, "public.orders", Field("customer", "Customer"),
             Block(OrderLines, AppBlockSchema.TabularAlias, ("heading", "Lines"), ("dataSource", "public.orders.lines"), ("linkField", "orderId"), ("fields", "item")))));
+        var conditions = Set("Umbraco.BlockList");
+        Add(conditions, "Umbraco.BlockList", Key("valid-item"), AppBlockSchema.Key("appFieldCondition"),
+            ("field", "item"), ("comparison", "Is not"), ("literal", "Retired"));
+        var rules = Set("Umbraco.BlockList");
+        Add(rules, "Umbraco.BlockList", Key("item-rule"), AppBlockSchema.Key("appFieldRule"),
+            ("field", "item"), ("action", "Validate"), ("conditions", conditions), ("message", "Choose an active item."));
+        var detailForm = FormBlock(RelatedForm, "public.orders.lines", Field("item", "Item"));
+        var detailPage = Container(detailForm with { Values = [.. detailForm.Values, ("fieldRules", rules), ("sidePanel", "1"),
+            ("parentPage", "umb://document/" + OrderPage.ToString("N")), ("parentForm", OrderForm.ToString()), ("linkField", "orderId")] });
+        Add(detailPage, "Umbraco.BlockList", RelatedReport, AppBlockSchema.Key("appReport"), ("dataSource", Source("table", "PUBLIC_ORDER_LINES")),
+            ("formOnThisPage", 1), ("keyColumn", "id"), ("createVisibility", "Public"), ("openVisibility", "Public"));
+        Page("Related details", DetailsPage, home.Id, detailPage);
         Page("Reports", ReportPage, home.Id, Reports((PublicReport, Source("table", "PUBLIC_ROWS")),
             (PersonalReport, Source("sql", "SELECT id, title FROM PUBLIC_ROWS WHERE owner = :USER_KEY OR :USER_KEY IS NULL"))));
         Page("Sizes", SizesPage, home.Id, Reports((UnsizedReport, Source("table", "PUBLIC_ROWS"), null), (ZeroSizedReport, Source("table", "PUBLIC_ROWS"), JsonValue.Create(0)), (EmptySizedReport, Source("table", "PUBLIC_ROWS"), JsonValue.Create(""))));
@@ -291,6 +307,18 @@ internal sealed class PublicSite : IAsyncDisposable
             .. from link in new[] { "create", "open" } from choice in LinkChoices
                select (LinkReport(link, choice), WritersPage, link == "create" ? choice : "Hidden", link == "open" ? choice : "Hidden"),
             (RefusingLinks, RefusingPage, "", "")]));
+        var line = FormBlock(LinePanel, "public.engine", Field("title", "Line title"));
+        var binding = (JsonObject)line.Values.Single(v => v.Alias == "formInterface").Value;
+        binding["contentData"]![0]!["values"]!.AsArray().Add(new JsonObject { ["alias"] = "keyParameter", ["value"] = "lineId" });
+        var lines = Container(FormBlock(Key("line-master"), "public.orders", Field("customer", "Master customer")),
+            line with { Values = [.. line.Values, ("sidePanel", "1")] });
+        foreach (var key in new[] { LocalLinks, SplitLinks })
+            Add(lines, "Umbraco.BlockList", key, AppBlockSchema.Key("appReport"), [
+                ("dataSource", JsonValue.Create(Source("table", "PUBLIC_ROWS"))), ("keyColumn", JsonValue.Create("id")),
+                ("formOnThisPage", JsonValue.Create(1)), ("createVisibility", JsonValue.Create("Public")), ("openVisibility", JsonValue.Create("Public")),
+                .. key == SplitLinks ? new (string, JsonNode?)[] { ("createFormPage", JsonValue.Create("umb://document/" + ContactPage.ToString("N"))) } : []]);
+        Page("Lines", LinesPage, home.Id, lines);
+        Page("Picked", PickedPage, home.Id, LinkedReports(reviewers.Result.Key, (PickedLinks, LinesPage, "Public", "Public")));
         var members = Page("Members", MembersPage, home.Id);
         var inside = Reports((ProtectedReport, Source("table", "PUBLIC_ROWS")));
         Merge(inside, Container(FormBlock(ProtectedForm, "public.contact", Field("name", "Your name")), Attachments(ProtectedFiles, "public.open")));

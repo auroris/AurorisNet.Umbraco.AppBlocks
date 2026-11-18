@@ -19,7 +19,7 @@ The browser is Playwright's Chromium, or Microsoft Edge. The test sites run only
 
 ## What it sets up
 
-The script packs the projects into a local feed and creates two sites with the Umbraco 18.3.0 template:
+The script packs the projects into a local feed and creates two sites with the Umbraco template matching the version in `Directory.Build.props`:
 
 1. **core**: AppBlocks alone.
 2. **companions**: AppBlocks with the Interactive Reports and Documents packages.
@@ -42,7 +42,7 @@ The core site starts with no connection string and no unattended installation. A
 
 **On the companions site, with sample content.** The script adds website-owned sample content only after installation has passed. It then checks:
 
-- Forms in a Block List and a Block Grid, required-field validation, optimistic concurrency and antiforgery protection.
+- Forms in a Block List and a Block Grid, required-field validation, the configured concurrency mode and antiforgery protection.
 - Report queries and saved views.
 - Attachment upload, download and removal.
 - Document HTML output.

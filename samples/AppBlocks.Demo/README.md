@@ -12,7 +12,7 @@ Complete Umbraco's installer in the browser, sign in and open **Settings → App
 
 - A project reference to `AppBlocks.InteractiveReports`, which brings in AppBlocks. Both register through their composers.
 - `DemoTasks`, a C# form class registered in `Program.cs` as an `IFormResource`, with the alias `demo.tasks`.
-- `DemoSeed`, an optional seed that creates the `AppBlocksDemoTasks` table in the AppBlocks database and sample pages with a form and a report. The report blocks select `AppBlocksDb.AppBlocksDemoTasks`.
+- `DemoSeed`, an optional seed that creates the `AppBlocksDemoTasks` table in the AppBlocks database and sample pages with a form and a report. The report blocks select `AppBlocksDb.AppBlocksDemoTasks`. In freshly seeded content, each report opens its own Task sidebar for Create and Open.
 - A reference to `Umbraco.Cms.DevelopmentMode.Backoffice`, which turns on editing under **Settings → AppBlocks → Backing Classes**.
 
 Application data goes in `AppBlocks.sqlite.db` beside Umbraco's SQLite database. Forms, saved report views and uploads share that database.

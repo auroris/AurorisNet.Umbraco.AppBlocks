@@ -9,6 +9,12 @@ public static class ReportBlocks
 {
     public const string Alias = "appReport";
     public static string Name(Guid page, Guid block) => AppBlockContent.BlockName(page, block);
+    public static string LocalPanelAnchors(IPublishedElement block, IPublishedContent page, string? culture)
+    {
+        var (open, create) = ReportFormTarget.Resolve(block, page, culture, localOnly: true);
+        return string.Join(" ", new[] { open?.PanelAnchor, create?.PanelAnchor }.OfType<string>().Distinct());
+    }
+
     public static bool ParseName(string name, out Guid page, out Guid block) => AppBlockContent.ParseBlockName(name, out page, out block);
     public static Task<(IPublishedContent Page, BlockGridItem Block, string? Culture)?> ResolveAsync(AppBlockContent content, string name)
         => content.BlockAsync(name, Alias);

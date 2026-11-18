@@ -106,6 +106,44 @@ public sealed class MasterDetailSiteTests
         Assert.Equal(2L, await Scalar(site, $"SELECT COUNT(*) FROM PUBLIC_ORDER_LINES WHERE order_id = {key}"));
     }
 
+    [Fact]
+    public async Task A_related_sidebar_filters_the_report_and_checks_the_parent_and_field_rules_on_write()
+    {
+        await using var site = await PublicSite.StartAsync();
+        using var client = await site.Administrator();
+        var parent = PublicSite.FormUrl(PublicSite.OrderPage, PublicSite.OrderForm);
+        var parentState = await Json(await client.GetAsync(parent));
+        async Task<string> CreateOrder(string name) {
+            var response = await Send(client, HttpMethod.Post, parent, parentState.GetProperty("antiforgeryToken").GetString()!, new {
+                values = new { customer = name }, submissionKey = Guid.NewGuid(), definitionVersion = parentState.GetProperty("definitionVersion"),
+            });
+            return (await Json(response)).GetProperty("record").GetProperty("key").GetString()!;
+        }
+        var first = await CreateOrder("First");
+        var second = await CreateOrder("Second");
+        var detail = PublicSite.FormUrl(PublicSite.DetailsPage, PublicSite.RelatedForm);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(detail)).StatusCode);
+        var state = await Json(await client.GetAsync(detail + "?id=" + first));
+        var token = state.GetProperty("antiforgeryToken").GetString()!;
+        object Save(string item) => new { values = new { item }, definitionVersion = state.GetProperty("definitionVersion"), submissionKey = Guid.NewGuid() };
+        var invalid = await Json(await Send(client, HttpMethod.Post, detail + "?id=" + first, token, Save("Retired")), HttpStatusCode.UnprocessableEntity);
+        Assert.Equal("Choose an active item.", invalid.GetProperty("errors").GetProperty("item")[0].GetString());
+        var custom = await Json(await Send(client, HttpMethod.Post, detail + "?id=" + first, token, Save("Discontinued")), HttpStatusCode.UnprocessableEntity);
+        Assert.Equal("Choose a stocked item.", custom.GetProperty("errors").GetProperty("item")[0].GetString());
+        var created = await Json(await Send(client, HttpMethod.Post, detail + "?id=" + first, token, Save("Bolt")));
+        var line = created.GetProperty("record").GetProperty("key").GetString();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(detail + "?id=" + second + "&detailId=" + line)).StatusCode);
+        foreach (var method in new[] { HttpMethod.Put, HttpMethod.Delete })
+            Assert.Equal(HttpStatusCode.NotFound, (await Send(client, method, detail + "/" + line + "?id=" + second, token, Save("Moved"))).StatusCode);
+
+        var report = "/api/reports/" + PublicSite.ReportName(PublicSite.DetailsPage, PublicSite.RelatedReport);
+        async Task<int> Count(string query) => (await Json(await client.PostAsJsonAsync(report + "/query" + query,
+            new { page = new { index = 1, size = 10 } }))).GetProperty("rows").GetArrayLength();
+        Assert.Equal(1, await Count("?appPageQuery=%3Fid%3D" + first));
+        Assert.Equal(0, await Count("?appPageQuery=%3Fid%3D" + second));
+        Assert.Equal(0, await Count(""));
+    }
+
     private static async Task<HttpResponseMessage> Send(HttpClient client, HttpMethod method, string url, string token, object body)
     {
         var request = new HttpRequestMessage(method, url) { Content = JsonContent.Create(body) };

@@ -96,7 +96,7 @@ export function mountShuttle(root) {
     for (const button of buttons) button.addEventListener("click", () => act(button.dataset.shuttleAction));
     available.addEventListener("change", refresh); selected.addEventListener("change", refresh);
     available.addEventListener("dblclick", () => act("add")); selected.addEventListener("dblclick", () => act("remove"));
-    return { display, control: selected };
+    return { display, refresh, control: selected };
 }
 
 // The text field owns the value: a native color input alone cannot represent an empty field.

@@ -33,7 +33,6 @@ public static class AppBlocksDocumentsExtensions
         builder.Services.TryAddScoped<IDocumentPresentationProvider, DefaultDocumentPresentationProvider>();
         builder.Services.TryAddSingleton<IAppDocumentLinks, DocumentLinks>();
         builder.Services.AddSingleton(new AppBlocksSchema(typeof(AppBlocksDocumentsExtensions).Assembly));
-        builder.PackageMigrationPlans().Add<DocumentsMigrationPlan>();
         builder.Services.AddControllersWithViews().AddApplicationPart(typeof(AppBlocksDocumentsExtensions).Assembly);
         PaperReportExtensions.RegisterPaperReports(builder);
         builder.Services.Configure<UmbracoPipelineOptions>(options => options.AddFilter(new UmbracoPipelineFilter("AppBlocks.Documents")

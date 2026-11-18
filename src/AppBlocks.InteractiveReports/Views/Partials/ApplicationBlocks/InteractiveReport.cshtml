@@ -34,9 +34,11 @@ else
 {
     var name = ReportBlocks.Name(Model.Page.Key, item.ContentKey);
     var controls = block.Value<string>("controls");
-    <section class="app-block-report">
+    <section class="app-block-report" data-form-panels="@ReportBlocks.LocalPanelAnchors(block, Model.Page, apiQuery.Length > 0 ? culture : null)">
         @if (printUrl is not null) { <p class="app-report-actions"><a href="@(printUrl + Context.Request.QueryString)" target="_blank" rel="noopener">Print</a></p> }
-        <template data-app-report data-state-key="@(Model.MemberId):@name:@culture" data-print-url="@printUrl" data-anonymous="@(Model.Anonymous ? "true" : null)"
+        @{ var targets = ReportFormTarget.Resolve(block, Model.Page, culture);
+           var relationship = targets.Open?.Relationship ?? targets.Create?.Relationship; }
+        <template data-parent-parameter="@(relationship?.ParentPage?.Key == Model.Page.Key ? relationship.ParentParameter : null)" data-app-report data-state-key="@(Model.MemberId):@name:@culture" data-print-url="@printUrl" data-anonymous="@(Model.Anonymous ? "true" : null)"
             data-setup-note="@(savedViewsOff ? Context.Request.PathBase + AppBlocks.InteractiveReports.Reports.SavedViewsSetupNote.Route : null)"
             data-print-key-column="@Text("keyColumn")" data-print-key-parameter="@(Text("keyParameter") ?? "id")">
             <interactive-report report="@name" report-title="@(heading ?? "Report")"

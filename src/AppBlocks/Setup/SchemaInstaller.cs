@@ -18,17 +18,14 @@ namespace AppBlocks.Setup;
 
 /// <summary>
 /// Installs missing package definitions from the current schema for a fresh site, and on request resets every definition to
-/// the schema or removes them all. Existing site definitions are never replaced on startup: Umbraco's package migration plan of
-/// each package (<see cref="AppBlocksPackagePlan"/>) carries changes to existing sites, and <see cref="ReinstallAsync"/> is the
-/// reset for when no step does. Package migrations install missing definitions using Umbraco's package importer. Hosts may also
-/// call <see cref="EnsureAsync"/> before an external schema import; it respects Umbraco's schema migration setting.
+/// the schema or removes them all. Automatic installation respects Umbraco’s package schema setting.
 /// </summary>
 public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeService dataTypes,
     IContentTypeContainerService contentFolders, IDataTypeContainerService dataFolders,
     PropertyEditorCollection editors, IConfigurationEditorJsonSerializer serializer, IPackagingService packaging,
     ICoreScopeProvider scopes, ILogger<SchemaInstaller> logger, IEnumerable<AppBlocksSchema> schemas,
     SchemaProperties properties, IOptions<PackageMigrationSettings> migrationSettings, AppCaches caches, IIdKeyMap keys, IKeyValueService keyValues,
-    PackageMigrationPlanCollection plans, PendingPackageMigrations pending, IMediaTypeService mediaTypes, IMemberTypeService memberTypes,
+    IMediaTypeService mediaTypes, IMemberTypeService memberTypes,
     SchemaUsage usage)
 {
     /// <summary>The key-value entry that <see cref="UninstallAsync"/> sets, so that no start installs the definitions again until <see cref="ReinstallAsync"/>.</summary>
@@ -75,24 +72,19 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
         return change;
     }
 
-    /// <summary>Each package's definitions and migration plan as they stand. Looking changes nothing.</summary>
+    /// <summary>Each package's installed definitions. Looking changes nothing.</summary>
     public async Task<DefinitionsStatus> StatusAsync(CancellationToken ct)
     {
-        var states = keyValues.FindByKeyPrefix(Constants.Conventions.Migrations.KeyValuePrefix) ?? new Dictionary<string, string?>();
-        var pendingPlans = pending.GetPendingPackageMigrations(states);
         var packages = new List<DefinitionsPackage>();
         foreach (var schema in schemas.DistinctBy(s => s.Assembly))
         {
             ct.ThrowIfCancellationRequested();
-            var plan = plans.OfType<AppBlocksPackagePlan>().FirstOrDefault(p => p.GetType().Assembly == schema.Assembly);
             var name = schema.Assembly.GetName().Name!;
             var declared = 0;
             var installed = 0;
             foreach (var definition in schema.Definitions("ContentTypes")) { declared++; if (contentTypes.Get(Key(definition)) is not null) installed++; }
             foreach (var definition in schema.Definitions("DataTypes")) { declared++; if (await dataTypes.GetAsync(Key(definition)) is not null) installed++; }
-            packages.Add(new DefinitionsPackage(plan?.PackageId ?? name, plan?.PackageName ?? name, Version(schema.Assembly), declared, installed,
-                plan is null ? null : states.GetValueOrDefault(Constants.Conventions.Migrations.KeyValuePrefix + plan.Name), plan?.FinalState,
-                plan is not null && pendingPlans.Contains(plan.Name)));
+            packages.Add(new DefinitionsPackage(name, name, Version(schema.Assembly), declared, installed));
         }
         return new DefinitionsStatus(Uninstalled, packages);
     }
@@ -340,21 +332,8 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
 
     private IEnumerable<XElement> Definitions(string kind) => schemas.DistinctBy(s => s.Assembly).SelectMany(schema => schema.Definitions(kind));
 
-    /// <summary>Creates the data type a schema definition declares, in its folder, inside the caller's scope; a migration step that adds one uses it too.</summary>
-    internal static async Task CreateDataTypeAsync(XElement definition, IDataTypeService dataTypes, IDataTypeContainerService folders,
-        PropertyEditorCollection editors, IConfigurationEditorJsonSerializer serializer)
-    {
-        var (info, editor, storage, configuration) = Editor(definition, editors, serializer);
-        var type = new DataType(editor, serializer, await FolderAsync(folders, Value(info, "Folder")))
-        {
-            Key = Key(definition), Name = Value(info, "Name"), EditorUiAlias = Value(info, "EditorUIAlias"), DatabaseType = storage, ConfigurationData = configuration,
-        };
-        var result = await dataTypes.CreateAsync(type, Constants.Security.SuperUserKey);
-        if (!result.Success) throw new InvalidOperationException($"AppBlocks could not install data type '{type.Name}' ({type.Key}): {result.Status}.");
-    }
-
     /// <summary>A data type definition's editor, and its storage and settings as that editor keeps them.</summary>
-    internal static (XElement Info, IDataEditor Editor, ValueStorageType Storage, IDictionary<string, object> Configuration) Editor(XElement definition,
+    private static (XElement Info, IDataEditor Editor, ValueStorageType Storage, IDictionary<string, object> Configuration) Editor(XElement definition,
         PropertyEditorCollection editors, IConfigurationEditorJsonSerializer serializer)
     {
         var info = definition.Element("Info")!;
@@ -404,7 +383,7 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
         if (created.Count == 0) return created;
         packaging.InstallCompiledPackageData(new XDocument(new XElement("umbPackage",
             new XElement("info", new XElement("package", new XElement("name", "AppBlocks"))), data, types)));
-        // Cancelable Umbraco notifications can refuse individual saves. Do not commit or record a successful migration then.
+        // Cancelable Umbraco notifications can refuse individual saves. Roll back the import if any definition is missing.
         foreach (var definition in data.Elements())
             if (await dataTypes.GetAsync(Guid.Parse(definition.Attribute("Definition")!.Value)) is null)
                 throw new InvalidOperationException($"The package importer did not install data type '{definition.Attribute("Name")!.Value}'.");

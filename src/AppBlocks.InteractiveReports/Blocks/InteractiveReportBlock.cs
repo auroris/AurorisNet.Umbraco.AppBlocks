@@ -30,19 +30,23 @@ public sealed class InteractiveReportBlock(ReportDefinitionCompiler compiler,
         }
         // Control names are Interactive Reports' feature tokens, as for a report definition node.
         if (Text(block, "controls").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Any(c => ReportFeatures.Canonical(c) is null)) errors.Add("The report contains an unknown control name.");
-        if (Text(block, "formPage").Length > 0) {
+        var hasOpenTarget = Text(block, "formOnThisPage") is "1" or "True" or "true" || Text(block, "formPage").Length > 0;
+        var keyColumn = Text(block, "keyColumn");
+        var checkColumn = false;
+        if (hasOpenTarget || Text(block, "createFormPage").Length > 0) {
             var open = ReportLinkRule.Read(ReportLinkRule.Open, alias => Text(block, alias));
             var create = ReportLinkRule.Read(ReportLinkRule.Create, alias => Text(block, alias));
-            if (open.Visibility != ReportLinkVisibility.Hidden && Text(block, "keyColumn").Length == 0) errors.Add("Select the record key column for the form link.");
+            checkColumn = hasOpenTarget && open.Visibility != ReportLinkVisibility.Hidden;
+            if (checkColumn && keyColumn.Length == 0) errors.Add("Select the record key column for the form link.");
             if (create.Visibility == ReportLinkVisibility.Groups && !create.HasGroups) errors.Add("Select at least one group for the Create button.");
-            if (open.Visibility == ReportLinkVisibility.Groups && !open.HasGroups) errors.Add("Select at least one group for the Open link.");
+            if (hasOpenTarget && open.Visibility == ReportLinkVisibility.Groups && !open.HasGroups) errors.Add("Select at least one group for the Open link.");
         }
         if (Text(block, "paperReport") is { Length: > 0 } paper) {
             PaperReport(paper, errors);
-            // Row print actions read the record key from this column, so a column the report lacks prints nothing.
-            if (Text(block, "keyColumn") is { Length: > 0 } printKey && definitions.SourceColumns(authored.DataSource!) is { } columns
-                && !columns.Contains(printKey, StringComparer.OrdinalIgnoreCase)) errors.Add($"The record key column {printKey} is not a column of the report {sourceName}.");
+            checkColumn = true;
         }
+        if (checkColumn && keyColumn.Length > 0 && definitions.SourceColumns(authored.DataSource!) is { } columns
+            && !columns.Contains(keyColumn, StringComparer.OrdinalIgnoreCase)) errors.Add($"The record key column {keyColumn} is not a column of the report {sourceName}.");
         if (Text(block, "initialState") is { Length: > 0 } state) {
             definition.DefaultState = JsonSerializer.Deserialize<ReportState>(state, IrJson.Options) ?? throw new JsonException("Starting view must be a report document.");
             if (definition.DefaultState.Tables?.Values.Any(t => t.Schema is { Count: > 0 }) == true) errors.Add("Capture the starting view without its transient schema cache.");

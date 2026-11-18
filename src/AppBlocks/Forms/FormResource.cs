@@ -28,6 +28,11 @@ public sealed record FormExecutionContext(ClaimsPrincipal Member, Guid PageKey, 
     IReadOnlyDictionary<string, string>? Parameters = null)
 {
     /// <summary>
+    /// The link field and verified master key for this detail. Custom resources can use it in their write predicate.
+    /// </summary>
+    public DataSources.DataSourceScope? ParentScope { get; init; }
+
+    /// <summary>
     /// The form's other named controls as the browser submitted them: anything inside the form that is not bound to a
     /// field, such as a captcha token or a honeypot. Never null, and empty on anything but a submission. It comes from the
     /// browser like any other input, and AppBlocks neither stores nor validates it, so verify what matters in the resource.

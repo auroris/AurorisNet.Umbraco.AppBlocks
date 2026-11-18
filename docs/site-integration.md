@@ -6,7 +6,7 @@ How AppBlocks installs into an Umbraco site, how its blocks render and are style
 
 Reference the `AurorisNet.Umbraco.AppBlocks` package, or `src/AppBlocks/AppBlocks.csproj` during development. Its Umbraco composer registers the services, backoffice screens and routes.
 
-At startup AppBlocks installs its element types and data types through Umbraco's package importer, inside a package migration:
+At startup AppBlocks installs its element types and data types through Umbraco's package importer.
 
 - Installation needs no synchronization package and no import configuration.
 - The definitions a site lacks, and their folders, are installed in one transaction. A failed installation is tried again at the next startup.
@@ -14,7 +14,7 @@ At startup AppBlocks installs its element types and data types through Umbraco's
 - Automatic installation follows `Umbraco:CMS:PackageMigration:RunSchemaAndContentMigrations`.
 - The types sit under **AppBlocks** folders in the Data Types and Document Types trees, with subfolders for Forms, Data sources and Interactive Reports.
 
-**Settings → AppBlocks → Definitions** shows where each package's definitions and migrations stand. **Reinstall** resets every definition to the installed package, and **Uninstall** removes them all. [Developing AppBlocks](developing.md#who-owns-the-definitions) describes both.
+**Settings → AppBlocks → Definitions** shows which package definitions are installed. **Reinstall** resets every definition to the installed package, and **Uninstall** removes them all. [Developing AppBlocks](developing.md#who-owns-the-definitions) describes both.
 
 Install `AurorisNet.Umbraco.AppBlocks.InteractiveReports` for interactive reports and `AurorisNet.Umbraco.AppBlocks.Documents` for documents. Each depends on AppBlocks and registers itself. See the [Interactive Reports](interactive-reports.md) and [Documents](documents.md) guides.
 
@@ -432,6 +432,6 @@ string json = forms.ToJson();
 builder.AddAppBlocks(appBlocks => appBlocks.AllowInBlockGrid("Main content", AppBlockSchema.FormsContainerAlias));
 ```
 
-`AllowInBlockGrid(blockGridDataTypeName, elementTypeAlias, columnSpan, rowSpan, areaKey)` adds the element to the named Block Grid data type once both exist: at startup, after package migrations, and when the element type is saved. Without `areaKey` the block may sit at the grid's root and in any area. With one, named by key or alias, it may sit in that area only. An element the grid already lists keeps the settings the site gave it.
+`AllowInBlockGrid(blockGridDataTypeName, elementTypeAlias, columnSpan, rowSpan, areaKey)` adds the element to the named Block Grid data type once both exist: at startup, after Umbraco finishes installation, and when the element type is saved. Without `areaKey` the block may sit at the grid's root and in any area. With one, named by key or alias, it may sit in that area only. An element the grid already lists keeps the settings the site gave it.
 
 **Page-wide CSS and JavaScript.** A site whose document types carry page-wide CSS and JavaScript in properties hands them to the blocks' asset writer from its layout, with `AppPageAssets.RegisterPage(page, navigation, published, httpContext, cssAlias, scriptAlias)`. The code of the page and of each ancestor, root first, comes before the CSS and JavaScript blocks' own. The aliases default to `css` and `javascript`.

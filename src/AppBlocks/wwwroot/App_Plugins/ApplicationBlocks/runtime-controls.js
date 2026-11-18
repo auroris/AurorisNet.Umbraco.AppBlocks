@@ -31,11 +31,11 @@ export function problemLines(problem, fallback) {
 }
 // A block's endpoint below the address the server gave it, such as a record's key, with the page's own query so the
 // endpoint sees the parameters the page did, the endpoint's own query values over those, and the given values last.
-export function endpointUrl(api, segments = [], query = {}) {
+export function endpointUrl(api, segments = [], query = {}, search = location.search) {
     const url = new URL(api, location.origin);
     for (const segment of segments) url.pathname += `/${encodeURIComponent(segment)}`;
     const internalQuery = new URLSearchParams(url.search);
-    url.search = location.search;
+    url.search = search;
     for (const [name, value] of internalQuery) url.searchParams.set(name, value);
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
     return url;

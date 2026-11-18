@@ -9,7 +9,6 @@ using AppBlocks.Tabular;
 using Microsoft.Extensions.DependencyInjection;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Models;
-using Umbraco.Cms.Core.Packaging;
 using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
@@ -19,7 +18,7 @@ using Umbraco.Cms.Core.Strings;
 namespace AppBlocks.Tests;
 
 /// <summary>
-/// The definitions on a site over time: Umbraco's package migration plan records where the site stands, Reinstall resets every
+/// The definitions on a site over time. Reinstall resets every
 /// definition to the package without touching content, and Uninstall removes them, refusing while something of the site's depends on them.
 /// </summary>
 [Collection("Standalone Umbraco")]
@@ -29,64 +28,11 @@ public sealed class DefinitionsTests
     private static readonly Guid FormsContainerGrid = Guid.Parse("97b36051-4abe-e750-6667-9cb7ee6a9a99");
 
     [Fact]
-    public async Task Single_Block_upgrade_changes_only_the_packages_interface_and_is_safe_to_repeat()
+    public async Task A_reinstall_resets_the_definitions_while_the_site_keeps_its_content()
     {
         await using var site = await BlockSite.StartAsync();
         using var scope = site.CreateScope();
         var services = scope.ServiceProvider;
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        var types = services.GetRequiredService<IContentTypeService>();
-        var editors = services.GetRequiredService<PropertyEditorCollection>();
-        var serializer = services.GetRequiredService<IConfigurationEditorJsonSerializer>();
-        var keyValues = services.GetRequiredService<IKeyValueService>();
-        var current = (await dataTypes.GetAsync(UseSingleBlockFormInterface.DataTypeKey))!;
-        var originalId = current.Id;
-        Assert.Equal("Umbraco.SingleBlock", current.EditorAlias);
-        Assert.Equal("Umb.PropertyEditorUi.BlockSingle", current.EditorUiAlias);
-        Assert.True(types.Get("appForm")!.PropertyTypes.Single(p => p.Alias == "formInterface").Mandatory);
-
-        var listEditor = editors.Single(e => e.Alias == "Umbraco.BlockList");
-        var oldConfiguration = new Dictionary<string, object> {
-            ["blocks"] = new[] { new { contentElementTypeKey = AppBlockSchema.Key("appFormInterface") } },
-            ["validationLimit"] = new { min = 1, max = 1 }
-        };
-        current.Editor = listEditor;
-        current.EditorUiAlias = "Umb.PropertyEditorUi.BlockList";
-        current.ConfigurationData = oldConfiguration;
-        Assert.True((await dataTypes.UpdateAsync(current, Constants.Security.SuperUserKey)).Success);
-        var host = new DataType(listEditor, serializer) {
-            Key = Guid.NewGuid(), Name = "Host-owned single-item list", EditorUiAlias = "Umb.PropertyEditorUi.BlockList",
-            ConfigurationData = oldConfiguration
-        };
-        Assert.True((await dataTypes.CreateAsync(host, Constants.Security.SuperUserKey)).Success);
-
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            keyValues.SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-02-package-install");
-            await RunPlanAsync(services);
-            var upgraded = (await dataTypes.GetAsync(current.Key))!;
-            Assert.Equal(originalId, upgraded.Id);
-            Assert.Equal("Umbraco.SingleBlock", upgraded.EditorAlias);
-            Assert.Equal("Umb.PropertyEditorUi.BlockSingle", upgraded.EditorUiAlias);
-            var configuration = Assert.IsType<SingleBlockConfiguration>(upgraded.ConfigurationObject);
-            Assert.Equal(AppBlockSchema.Key("appFormInterface"), Assert.Single(configuration.Blocks).ContentElementTypeKey);
-            Assert.False(upgraded.ConfigurationData.ContainsKey("validationLimit"));
-            Assert.Equal("Umbraco.SingleBlock", types.Get("appForm")!.PropertyTypes.Single(p => p.Alias == "formInterface").PropertyEditorAlias);
-            var untouched = (await dataTypes.GetAsync(host.Key))!;
-            Assert.Equal("Umbraco.BlockList", untouched.EditorAlias);
-            Assert.IsType<BlockListConfiguration>(untouched.ConfigurationObject);
-        }
-    }
-
-    [Fact]
-    public async Task The_plan_state_is_recorded_and_a_reinstall_resets_the_definitions_while_the_site_keeps_its_content()
-    {
-        await using var site = await BlockSite.StartAsync();
-        using var scope = site.CreateScope();
-        var services = scope.ServiceProvider;
-        var plan = Assert.Single(services.GetRequiredService<PackageMigrationPlanCollection>().OfType<AppBlocksPackagePlan>());
-        Assert.Equal("AppBlocks", plan.Name);
-        Assert.Equal(plan.FinalState, services.GetRequiredService<IKeyValueService>().GetValue(Constants.Conventions.Migrations.KeyValuePrefix + plan.Name));
 
         using var admin = await site.SignInAsAdministratorAsync();
         var status = await admin.GetFromJsonAsync<JsonElement>(Api);
@@ -94,8 +40,6 @@ public sealed class DefinitionsTests
         var package = Assert.Single(status.GetProperty("packages").EnumerateArray());
         Assert.Equal("AppBlocks", package.GetProperty("id").GetString());
         Assert.StartsWith("0.", package.GetProperty("version").GetString());
-        Assert.False(package.GetProperty("pending").GetBoolean());
-        Assert.Equal(plan.FinalState, package.GetProperty("state").GetString());
         var declared = package.GetProperty("declared").GetInt32();
         Assert.True(declared > 30);
         Assert.Equal(declared, package.GetProperty("installed").GetInt32());
@@ -226,190 +170,6 @@ public sealed class DefinitionsTests
         Assert.Equal(declared, Assert.Single(again.GetProperty("packages").EnumerateArray()).GetProperty("installed").GetInt32());
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Concurrency_upgrade_removes_version_columns_and_preserves_explicit_choices(bool hasMode)
-    {
-        await using var site = await BlockSite.StartAsync();
-        using var scope = site.CreateScope();
-        var services = scope.ServiceProvider;
-        var types = services.GetRequiredService<IContentTypeService>();
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        var type = types.Get(DataSourceSchema.SqlAlias)!;
-        var mode = type.PropertyTypes.Single(p => p.Alias == "concurrencyMode");
-        var picker = (await dataTypes.GetAsync(mode.DataTypeKey))!;
-        Assert.Equal("Umbraco.RadioButtonList", picker.EditorAlias);
-        var options = JsonSerializer.SerializeToElement(picker.ConfigurationData).GetProperty("items").EnumerateArray().Select(v => v.GetString()).ToArray();
-        Assert.Equal(Enum.GetNames<DataSourceConcurrency>(), options);
-        var contents = services.GetRequiredService<IContentService>();
-        var source = Assert.Single(contents.GetPagedOfTypes([type.Id], 0, 10, out _, null));
-        Assert.False(type.PropertyTypeExists("concurrency"));
-
-        // Recreate either the original text field or the three-choice preview schema.
-        var strings = services.GetRequiredService<IShortStringHelper>();
-        var textType = (await dataTypes.GetAsync(new Guid("90cb2487-adcb-2ec5-c4a0-840175ba5424")))!;
-        type.AddPropertyType(new PropertyType(strings, textType) { Alias = "concurrency", Name = "Version column" }, "writes");
-        if (!hasMode) type.RemovePropertyType("concurrencyMode");
-        Assert.True((await types.UpdateAsync(type, Constants.Security.SuperUserKey)).Success);
-        source = contents.GetById(source.Id)!;
-        source.SetValue("concurrency", "VERSION");
-        if (hasMode)
-        {
-            source.SetValue("concurrencyMode", "VersionColumn");
-            picker.ConfigurationData = new Dictionary<string, object> { ["items"] = new[] { "LastSaveWins", "Checksum", "VersionColumn" } };
-            Assert.True((await dataTypes.UpdateAsync(picker, Constants.Security.SuperUserKey)).Success);
-        }
-        else Assert.True((await dataTypes.DeleteAsync(picker.Key, Constants.Security.SuperUserKey)).Success);
-        contents.Save(source);
-        var lastSaveWins = contents.Create("Last save wins", source.ParentId, DataSourceSchema.SqlAlias);
-        lastSaveWins.SetValue("concurrency", hasMode ? "VERSION" : "");
-        if (hasMode) lastSaveWins.SetValue("concurrencyMode", nameof(DataSourceConcurrency.LastSaveWins));
-        contents.Save(lastSaveWins);
-        services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks",
-            hasMode ? "2026-11-04-data-source-concurrency" : "2026-11-03-api-endpoints");
-        await RunPlanAsync(services);
-        type = types.Get(DataSourceSchema.SqlAlias)!;
-        Assert.Single(type.PropertyTypes, p => p.Alias == "concurrencyMode");
-        Assert.False(type.PropertyTypeExists("concurrency"));
-        Assert.Equal(nameof(DataSourceConcurrency.Checksum), contents.GetById(source.Id)!.GetValue<string>("concurrencyMode"));
-        Assert.Equal(hasMode ? nameof(DataSourceConcurrency.LastSaveWins) : null, contents.GetById(lastSaveWins.Id)!.GetValue<string>("concurrencyMode"));
-        picker = (await dataTypes.GetAsync(mode.DataTypeKey))!;
-        options = JsonSerializer.SerializeToElement(picker.ConfigurationData).GetProperty("items").EnumerateArray().Select(v => v.GetString()).ToArray();
-        Assert.Equal(Enum.GetNames<DataSourceConcurrency>(), options);
-        await RunPlanAsync(services);
-        Assert.Single(types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes, p => p.Alias == "concurrencyMode");
-    }
-
-    [Fact]
-    public async Task The_backing_class_step_gives_an_existing_site_what_a_fresh_install_has_and_skips_a_site_without_the_type()
-    {
-        await using (var site = await BlockSite.StartAsync())
-        {
-            using var scope = site.CreateScope();
-            var services = scope.ServiceProvider;
-            var types = services.GetRequiredService<IContentTypeService>();
-            var dataTypes = services.GetRequiredService<IDataTypeService>();
-            var fresh = types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes.Single(p => p.Alias == AddDataSourceBackingClass.Property);
-            var freshGroup = types.Get(DataSourceSchema.SqlAlias)!.PropertyGroups.Single(g => g.PropertyTypes!.Contains(fresh.Alias)).Alias;
-            var picker = (await dataTypes.GetAsync(fresh.DataTypeKey))!;
-            Assert.Equal("AppBlocks.BackingClassPicker", picker.EditorUiAlias);
-            // The picker lists the registered backing classes, of which this site has none.
-            using (var admin = await site.SignInAsAdministratorAsync())
-                Assert.Empty((await admin.GetFromJsonAsync<JsonElement>("/umbraco/management/api/v1/application-blocks/catalogue")).GetProperty("dataSourceHandlers").EnumerateArray());
-
-            // The site as it was before the step: no property, no picker data type, and the plan at its first state.
-            await BeforeTheStepAsync(services);
-            var source = Assert.Single(services.GetRequiredService<IContentService>().GetPagedOfTypes([types.Get(DataSourceSchema.SqlAlias)!.Id], 0, 10, out _, null));
-            await RunPlanAsync(services);
-
-            var type = types.Get(DataSourceSchema.SqlAlias)!;
-            var added = type.PropertyTypes.Single(p => p.Alias == AddDataSourceBackingClass.Property);
-            Assert.Equal((fresh.Key, fresh.Name, fresh.Description, fresh.SortOrder, fresh.Mandatory, fresh.DataTypeKey),
-                (added.Key, added.Name, added.Description, added.SortOrder, added.Mandatory, added.DataTypeKey));
-            Assert.Equal(freshGroup, type.PropertyGroups.Single(g => g.PropertyTypes!.Contains(added.Alias)).Alias);
-            var restored = (await dataTypes.GetAsync(fresh.DataTypeKey))!;
-            Assert.Equal((picker.Name, picker.EditorUiAlias, picker.EditorAlias, picker.ParentId), (restored.Name, restored.EditorUiAlias, restored.EditorAlias, restored.ParentId));
-            Assert.Equal("orders.lines", services.GetRequiredService<IContentService>().GetById(source.Id)!.GetValue<string>("alias"));
-
-            // Run again over a site that has it: nothing changes.
-            services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-02-tracked");
-            await RunPlanAsync(services);
-            Assert.Single(types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes, p => p.Alias == AddDataSourceBackingClass.Property);
-        }
-
-        await using var bare = await BlockSite.BootAsync();
-        using var bareScope = bare.CreateScope();
-        var bareServices = bareScope.ServiceProvider;
-        var bareTypes = bareServices.GetRequiredService<IContentTypeService>();
-        await WaitForInstallAsync(bareTypes);
-        var pickerKey = bareTypes.Get(DataSourceSchema.SqlAlias)!.PropertyTypes.Single(p => p.Alias == AddDataSourceBackingClass.Property).DataTypeKey;
-        Assert.Equal(ContentTypeOperationStatus.Success, await bareTypes.DeleteAsync(bareTypes.Get(DataSourceSchema.SqlAlias)!.Key, Constants.Security.SuperUserKey));
-        await BeforeTheStepAsync(bareServices);
-        await RunPlanAsync(bareServices);
-        // The later installation step restores missing definitions in the same package plan.
-        Assert.NotNull(bareTypes.Get(DataSourceSchema.SqlAlias));
-        Assert.NotNull(await bareServices.GetRequiredService<IDataTypeService>().GetAsync(pickerKey));
-    }
-
-    [Fact]
-    public async Task An_existing_site_gains_API_endpoints_and_their_root()
-    {
-        await using var site = await BlockSite.BootAsync();
-        using var scope = site.CreateScope();
-        var services = scope.ServiceProvider;
-        var types = services.GetRequiredService<IContentTypeService>();
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        await WaitForInstallAsync(types);
-        var fresh = types.Get(ApiEndpointCatalog.Alias)!;
-        var editors = fresh.PropertyTypes.Select(p => p.DataTypeKey).ToHashSet();
-        string[] Allowed() => types.Get(DataSourceSchema.RootAlias)!.AllowedContentTypes!.OrderBy(c => c.SortOrder).Select(c => c.Alias).ToArray();
-        Assert.Equal("apiEndpoint", Allowed()[^1]);
-
-        var container = types.Get(ApiEndpointCatalog.RootAlias)!;
-
-        // The site as it was before the step: no endpoint type or root, none of their data types, and the plan at the step before.
-        Assert.Equal(ContentTypeOperationStatus.Success, await types.DeleteAsync(container.Key, Constants.Security.SuperUserKey));
-        Assert.Equal(ContentTypeOperationStatus.Success, await types.DeleteAsync(fresh.Key, Constants.Security.SuperUserKey));
-        var own = new List<Guid>();
-        foreach (var dataType in await dataTypes.GetAllAsync())
-            if (dataType.EditorUiAlias is "AppBlocks.ApiRoute" or "AppBlocks.ApiEndpointTest" || dataType.Name == "Application: API shape")
-            {
-                own.Add(dataType.Key);
-                Assert.True((await dataTypes.DeleteAsync(dataType.Key, Constants.Security.SuperUserKey)).Success);
-            }
-        Assert.Equal(3, own.Count);
-        Assert.DoesNotContain("apiEndpoint", Allowed());
-        services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-02-single-block-form-interface");
-        await RunPlanAsync(services);
-
-        var added = types.Get(ApiEndpointCatalog.Alias)!;
-        Assert.Equal(fresh.Key, added.Key);
-        Assert.Equal(fresh.PropertyTypes.Select(p => (p.Alias, p.DataTypeKey)).Order(), added.PropertyTypes.Select(p => (p.Alias, p.DataTypeKey)).Order());
-        foreach (var key in own) Assert.Contains(key, editors);
-        foreach (var key in editors) Assert.NotNull(await dataTypes.GetAsync(key));
-        Assert.Equal(["sqlDataSource", "listOfValues", "apiEndpoint"], Allowed());
-        var root = types.Get(ApiEndpointCatalog.RootAlias)!;
-        Assert.Equal((container.Key, true), (root.Key, root.AllowedAsRoot));
-        Assert.Equal(["apiEndpoint"], root.AllowedContentTypes!.Select(c => c.Alias));
-
-        // Run again over a site that has it: nothing changes.
-        services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-02-single-block-form-interface");
-        await RunPlanAsync(services);
-        Assert.Equal(["sqlDataSource", "listOfValues", "apiEndpoint"], Allowed());
-    }
-
-    [Fact]
-    public async Task The_editor_alias_step_moves_every_data_type_off_the_old_AppHost_aliases()
-    {
-        await using var site = await BlockSite.BootAsync();
-        using var scope = site.CreateScope();
-        var services = scope.ServiceProvider;
-        await WaitForInstallAsync(services.GetRequiredService<IContentTypeService>());
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        var serializer = services.GetRequiredService<IConfigurationEditorJsonSerializer>();
-        // The package's data types carry the new aliases from the start.
-        foreach (var current in RenameEditorUiAliases.Renamed.Values) Assert.NotEmpty(await dataTypes.GetByEditorUiAlias(current));
-        foreach (var old in RenameEditorUiAliases.Renamed.Keys) Assert.Empty(await dataTypes.GetByEditorUiAlias(old));
-
-        // A site from before the rename: the package's picker on its old alias, and a picker of the site's own made from the same editor.
-        var packaged = (await dataTypes.GetByEditorUiAlias("AppBlocks.DataSourcePicker")).First();
-        packaged.EditorUiAlias = "AppHost.DataSourcePicker";
-        Assert.True((await dataTypes.UpdateAsync(packaged, Constants.Security.SuperUserKey)).Success);
-        var field = (await dataTypes.GetByEditorUiAlias("AppBlocks.FieldPicker")).First();
-        var own = new DataType(field.Editor!, serializer) { Key = Guid.NewGuid(), Name = "Site field picker", EditorUiAlias = "AppHost.FieldPicker", ConfigurationData = field.ConfigurationData };
-        Assert.True((await dataTypes.CreateAsync(own, Constants.Security.SuperUserKey)).Success);
-
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-04-checksum-concurrency");
-            await RunPlanAsync(services);
-            Assert.Equal("AppBlocks.DataSourcePicker", (await dataTypes.GetAsync(packaged.Key))!.EditorUiAlias);
-            Assert.Equal("AppBlocks.FieldPicker", (await dataTypes.GetAsync(own.Key))!.EditorUiAlias);
-            foreach (var old in RenameEditorUiAliases.Renamed.Keys) Assert.Empty(await dataTypes.GetByEditorUiAlias(old));
-        }
-    }
-
     [Fact]
     public async Task A_registered_element_is_allowed_in_the_named_Block_Grid_once_both_are_there()
     {
@@ -456,133 +216,24 @@ public sealed class DefinitionsTests
         var listed = Configuration()["blocks"]![0]!["areas"]![0]!["specifiedAllowance"]!.AsArray();
         Assert.Single(listed, entry => string.Equals(entry!["elementTypeKey"]!.GetValue<string>(), banner.Key.ToString(), StringComparison.OrdinalIgnoreCase));
 
-        // What the site changes afterwards stays, and running again after the package migrations adds nothing twice.
+        // Reapplying the registered allowances preserves the site's label and keeps each entry unique.
         var configuration = Configuration();
         configuration["blocks"]!.AsArray().Single(block => string.Equals(block!["contentElementTypeKey"]!.GetValue<string>(), notice.Key.ToString(), StringComparison.OrdinalIgnoreCase))!["label"] = "Site's own label";
         var changed = (await dataTypes.GetAsync(grid.Key))!;
         changed.ConfigurationData = editor.GetConfigurationEditor().FromDatabase(configuration.ToJsonString(), serializer);
         Assert.True((await dataTypes.UpdateAsync(changed, Constants.Security.SuperUserKey)).Success);
-        services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-04-checksum-concurrency");
-        await RunPlanAsync(services);
+        await ActivatorUtilities.CreateInstance<BlockGridAllowances>(services).ApplyAsync(
+            services.GetRequiredService<AppBlocks.Connections.AppBlocksBuilder>().BlockGridAllowances, default);
         Assert.Equal("Site's own label", Assert.Single(Blocks(notice.Key))["label"]!.GetValue<string>());
         Assert.Single(Blocks(banner.Key));
         Assert.Equal(3, Configuration()["blocks"]!.AsArray().Count);
         Assert.Equal(2, Configuration()["blocks"]![0]!["areas"]![0]!["specifiedAllowance"]!.AsArray().Count);
     }
 
-    /// <summary>Takes the backing class away again, as a site that has not run its step has it, and sets the plan back before the step.</summary>
-    private static async Task BeforeTheStepAsync(IServiceProvider services)
-    {
-        var types = services.GetRequiredService<IContentTypeService>();
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        Guid? picker = null;
-        if (types.Get(DataSourceSchema.SqlAlias) is { } type)
-        {
-            picker = type.PropertyTypes.Single(p => p.Alias == AddDataSourceBackingClass.Property).DataTypeKey;
-            type.RemovePropertyType(AddDataSourceBackingClass.Property);
-            Assert.True((await types.UpdateAsync(type, Constants.Security.SuperUserKey)).Success);
-        }
-        foreach (var dataType in await dataTypes.GetAllAsync())
-            if (dataType.EditorUiAlias == "AppBlocks.BackingClassPicker" && (picker is null || dataType.Key == picker))
-                Assert.True((await dataTypes.DeleteAsync(dataType.Key, Constants.Security.SuperUserKey)).Success);
-        services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-02-tracked");
-    }
-
-    private static async Task RunPlanAsync(IServiceProvider services)
-    {
-        var results = await services.GetRequiredService<Umbraco.Cms.Infrastructure.Install.PackageMigrationRunner>().RunPackagePlansAsync(["AppBlocks"]);
-        Assert.All(results, result => Assert.True(result.Successful, result.Exception?.ToString()));
-        var plan = Assert.Single(services.GetRequiredService<PackageMigrationPlanCollection>().OfType<AppBlocksPackagePlan>());
-        Assert.Equal(plan.FinalState, services.GetRequiredService<IKeyValueService>().GetValue(Constants.Conventions.Migrations.KeyValuePrefix + plan.Name));
-    }
-
-    /// <summary>The package migration must have installed definitions before the site is used.</summary>
     private static async Task WaitForInstallAsync(IContentTypeService types)
     {
         for (var i = 0; i < 100 && types.Get(DataSourceSchema.SqlAlias) is null; i++) await Task.Delay(100);
         Assert.NotNull(types.Get(DataSourceSchema.SqlAlias));
     }
 
-    [Fact]
-    public async Task The_date_time_and_list_access_step_gives_an_existing_site_both_properties_and_tolerates_a_missing_type()
-    {
-        await using var site = await BlockSite.BootAsync();
-        using var scope = site.CreateScope();
-        var services = scope.ServiceProvider;
-        var types = services.GetRequiredService<IContentTypeService>();
-        var dataTypes = services.GetRequiredService<IDataTypeService>();
-        await WaitForInstallAsync(types);
-        var mode = types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes.Single(p => p.Alias == AddDateTimeModeAndListAccess.DateTimeProperty);
-        var audit = types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes.Single(p => p.Alias == "auditColumns").Description;
-        var access = types.Get(PublishedDataCatalog.ListAlias)!.PropertyTypes.Single(p => p.Alias == AddDateTimeModeAndListAccess.AccessProperty);
-        Assert.Equal("Application: Data source date-times", (await dataTypes.GetAsync(mode.DataTypeKey))!.Name);
-
-        // The site as it was before the step: neither property, no date-time data type, the old audit description, and the plan at the step before.
-        var source = types.Get(DataSourceSchema.SqlAlias)!;
-        source.RemovePropertyType(mode.Alias);
-        source.PropertyTypes.Single(p => p.Alias == "auditColumns").Description = "The engine writes the username and the server's local time.";
-        Assert.True((await types.UpdateAsync(source, Constants.Security.SuperUserKey)).Success);
-        Assert.True((await dataTypes.DeleteAsync(mode.DataTypeKey, Constants.Security.SuperUserKey)).Success);
-        var list = types.Get(PublishedDataCatalog.ListAlias)!;
-        list.RemovePropertyType(access.Alias);
-        Assert.True((await types.UpdateAsync(list, Constants.Security.SuperUserKey)).Success);
-        var keyValues = services.GetRequiredService<IKeyValueService>();
-        keyValues.SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-04-checksum-concurrency");
-        await RunPlanAsync(services);
-
-        var added = types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes.Single(p => p.Alias == mode.Alias);
-        Assert.Equal((mode.Key, mode.Name, mode.Description, mode.DataTypeKey), (added.Key, added.Name, added.Description, added.DataTypeKey));
-        Assert.NotNull(await dataTypes.GetAsync(mode.DataTypeKey));
-        Assert.Equal(audit, types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes.Single(p => p.Alias == "auditColumns").Description);
-        var restored = types.Get(PublishedDataCatalog.ListAlias)!.PropertyTypes.Single(p => p.Alias == access.Alias);
-        Assert.Equal((access.Key, access.DataTypeKey, access.Mandatory), (restored.Key, restored.DataTypeKey, restored.Mandatory));
-
-        // A site without the list type: the step adds what it can and the plan still completes.
-        Assert.Equal(ContentTypeOperationStatus.Success, await types.DeleteAsync(types.Get(PublishedDataCatalog.ListAlias)!.Key, Constants.Security.SuperUserKey));
-        keyValues.SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-04-checksum-concurrency");
-        await RunPlanAsync(services);
-        Assert.Null(types.Get(PublishedDataCatalog.ListAlias));
-        Assert.Single(types.Get(DataSourceSchema.SqlAlias)!.PropertyTypes, p => p.Alias == mode.Alias);
-    }
-
-    [Fact]
-    public async Task The_display_link_and_tabular_editing_step_gives_an_existing_site_both_settings_in_the_packages_order()
-    {
-        await using var site = await BlockSite.BootAsync();
-        using var scope = site.CreateScope();
-        var services = scope.ServiceProvider;
-        var types = services.GetRequiredService<IContentTypeService>();
-        await WaitForInstallAsync(types);
-        var link = types.Get(AddDisplayLinkAndTabularEditing.DisplayAlias)!.PropertyTypes.Single(p => p.Alias == AppBlockField.LinkTemplateAlias);
-        var edit = types.Get(AppBlockSchema.TabularAlias)!.PropertyTypes.Single(p => p.Alias == TabularBlock.HideEditAlias);
-        string[] Order() => [.. types.Get(AppBlockSchema.TabularAlias)!.PropertyTypes.OrderBy(p => p.SortOrder).Select(p => p.Alias)];
-        var order = Order();
-        Assert.Equal([TabularBlock.HideAddAlias, TabularBlock.HideEditAlias, TabularBlock.HideDeleteAlias, TabularBlock.ReadOnlyAlias], order[7..11]);
-
-        // The site as it was before the step: neither setting, the Tabular form's later settings one place up, and the plan at the step before.
-        var display = types.Get(AddDisplayLinkAndTabularEditing.DisplayAlias)!;
-        display.RemovePropertyType(link.Alias);
-        Assert.True((await types.UpdateAsync(display, Constants.Security.SuperUserKey)).Success);
-        var tabular = types.Get(AppBlockSchema.TabularAlias)!;
-        tabular.RemovePropertyType(edit.Alias);
-        foreach (var later in tabular.PropertyTypes.Where(p => p.SortOrder > edit.SortOrder).ToArray()) later.SortOrder--;
-        Assert.True((await types.UpdateAsync(tabular, Constants.Security.SuperUserKey)).Success);
-        Assert.DoesNotContain(TabularBlock.HideEditAlias, Order());
-        var keyValues = services.GetRequiredService<IKeyValueService>();
-        keyValues.SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-08-appblocks-editor-ui-aliases");
-        await RunPlanAsync(services);
-
-        var linked = types.Get(AddDisplayLinkAndTabularEditing.DisplayAlias)!.PropertyTypes.Single(p => p.Alias == link.Alias);
-        Assert.Equal((link.Key, link.Name, link.Description, link.DataTypeKey, link.SortOrder), (linked.Key, linked.Name, linked.Description, linked.DataTypeKey, linked.SortOrder));
-        var edited = types.Get(AppBlockSchema.TabularAlias)!.PropertyTypes.Single(p => p.Alias == edit.Alias);
-        Assert.Equal((edit.Key, edit.Name, edit.Description, edit.DataTypeKey), (edited.Key, edited.Name, edited.Description, edited.DataTypeKey));
-        Assert.Equal(order, Order());
-
-        // A site without the Display value type: the step adds what it can and the plan still completes.
-        Assert.Equal(ContentTypeOperationStatus.Success, await types.DeleteAsync(types.Get(AddDisplayLinkAndTabularEditing.DisplayAlias)!.Key, Constants.Security.SuperUserKey));
-        keyValues.SetValue(Constants.Conventions.Migrations.KeyValuePrefix + "AppBlocks", "2026-11-08-appblocks-editor-ui-aliases");
-        await RunPlanAsync(services);
-        Assert.Null(types.Get(AddDisplayLinkAndTabularEditing.DisplayAlias));
-        Assert.Single(types.Get(AppBlockSchema.TabularAlias)!.PropertyTypes, p => p.Alias == edit.Alias);
-    }
 }

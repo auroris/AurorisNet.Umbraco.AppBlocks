@@ -14,19 +14,26 @@ internal sealed record BlockGridAllowance(string DataType, string ElementType, i
 
 /// <summary>
 /// Adds each element type registered with <see cref="AppBlocksBuilder.AllowInBlockGrid"/> to its Block Grid data type once the definitions
-/// are there: at startup when nothing waits to be upgraded, after the package migrations when something did, and when an element type it
+/// are there: at startup when nothing waits to be upgraded, after Umbraco finishes an unattended installation or upgrade, and when an element type it
 /// names is saved, as a package's own startup may create one after this ran. Each pass reads the data type afresh and saves it only when
 /// it adds something, so repeating it changes nothing.
 /// </summary>
 public sealed class BlockGridAllowances(AppBlocksBuilder builder, IRuntimeState runtime, IDataTypeService dataTypes, IContentTypeService contentTypes,
-    IConfigurationEditorJsonSerializer serializer, ILogger<BlockGridAllowances> logger)
+    IConfigurationEditorJsonSerializer serializer, ILogger<BlockGridAllowances> logger, IServiceScopeFactory services)
     : INotificationAsyncHandler<UmbracoApplicationStartedNotification>, INotificationAsyncHandler<MigrationPlansExecutedNotification>,
         INotificationAsyncHandler<ContentTypeSavedNotification>
 {
     public Task HandleAsync(UmbracoApplicationStartedNotification notification, CancellationToken ct)
-        => runtime.Level == RuntimeLevel.Run ? ApplyAsync(builder.BlockGridAllowances, ct) : Task.CompletedTask;
+        => runtime.Level == RuntimeLevel.Run ? InstallAndApplyAsync(ct) : Task.CompletedTask;
 
-    public Task HandleAsync(MigrationPlansExecutedNotification notification, CancellationToken ct) => ApplyAsync(builder.BlockGridAllowances, ct);
+    public Task HandleAsync(MigrationPlansExecutedNotification notification, CancellationToken ct) => InstallAndApplyAsync(ct);
+
+    private async Task InstallAndApplyAsync(CancellationToken ct)
+    {
+        using var scope = services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<SchemaInstaller>().EnsureAsync(ct);
+        await ApplyAsync(builder.BlockGridAllowances, ct);
+    }
 
     public Task HandleAsync(ContentTypeSavedNotification notification, CancellationToken ct)
     {
