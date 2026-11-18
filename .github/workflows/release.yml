@@ -57,9 +57,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-    env:
-      # Makes the build deterministic.
-      ContinuousIntegrationBuild: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,12 +86,14 @@ jobs:
           }
 
       # The four packages carry one version, and the companions depend on AppBlocks at that version.
+      # ContinuousIntegrationBuild makes the packed build deterministic. It is set here and not for the tests, which find
+      # repository files through the source paths the compiler records, and a deterministic build replaces those paths.
       - name: Pack
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           foreach ($project in 'AppBlocks', 'AppBlocks.InteractiveReports', 'AppBlocks.Documents', 'AppBlocks.Testing') {
-            dotnet pack "src/$project" -c Release "-p:Version=$env:RELEASE_VERSION" -o artifacts/packages
+            dotnet pack "src/$project" -c Release "-p:Version=$env:RELEASE_VERSION" -p:ContinuousIntegrationBuild=true -o artifacts/packages
             if ($LASTEXITCODE -ne 0) { throw "Could not pack $project." }
           }
 
