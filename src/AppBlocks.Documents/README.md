@@ -1,6 +1,6 @@
 # AppBlocks Documents
 
-`AurorisNet.Umbraco.AppBlocks.Documents` produces documents from [AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks) data sources and Razor templates on Umbraco. A document downloads as self-contained HTML, or as PDF through a [Pressroom](https://github.com/auroris/Pressroom) server. Other packages use its output service to send HTML to a PDF or printer destination.
+`AurorisNet.Umbraco.AppBlocks.Documents` produces documents from [AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks) data sources and Razor templates on Umbraco. A document downloads as self-contained HTML, or as PDF through a [Pressroom](https://github.com/auroris/AurorisNet.Pressroom) server. Other packages use its output service to send HTML to a PDF or printer destination.
 
 ## Install
 

@@ -13,7 +13,6 @@ pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
 | Parameter | Default | What it does |
 |---|---|---|
 | `-InteractiveReportsRoot` | `../AurorisNet.InteractiveReports` | The Interactive Reports checkout whose projects the script packs, and whose `node_modules` supply Playwright. Run `npm ci` there first |
-| `-PressroomRoot` | `../Pressroom` | The Pressroom checkout whose client the script packs |
 | `-Port` | `5189` | The port the test sites listen on |
 
 The browser is Playwright's Chromium, or Microsoft Edge. The test sites run only while the checks run.

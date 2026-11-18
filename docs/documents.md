@@ -1,6 +1,6 @@
 # Documents package
 
-`AurorisNet.Umbraco.AppBlocks.Documents` produces documents from AppBlocks data sources and Razor templates, as self-contained HTML or as PDF through a [Pressroom](https://github.com/auroris/Pressroom) server. It also gives other packages one service for sending HTML to a PDF or printer destination. This page covers the settings screen, authoring a document, the settings and the output service.
+`AurorisNet.Umbraco.AppBlocks.Documents` produces documents from AppBlocks data sources and Razor templates, as self-contained HTML or as PDF through a [Pressroom](https://github.com/auroris/AurorisNet.Pressroom) server. It also gives other packages one service for sending HTML to a PDF or printer destination. This page covers the settings screen, authoring a document, the settings and the output service.
 
 Install the package beside `AurorisNet.Umbraco.AppBlocks`, which it depends on. It works with or without the Interactive Reports package. Its composer registers the document engine, the routes, the settings screen and the schema.
 

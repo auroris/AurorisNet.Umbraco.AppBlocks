@@ -21,12 +21,7 @@ The three test projects and the [clean-install test](#clean-install-test) are th
 
 ## Dependencies from sibling checkouts
 
-The companions restore their dependencies from NuGet: `AurorisNet.InteractiveReports`, `AurorisNet.InteractiveReports.AspNetCore` and `AurorisNet.InteractiveReports.Client.FileDownload` for reports, and `AurorisNet.Pressroom.Client` for documents. To build against the source of either one, pass a switch:
-
-| Switch | Source checkout | Property that moves it |
-|---|---|---|
-| `-p:UseInteractiveReportsSource=true` | `../AurorisNet.InteractiveReports` | `InteractiveReportsRoot` |
-| `-p:UsePressroomSource=true` | `../Pressroom` | `PressroomRoot` |
+The companions restore their dependencies from NuGet: `AurorisNet.InteractiveReports`, `AurorisNet.InteractiveReports.AspNetCore` and `AurorisNet.InteractiveReports.Client.FileDownload` for reports, and `AurorisNet.Pressroom.Client` for documents. To build the reports companion against Interactive Reports' source, pass `-p:UseInteractiveReportsSource=true`. It reads the checkout at `../AurorisNet.InteractiveReports`; the `InteractiveReportsRoot` property names another location. The Pressroom client always comes from its NuGet package.
 
 The core `AppBlocks` project builds without either.
 
@@ -70,7 +65,7 @@ They load Playwright from the checkout at `../AurorisNet.InteractiveReports`, af
 pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
 ```
 
-The script packs the Interactive Reports and Pressroom projects from the checkouts at `../AurorisNet.InteractiveReports` and `../Pressroom`. `-InteractiveReportsRoot` and `-PressroomRoot` name other locations.
+The script packs the Interactive Reports projects from the checkout at `../AurorisNet.InteractiveReports`; `-InteractiveReportsRoot` names another location. The Pressroom client restores from nuget.org.
 
 ## The demo site
 

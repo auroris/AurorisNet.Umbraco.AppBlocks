@@ -1,8 +1,7 @@
 [CmdletBinding()]
 param(
     [int] $Port = 5189,
-    [string] $InteractiveReportsRoot = (Join-Path $PSScriptRoot '../../../AurorisNet.InteractiveReports'),
-    [string] $PressroomRoot = (Join-Path $PSScriptRoot '../../../Pressroom')
+    [string] $InteractiveReportsRoot = (Join-Path $PSScriptRoot '../../../AurorisNet.InteractiveReports')
 )
 $ErrorActionPreference = 'Stop'
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -65,12 +64,11 @@ try {
         (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.AspNetCore'),
         (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.Client.Json'),
         (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.Client.FileDownload'),
-        (Join-Path $PressroomRoot 'src/Pressroom.Client'),
         'src/AppBlocks', 'src/AppBlocks.InteractiveReports', 'src/AppBlocks.Documents'
     )
     foreach ($project in $projects) {
         $name = Split-Path $project -Leaf
-        Invoke-Checked "pack-$name.log" { dotnet pack $project -c Release -o $feed.FullName --nologo -v minimal "-p:InteractiveReportsRoot=$InteractiveReportsRoot" "-p:PressroomRoot=$PressroomRoot" }
+        Invoke-Checked "pack-$name.log" { dotnet pack $project -c Release -o $feed.FullName --nologo -v minimal "-p:InteractiveReportsRoot=$InteractiveReportsRoot" }
     }
     @'
 <?xml version="1.0" encoding="utf-8"?>
