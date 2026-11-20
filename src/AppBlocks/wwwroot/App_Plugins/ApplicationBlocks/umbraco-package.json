@@ -75,6 +75,18 @@
     },
     {
       "type": "propertyEditorUi",
+      "alias": "AppBlocks.WritableTextFieldPicker",
+      "name": "Writable text field on this form",
+      "element": "/App_Plugins/ApplicationBlocks/writable-text-field-picker.js",
+      "meta": {
+        "label": "Writable text field",
+        "icon": "icon-edit",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
       "alias": "AppBlocks.FieldPicker",
       "name": "Application field binding",
       "element": "/App_Plugins/ApplicationBlocks/field-picker.js",
@@ -155,6 +167,14 @@
       "name": "Two columns preview",
       "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
       "forContentTypeAlias": "appColumns",
+      "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "blockEditorCustomView",
+      "alias": "AppBlocks.Preview.appFormColumns",
+      "name": "Form two columns preview",
+      "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
+      "forContentTypeAlias": "appFormColumns",
       "forBlockEditor": "block-grid"
     },
     {
@@ -251,6 +271,14 @@
       "name": "Region preview",
       "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
       "forContentTypeAlias": "appRegion",
+      "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "blockEditorCustomView",
+      "alias": "AppBlocks.Preview.appFormRegion",
+      "name": "Form region preview",
+      "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
+      "forContentTypeAlias": "appFormRegion",
       "forBlockEditor": "block-grid"
     },
     {

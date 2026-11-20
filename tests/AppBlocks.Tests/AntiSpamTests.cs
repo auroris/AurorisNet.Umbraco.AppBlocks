@@ -376,9 +376,9 @@ public sealed class AntiSpamTests
         var grid = JsonNode.Parse(XElement.Parse(Config("Schema/DataTypes/ApplicationApplicationBlocks.config")).Element("Config")!.Value)!;
         var offered = grid["blocks"]!.AsArray().Single(block => block!["contentElementTypeKey"]!.GetValue<string>() == definition.Attribute("Key")!.Value)!;
         Assert.False(offered["allowAtRoot"]!.GetValue<bool>());
-        Assert.True(offered["allowInAreas"]!.GetValue<bool>());
-        // In the Content group, so a fieldset or a region in a form takes it.
-        Assert.Equal(grid["blockGroups"]![1]!["key"]!.GetValue<string>(), offered["groupKey"]!.GetValue<string>());
+        Assert.False(offered["allowInAreas"]!.GetValue<bool>());
+        var region = grid["blocks"]!.AsArray().Single(block => block!["contentElementTypeKey"]!.GetValue<string>() == AppBlockSchema.Key(AppBlockSchema.FormRegionAlias).ToString());
+        Assert.Contains(region!["areas"]![0]!["specifiedAllowance"]!.AsArray(), rule => rule!["groupKey"]?.GetValue<string>() == offered["groupKey"]!.GetValue<string>());
     }
 
     private static string Guide()

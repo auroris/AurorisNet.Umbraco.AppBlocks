@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using Microsoft.Extensions.FileProviders;
+using Umbraco.Cms.Core.PropertyEditors;
+using static Umbraco.Cms.Core.PropertyEditors.BlockGridConfiguration;
 
 namespace AppBlocks.Blocks;
 
@@ -12,12 +14,16 @@ namespace AppBlocks.Blocks;
 public sealed class AppBlockItem
 {
     private readonly Dictionary<string, List<AppBlockItem>> areas = new(StringComparer.Ordinal);
+    private readonly BlockGridAreaConfiguration[] areaDefinitions;
+    private readonly Guid? settingsKey;
 
-    internal AppBlockItem(Guid key, string alias, int columnSpan)
+    internal AppBlockItem(Guid key, string alias, int columnSpan, BlockGridAreaConfiguration[] areaDefinitions, Guid? settingsKey)
     {
         Key = key;
         Alias = alias;
         ColumnSpan = columnSpan;
+        this.areaDefinitions = areaDefinitions;
+        this.settingsKey = settingsKey;
     }
 
     public Guid Key { get; }
@@ -27,7 +33,7 @@ public sealed class AppBlockItem
     /// <summary>Places <paramref name="items"/> at the end of the area <paramref name="area"/>; an area the block's grid entry lacks is refused.</summary>
     public AppBlockItem Place(string area, params AppBlockItem[] items)
     {
-        if (!AppBlockValues.AreaKeys(Alias).ContainsKey(area))
+        if (!areaDefinitions.Any(definition => definition.Alias == area))
             throw new ArgumentException($"The Forms container's grid gives {Alias} no area '{area}'.", nameof(area));
         if (!areas.TryGetValue(area, out var list)) areas[area] = list = [];
         list.AddRange(items);
@@ -35,11 +41,11 @@ public sealed class AppBlockItem
     }
 
     internal JsonObject Layout() => new() {
-        ["contentKey"] = Key.ToString(), ["settingsKey"] = null, ["columnSpan"] = ColumnSpan, ["rowSpan"] = 1,
+        ["contentKey"] = Key.ToString(), ["settingsKey"] = settingsKey?.ToString(), ["columnSpan"] = ColumnSpan, ["rowSpan"] = 1,
         // Every area the grid entry declares, empty or not, as the backoffice saves it.
-        ["areas"] = new JsonArray(AppBlockValues.AreaKeys(Alias).Select(area => (JsonNode)new JsonObject {
-            ["key"] = area.Value.ToString(),
-            ["items"] = new JsonArray(areas.GetValueOrDefault(area.Key)?.Select(item => (JsonNode)item.Layout()).ToArray() ?? []),
+        ["areas"] = new JsonArray(areaDefinitions.Select(area => (JsonNode)new JsonObject {
+            ["key"] = area.Key.ToString(),
+            ["items"] = new JsonArray(areas.GetValueOrDefault(area.Alias!)?.Select(item => (JsonNode)item.Layout()).ToArray() ?? []),
         }).ToArray()),
     };
 }
@@ -53,6 +59,7 @@ public sealed class AppBlockItem
 public sealed class AppBlockValues
 {
     private readonly List<JsonObject> contentData = [];
+    private readonly List<JsonObject> settingsData = [];
     private readonly List<AppBlockItem> layout = [];
     private readonly HashSet<Guid> keys = [];
 
@@ -65,9 +72,19 @@ public sealed class AppBlockValues
     public AppBlockItem Add(string alias, object? values = null, string? id = null, int columnSpan = 12)
     {
         var key = id is null ? Guid.NewGuid() : AppBlockSchema.Key("block:" + id);
+        var typeKey = AppBlockSchema.Key(alias);
+        var content = Element(typeKey, key, values);
+        var definition = BlockTypes.Value.GetValueOrDefault(typeKey);
         if (!keys.Add(key)) throw new ArgumentException($"Another block in this value already has the id '{id}'.", nameof(id));
-        contentData.Add(Element(alias, key, values));
-        return new AppBlockItem(key, alias, columnSpan);
+        Guid? settingsKey = null;
+        if (definition?.SettingsElementTypeKey is Guid settingsType)
+        {
+            // Umbraco creates this element on opening a block if it is missing, even with all settings at their defaults.
+            settingsKey = AppBlockSchema.Key($"settings:{key:D}");
+            settingsData.Add(Element(settingsType, settingsKey.Value, null));
+        }
+        contentData.Add(content);
+        return new AppBlockItem(key, alias, columnSpan, definition?.Areas ?? [], settingsKey);
     }
 
     /// <summary>A field block, such as <c>appText</c> or <c>appSelect</c>, bound to the resource's <paramref name="field"/>, with any other of its properties in <paramref name="values"/>.</summary>
@@ -95,7 +112,7 @@ public sealed class AppBlockValues
         if (returnPage is { } page) settings["returnPage"] = "umb://document/" + page.ToString("N");
         var interfaceKey = id is null ? Guid.NewGuid() : AppBlockSchema.Key("block:" + id + ":interface");
         properties["formInterface"] = new JsonObject {
-            ["contentData"] = new JsonArray(Element("appFormInterface", interfaceKey, settings)), ["settingsData"] = new JsonArray(),
+            ["contentData"] = new JsonArray(Element(AppBlockSchema.Key("appFormInterface"), interfaceKey, settings)), ["settingsData"] = new JsonArray(),
             ["expose"] = new JsonArray(Expose(interfaceKey)),
             ["layout"] = new JsonObject { ["Umbraco.SingleBlock"] = new JsonArray(new JsonObject { ["contentKey"] = interfaceKey.ToString(), ["settingsKey"] = null }) },
         };
@@ -115,13 +132,13 @@ public sealed class AppBlockValues
     /// <summary>The Block Grid value as the backoffice saves it.</summary>
     public string ToJson() => new JsonObject {
         ["contentData"] = new JsonArray(contentData.Select(block => (JsonNode)block.DeepClone()).ToArray()),
-        ["settingsData"] = new JsonArray(),
+        ["settingsData"] = new JsonArray(settingsData.Select(block => (JsonNode)block.DeepClone()).ToArray()),
         ["expose"] = new JsonArray(contentData.Select(block => (JsonNode)Expose(Guid.Parse(block["key"]!.GetValue<string>()))).ToArray()),
         ["layout"] = new JsonObject { ["Umbraco.BlockGrid"] = new JsonArray(layout.Select(item => (JsonNode)item.Layout()).ToArray()) },
     }.ToJsonString();
 
-    private static JsonObject Element(string alias, Guid key, object? values) => new() {
-        ["key"] = key.ToString(), ["contentTypeKey"] = AppBlockSchema.Key(alias).ToString(),
+    private static JsonObject Element(Guid typeKey, Guid key, object? values) => new() {
+        ["key"] = key.ToString(), ["contentTypeKey"] = typeKey.ToString(),
         ["values"] = new JsonArray(Properties(values).Select(pair => (JsonNode)new JsonObject {
             ["alias"] = pair.Key, ["culture"] = null, ["segment"] = null, ["editorAlias"] = null, ["value"] = pair.Value?.DeepClone(),
         }).ToArray()),
@@ -136,25 +153,13 @@ public sealed class AppBlockValues
         _ => JsonSerializer.SerializeToNode(values) as JsonObject ?? throw new ArgumentException("Give the values as an object or a dictionary.", nameof(values)),
     };
 
-    private static readonly Lazy<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, Guid>>> Areas = new(ReadAreas);
-
-    /// <summary>The areas the Forms container's grid gives an element type, by alias, in the grid's order; none for a block without areas.</summary>
-    internal static IReadOnlyDictionary<string, Guid> AreaKeys(string alias)
-        => Areas.Value.GetValueOrDefault(AppBlockSchema.Key(alias)) ?? new Dictionary<string, Guid>();
+    private static readonly Lazy<Dictionary<Guid, BlockGridBlockConfiguration>> BlockTypes = new(ReadBlockTypes);
 
     // Read from the package's own grid definition, so the keys are the ones the schema installs.
-    private static IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, Guid>> ReadAreas()
+    private static Dictionary<Guid, BlockGridBlockConfiguration> ReadBlockTypes()
     {
         using var stream = new ManifestEmbeddedFileProvider(typeof(AppBlockSchema).Assembly).GetFileInfo("Schema/DataTypes/ApplicationApplicationBlocks.config").CreateReadStream();
-        var configuration = JsonNode.Parse(XElement.Load(stream).Element("Config")!.Value)!;
-        var areas = new Dictionary<Guid, IReadOnlyDictionary<string, Guid>>();
-        foreach (var block in configuration["blocks"]!.AsArray())
-        {
-            var byAlias = new Dictionary<string, Guid>(StringComparer.Ordinal);
-            foreach (var area in block!["areas"]?.AsArray() ?? [])
-                byAlias[area!["alias"]!.GetValue<string>()] = Guid.Parse(area["key"]!.GetValue<string>());
-            areas[Guid.Parse(block["contentElementTypeKey"]!.GetValue<string>())] = byAlias;
-        }
-        return areas;
+        var configuration = JsonSerializer.Deserialize<BlockGridConfiguration>(XElement.Load(stream).Element("Config")!.Value, JsonSerializerOptions.Web)!;
+        return configuration.Blocks.ToDictionary(block => block.ContentElementTypeKey);
     }
 }

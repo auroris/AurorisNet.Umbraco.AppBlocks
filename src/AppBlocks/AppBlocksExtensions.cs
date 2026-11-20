@@ -81,6 +81,7 @@ public static class AppBlocksExtensions
         AppBlocksAuthorization.Add(services);
         Decorate<IAuthorizationPolicyProvider>(services, (_, inner) => new AppPagePolicyProvider(inner));
         builder.AddNotificationAsyncHandler<ContentPublishingNotification, AppBlocksValidator>();
+        services.AddScoped<AppBlocksValidator>();
         // Bound at startup, so a value that is not AppBlocksPages, AllPages or Off is reported then rather than on the first page.
         services.AddOptions<Publishing.PageCacheOptions>().Bind(builder.Config.GetSection(Publishing.PageCacheOptions.Section)).ValidateOnStart();
         services.AddScoped<AppPageAssets>();

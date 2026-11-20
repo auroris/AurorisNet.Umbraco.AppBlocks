@@ -92,13 +92,15 @@ In a block grid, each AppBlocks block shows a preview in place of Umbraco's defa
 
 A preview keeps Umbraco's header, with the block's icon, label, **Not published** tag and edit link. Beneath it the preview draws the block's content, then the block's areas:
 
-- Fields appear as disabled controls with their label, placeholder, default value and help text.
-- Rich text and HTML appear as authored. CSS and JavaScript appear as code.
+- A field's card shows its authored label or, when that is empty, its binding. The preview shows a disabled control with its placeholder, default value and help text.
+- Rich text and HTML appear as authored. CSS and JavaScript show a line count. Open the block to edit the full source.
+- A form region shows its heading. Its disclosure button folds the region for the current editor tab. Editors can fold a region and navigate away without saving.
+- A form shows its publish validation errors above its fields. Follow a location to open that block in Umbraco. A duplicate binding lists every occurrence under its enclosing region.
 - Forms, tabular forms, schedules, attachments and the anti-spam check appear as representative markup that names the form class or data source they use.
 - A Forms container shows the forms inside it. A form's Form Interface shows the same preview inside its single-block property.
 - With Interactive Reports installed, a report shows its heading, buttons and the columns of its starting view.
 
-A preview runs nothing: no form class, SQL, data source, report action or page script. Authored HTML is sanitized and drawn in a sandboxed frame that allows no scripts, forms or requests to other origins. A preview requests only its stylesheets, images and the media items behind a picked image. Images and stylesheets on another origin, such as a CDN, are left out.
+The backoffice sends the working form to the AppBlocks publish validator when its layout or values change. Rendering the preview never submits a form or runs an authored script or report action. Authored HTML is sanitized and drawn in a sandboxed frame with same-origin stylesheets and images.
 
 ### Replacing a preview
 
@@ -424,6 +426,7 @@ string json = forms.ToJson();
 - `ToJson` gives the value of a property that uses the **AppBlocks: Forms container** data type, such as a Forms container block's `forms` property. Use it in `OwnedNode` values or a content service save.
 - `Form` takes the alias of a C# class or a published data source. It writes the Form Interface with the key parameter, `id` unless given, and the return page. It places the fields in the form's `fields` area and an Actions block in its `actions` area.
 - `Field` refuses an alias that is not a field block.
+- Use `appFormFullWidth`, `appFormColumns`, `appFormThreeColumns` or `appFormRegion` to arrange fields inside a Form. For example, `forms.Add("appFormColumns").Place("left", title).Place("right", date)` places the two fields side by side. The page layouts accept standalone blocks such as rich text and attachments.
 - `AppBlockItem.Place(area, ...)` refuses an area the block's grid entry lacks.
 
 **Allowing a block in a Block Grid.** A package or site allows a block in one of the site's Block Grids from its registration, so no editor has to configure the grid:

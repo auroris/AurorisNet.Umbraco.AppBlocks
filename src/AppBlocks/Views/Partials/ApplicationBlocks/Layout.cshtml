@@ -3,8 +3,7 @@
 @*
     Full width, Two columns and Three columns: neutral markup, no chrome. The areas carry the spans
     umbraco-blockgridlayout.css places them by; the themes add the gutters and stack the areas below
-    their breakpoint. A layout's areas never hold another column layout (the grid data type forbids
-    it), so nothing here needs to cope with nesting.
+    their breakpoint.
 
     The split of Two columns sets how wide each area is. The grid inside an area keeps the span the
     data type configures, as Umbraco's own area partial does, because that is the grid the backoffice
@@ -17,7 +16,7 @@
     var areas = item.Areas.ToList();
     var spans = AppBlockLayout.AreaSpans(item);
     var columns = item.AreaGridColumns ?? item.GridColumns ?? 12;
-    var split = alias == "appColumns" && spans.Count == 2 ? $" ah-layout--split-{spans[0]}-{spans[1]}" : "";
+    var split = AppBlockLayout.IsTwoColumns(alias) && spans.Count == 2 ? $" ah-layout--split-{spans[0]}-{spans[1]}" : "";
 }
 <div class="ah-layout ah-layout--@AppBlockLayout.Modifier(alias)@split umb-block-grid__area-container" data-layout="@alias"
     style="--umb-block-grid--area-grid-columns: @columns;">

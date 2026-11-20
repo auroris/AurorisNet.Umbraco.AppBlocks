@@ -177,10 +177,11 @@ export function mountAttachments(root) {
         return uploaderReady ??= loadUppy().then(({ Uppy, Dashboard, XHRUpload }) => {
             if (!root.isConnected) return;
             const limit = state?.maxFileSize || maxSize || null;
+            const fileTypes = (state?.accept || root.dataset.accept || "").split(",").map(type => type.trim()).filter(Boolean);
             uploader = new Uppy({
                 id: root.id || api, autoProceed: false,
                 locale: { strings: uploaderStrings(limit), pluralize: count => count === 1 ? 0 : 1 },
-                restrictions: { maxFileSize: limit, allowedFileTypes: (state?.accept || root.dataset.accept)?.split(",").filter(Boolean) || null },
+                restrictions: { maxFileSize: limit, allowedFileTypes: fileTypes.length ? fileTypes : null },
                 // Uppy refuses a file already in the list before it asks this.
                 onBeforeFileAdded(file) {
                     const allowed = state?.canAdd ?? state?.canWrite;

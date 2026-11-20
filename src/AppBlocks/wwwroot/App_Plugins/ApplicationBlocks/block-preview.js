@@ -3,13 +3,14 @@ import { html, css, nothing } from "@umbraco-cms/backoffice/external/lit";
 import { DOMPurify } from "@umbraco-cms/backoffice/external/dompurify";
 import { UMB_PROPERTY_DATASET_CONTEXT } from "@umbraco-cms/backoffice/property";
 import { UmbMediaDetailRepository } from "@umbraco-cms/backoffice/media";
-import { escape, json, values, note, renderAppBlock } from "./preview-model.js";
+import { codeSize, escape, json, values, note, renderAppBlock } from "./preview-model.js";
 import { appBlockTypes } from "./block-types.js";
 import { pathBase } from "./data-api.js";
 import "@umbraco-cms/backoffice/block-grid";
 import { UMB_BLOCK_LIST } from "@umbraco-cms/backoffice/block-list";
 import { UMB_BLOCK_SINGLE } from "@umbraco-cms/backoffice/block-single";
 import "@umbraco-cms/backoffice/ufm";
+import "./form-problems.js";
 
 // The site root under any path base.
 const siteRoot = new URL(`${pathBase}/`, import.meta.url);
@@ -21,12 +22,23 @@ export const previewStylesheets = [new URL("runtime.css", import.meta.url).pathn
 export const previewStyles = [];
 // A companion's blocks can also occur inside the Forms container's nested grid: content type key -> (content, settings) => markup.
 export const nestedBlockPreviews = new Map();
+function columnsPerArea(alias) {
+    switch (alias) {
+        case "appColumns": case "appFormColumns": return 6;
+        case "appThreeColumns": case "appFormThreeColumns": return 4;
+        default: return 12;
+    }
+}
+
 export class BlockPreview extends UmbLitElement {
     static properties = Object.fromEntries(["content", "settings", "layout", "blockType", "config", "manifest", "label", "icon", "index", "unpublished", "readonly"].map(name => [name, { attribute: false }]));
     #media = new Map();
     #mediaRepository = new UmbMediaDetailRepository(this);
     #resize;
     #dataset;
+    #regionKey;
+    #folded = false;
+    #paths;
     get culture() { return this.#dataset?.getVariantId?.()?.culture; }
     constructor() {
         super();
@@ -50,8 +62,8 @@ export class BlockPreview extends UmbLitElement {
             const companion = nestedBlockPreviews.get(data?.contentTypeKey);
             const settings = values(grid.settingsData?.find(item => item.key === entry.settingsKey), this.culture);
             const areas = entry.areas ?? [];
-            const areaColumns = type?.alias === "appColumns" ? 6 : type?.alias === "appThreeColumns" ? 4 : 12;
-            const split = type?.alias === "appColumns" ? ({ "4/8": "1fr 2fr", "8/4": "2fr 1fr" }[settings.split] ?? "1fr 1fr") : `repeat(${Math.max(1, areas.length)},minmax(0,1fr))`;
+            const areaColumns = columnsPerArea(type?.alias);
+            const split = areaColumns === 6 ? ({ "4/8": "1fr 2fr", "8/4": "2fr 1fr" }[settings.split] ?? "1fr 1fr") : `repeat(${Math.max(1, areas.length)},minmax(0,1fr))`;
             const children = areas.length ? `<div style="display:grid;grid-template-columns:${split};gap:10px">${areas.map(area => `<div class="preview-nested-grid" style="grid-template-columns:repeat(${areaColumns},minmax(0,1fr))">${render(area.items ?? [], areaColumns)}</div>`).join("")}</div>` : "";
             const content = values(data, this.culture);
             const body = companion ? companion(content, settings) : this.renderContent(type?.alias, content, settings);
@@ -96,33 +108,88 @@ html,body{margin:0;padding:0;background:white;color:#24323d;font:14px/1.5 system
         resize();
     }
     disconnectedCallback() { this.#resize?.disconnect(); super.disconnectedCallback(); }
+    willUpdate(changed) {
+        super.willUpdate(changed);
+        const key = this.alias === "appFormRegion" && this.layout?.contentKey;
+        if (key !== this.#regionKey) {
+            this.#regionKey = key;
+            this.#folded = false;
+            try { if (key) this.#folded = sessionStorage.getItem(`AppBlocks:${pathBase}:region:${key}`) === "folded"; } catch {}
+        }
+    }
+    #toggleRegion() {
+        this.#folded = !this.#folded;
+        if (this.#regionKey) {
+            const key = `AppBlocks:${pathBase}:region:${this.#regionKey}`;
+            try {
+                if (this.#folded) sessionStorage.setItem(key, "folded"); else sessionStorage.removeItem(key);
+            } catch { /* Folding also works when the browser disables session storage. */ }
+        }
+        this.requestUpdate();
+    }
+    updated(changes) {
+        super.updated(changes);
+        if (changes.has("config") || changes.has("layout") || changes.has("manifest")) {
+            const key = this.layout?.contentKey;
+            const path = this.config?.showContentEdit ? this.config.editContentPath : undefined;
+            if (key) {
+                if (this.alias === "appForm") this.#rememberPath(key, path);
+                this.dispatchEvent(new CustomEvent("app-block-edit-path", { bubbles: true, composed: true, detail: { key, path } }));
+            }
+        }
+    }
+    #rememberPath(key, path) {
+        this.#paths ??= new Map();
+        if (this.#paths.get(key) === path) return;
+        if (path) this.#paths.set(key, path); else this.#paths.delete(key);
+        this.shadowRoot.querySelector("app-form-problems")?.requestUpdate();
+    }
+    #childPath(event) {
+        event.stopPropagation();
+        this.#rememberPath(event.detail.key, event.detail.path);
+    }
     render() {
-        const markup = this.renderContent(this.alias, this.content ?? {}, this.settings ?? {});
+        const size = codeSize(this.alias, this.content);
+        const markup = size ? "" : this.renderContent(this.alias, this.content ?? {}, this.settings ?? {});
         const edit = this.config?.showContentEdit ? this.config.editContentPath : undefined;
-        const split = this.alias === "appColumns" ? ({ "4/8": "1fr 2fr", "8/4": "2fr 1fr" }[this.settings?.split] ?? "1fr 1fr") : undefined;
+        const split = columnsPerArea(this.alias) === 6 ? ({ "4/8": "1fr 2fr", "8/4": "2fr 1fr" }[this.settings?.split] ?? "1fr 1fr") : undefined;
         const grid = ![UMB_BLOCK_LIST, UMB_BLOCK_SINGLE].includes(this.manifest?.forBlockEditor);
-        return html`<div class="block">
-            ${this.#header(edit)}
+        return html`<div class="block" @app-block-edit-path=${this.alias === "appForm" ? this.#childPath : nothing}>
+            <div class="header">
+                ${this.alias === "appFormRegion" && grid ? html`<button class="fold" type="button"
+                    aria-label=${`${this.#folded ? "Expand" : "Collapse"} ${this.content?.heading || "form region"}`}
+                    aria-expanded=${String(!this.#folded)} aria-controls="region-content" @click=${this.#toggleRegion}>
+                    <umb-icon .name=${this.#folded ? "icon-navigation-right" : "icon-navigation-down"}></umb-icon>
+                </button>` : nothing}
+                ${this.#header(edit, size)}
+            </div>
+            ${this.alias === "appForm" && grid ? html`<app-form-problems .layout=${this.layout} .culture=${this.culture} .paths=${this.#paths ??= new Map()}></app-form-problems>` : nothing}
+            <div id="region-content" ?hidden=${this.#folded}>
             ${markup ? html`<div class="preview"><iframe title="Block content preview" sandbox="allow-same-origin" inert tabindex="-1" .srcdoc=${this.previewDocument(markup)} @load=${this.#loaded}></iframe>${edit ? html`<a class="edit-preview" href=${edit} draggable="false" aria-label="Edit block content"></a>` : nothing}</div>` : nothing}
             ${grid ? html`<umb-block-grid-areas-container class=${split ? "split" : ""} style=${split ? `--preview-columns:${split}` : ""} draggable="false"></umb-block-grid-areas-container>` : nothing}
+            </div>
         </div>`;
     }
     // The block editor's own header for the editor the manifest names. Each element ships with the editor that hosts the view.
-    #header(edit) {
+    #header(edit, size) {
         const value = { ...this.content, $settings: this.settings, $index: this.index };
+        const label = size ? `${this.label || (this.alias === "appCss" ? "CSS" : "JavaScript")} · ${size}` : this.label;
         switch (this.manifest?.forBlockEditor) {
             case UMB_BLOCK_LIST: return html`<umb-ref-list-block .icon=${this.icon} .index=${this.index} .unpublished=${this.unpublished} .config=${this.config} .content=${this.content} .settings=${this.settings}>
-                <umb-ufm-render slot="name" inline .markdown=${this.label} .value=${value}></umb-ufm-render>
+                <umb-ufm-render slot="name" inline .markdown=${label} .value=${value}></umb-ufm-render>
             </umb-ref-list-block>`;
-            case UMB_BLOCK_SINGLE: return html`<umb-ref-single-block .label=${this.label} .icon=${this.icon} .index=${this.index} .unpublished=${this.unpublished} .config=${this.config} .content=${this.content} .settings=${this.settings}></umb-ref-single-block>`;
+            case UMB_BLOCK_SINGLE: return html`<umb-ref-single-block .label=${label} .icon=${this.icon} .index=${this.index} .unpublished=${this.unpublished} .config=${this.config} .content=${this.content} .settings=${this.settings}></umb-ref-single-block>`;
             default: return html`<umb-ref-grid-block standalone .readonly=${!edit} .href=${edit}>
                 <umb-icon slot="icon" .name=${this.icon}></umb-icon>
-                <umb-ufm-render slot="name" inline .markdown=${this.label} .value=${value}></umb-ufm-render>
+                <umb-ufm-render slot="name" inline .markdown=${label} .value=${value}></umb-ufm-render>
                 ${this.unpublished ? html`<uui-tag slot="name" look="secondary">Not published</uui-tag>` : nothing}
             </umb-ref-grid-block>`;
         }
     }
     static styles = css`
+        .header{display:flex;align-items:center}.header>:last-child{flex:1;min-width:0}
+        .fold{margin-inline-start:4px;padding:8px;border:0;border-radius:var(--uui-border-radius);background:transparent;color:var(--uui-color-interactive);cursor:pointer}
+        .fold:hover,.fold:focus-visible{background:var(--uui-color-surface-emphasis)}
         :host{display:block;height:100%;min-width:0}.block{background:var(--uui-color-surface);border:1px solid var(--uui-color-border);border-radius:4px}umb-ref-grid-block{border:0;min-height:38px}umb-ref-list-block,umb-ref-single-block{margin:0}umb-ufm-render{user-select:none}.preview{position:relative}iframe{display:block;width:100%;height:80px;border:0;pointer-events:none}.edit-preview{position:absolute;inset:0;display:block}.edit-preview:focus-visible{outline:2px solid var(--uui-color-interactive);outline-offset:-2px}umb-block-grid-areas-container::part(area){margin:8px;min-width:0}umb-block-grid-areas-container.split::part(area-container){display:grid;grid-template-columns:var(--preview-columns)}umb-block-grid-areas-container.split::part(area){grid-column:auto!important}uui-tag{margin-left:8px}
     `;
 }

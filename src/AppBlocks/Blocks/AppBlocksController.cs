@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Umbraco.Cms.Api.Management.Controllers;
 using Umbraco.Cms.Api.Management.Routing;
@@ -17,6 +18,16 @@ namespace AppBlocks.Blocks;
 public sealed class AppBlocksController(FormResourceRegistry resources, DataSourceHandlers handlers,
     PublishedDataCatalog definitions, IEnumerable<IAppBlocksCatalogueContributor> contributors) : ManagementApiControllerBase
 {
+    [HttpPost("validate-form")]
+    public async Task<IActionResult> ValidateForm([FromBody] JsonElement grid, [FromServices] AppBlocksValidator validator)
+    {
+        Response.Headers.CacheControl = "no-store";
+        await validator.LoadAsync();
+        try { return Ok(validator.EditorProblems(grid.GetRawText())); }
+        catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException)
+        { return BadRequest("Invalid form block data."); }
+    }
+
     [HttpGet("catalogue")]
     public async Task<IActionResult> Catalogue()
     {

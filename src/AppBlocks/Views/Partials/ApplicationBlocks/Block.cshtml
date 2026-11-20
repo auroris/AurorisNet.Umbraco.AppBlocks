@@ -115,7 +115,7 @@ else if (AppBlockSchema.ColumnLayoutAliases.Contains(alias))
 {
     @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Layout.cshtml", Model)
 }
-else if (alias == AppBlockSchema.RegionAlias)
+else if (alias is AppBlockSchema.RegionAlias or AppBlockSchema.FormRegionAlias)
 {
     @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Region.cshtml", Model)
 }

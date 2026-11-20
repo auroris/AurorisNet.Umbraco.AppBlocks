@@ -39,6 +39,7 @@ public sealed class AttachmentsHttpTests
         var list = await files.ListAsync("id=4");
         Assert.True(list.IsSuccess, list.Problem);
         Assert.True(list.CanWrite);
+        Assert.True(list.Body.GetProperty("canAdd").GetBoolean());
         Assert.Equal(["Invoice", "Delivery note", "Other"], list.Body.GetProperty("purposes").EnumerateArray().Select(p => p.GetString()!).ToArray());
         Assert.Empty(list.Items);
 
@@ -135,6 +136,7 @@ public sealed class AttachmentsHttpTests
         // A later site configuration can leave a published block with no compatible types.
         var settings = site.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AppBlocks.Attachments.AttachmentSettings>>().Value;
         settings.AllowedExtensions = [".docx"];
+        Assert.False((await small.ListAsync("id=4")).Body.GetProperty("canAdd").GetBoolean());
         foreach (var name in new[] { "file.docx", "file.txt", "file.exe" })
         {
             var refused = await small.UploadAsync(new(name, "application/octet-stream", Encoding.UTF8.GetBytes("x")), query: "id=4");

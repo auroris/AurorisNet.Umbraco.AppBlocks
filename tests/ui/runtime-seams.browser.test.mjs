@@ -647,6 +647,26 @@ test('cancelling an active Uppy upload releases the Save guard', async () => {
     } finally { finishUpload(); await page.close(); }
 });
 
+test('an empty file-type setting allows an attachment to upload', async () => {
+    let uploaded = false;
+    const { page, requests, errors } = await mount(attachments('page', 'data-accept=""') + runtime(''), ({ method }) => {
+        if (method === 'POST') {
+            uploaded = true;
+            return json({}, 201);
+        }
+        return json({ ...files(uploaded ? [file('report', 4)] : []), accept: null });
+    });
+    try {
+        await openUploader(page);
+        await page.locator('.uppy-Dashboard-input').first().setInputFiles({ name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('file') });
+        await page.locator('a.app-attachment-name', { hasText: 'report.pdf' }).waitFor({ timeout: 5000 });
+        assert.deepEqual(requests.map(r => r.method), ['GET', 'POST', 'GET']);
+        assert.equal(requests[1].path, '/api/attachments/page/block');
+        assert.match(requests[1].headers['content-type'], /^multipart\/form-data; boundary=/);
+        assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+});
+
 test('Uppy honours upload limits and add-only permissions and fits mobile and desktop widths', async () => {
     const { page, requests, errors } = await mount(attachments('page') + runtime(''), ({ method }) => method === 'POST' ? json({ detail: 'Refused.' }, 422) : json({ ...files([file('existing', 8)], false), canAdd: true, maxFileSize: 10, accept: '.pdf' }));
     try {

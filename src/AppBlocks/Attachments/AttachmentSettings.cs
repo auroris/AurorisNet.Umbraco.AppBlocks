@@ -42,6 +42,7 @@ public sealed class AttachmentSettings
 public sealed record AttachmentLimits(long MaxFileSize, IReadOnlyList<string> Extensions)
 {
     private bool UnrestrictedExtensions { get; init; } = Extensions.Count == 0;
+    internal bool AllowsUploads => UnrestrictedExtensions || Extensions.Count > 0;
 
     /// <summary>What the file input's <c>accept</c> attribute says, or null when there are no extensions to suggest.</summary>
     public string? Accept => Extensions.Count == 0 ? null : string.Join(",", Extensions);

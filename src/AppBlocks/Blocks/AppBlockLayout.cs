@@ -15,11 +15,13 @@ public static class AppBlockLayout
     public const string SplitAlias = "split";
     public const string CollapsibleAlias = "collapsible";
 
+    public static bool IsTwoColumns(string alias) => alias is "appColumns" or "appFormColumns";
+
     /// <summary>The span of each area, in the order the data type defines the areas.</summary>
     public static IReadOnlyList<int> AreaSpans(BlockGridItem item)
     {
         var spans = item.Areas.Select(area => area.ColumnSpan).ToArray();
-        if (item.Content.ContentType.Alias == "appColumns" && spans.Length == 2
+        if (IsTwoColumns(item.Content.ContentType.Alias) && spans.Length == 2
             && Split(item.Settings?.Value<string>(SplitAlias), item.AreaGridColumns ?? 12) is { } split)
             return [split.Left, split.Right];
         return spans;
@@ -54,9 +56,9 @@ public static class AppBlockLayout
 
     /// <summary>The modifier of the <c>ah-layout</c> hook, named for what an editor picked rather than the alias.</summary>
     public static string Modifier(string alias) => alias switch {
-        "appFullWidth" => "full-width",
-        "appColumns" => "two-columns",
-        "appThreeColumns" => "three-columns",
+        "appFullWidth" or "appFormFullWidth" => "full-width",
+        "appColumns" or "appFormColumns" => "two-columns",
+        "appThreeColumns" or "appFormThreeColumns" => "three-columns",
         _ => alias,
     };
 }

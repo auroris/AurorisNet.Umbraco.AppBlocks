@@ -18,17 +18,14 @@ public static class AppBlockSchema
     public const string ColorAlias = "appColor";
     public static readonly string[] FieldAliases = ["appText", "appTextArea", ColorAlias, "appNumber", "appDate", "appTime", "appDateTime", "appCheckbox", "appSelect", ShuttleAlias, "appDisplay"];
 
-    /// <summary>
-    /// The column layouts. The grid data type never lets one into another's areas, so a page's columns
-    /// nest one level deep and every theme can style them without guessing at depth.
-    /// </summary>
-    public static readonly string[] ColumnLayoutAliases = ["appFullWidth", "appColumns", "appThreeColumns"];
+    /// <summary>Page and form column layouts share the same renderer and settings.</summary>
+    public static readonly string[] ColumnLayoutAliases = ["appFullWidth", "appColumns", "appThreeColumns", "appFormFullWidth", "appFormColumns", "appFormThreeColumns"];
 
-    /// <summary>A region: an optional title bar over one area. It is content to a column layout, not a layout.</summary>
     public const string RegionAlias = "appRegion";
+    public const string FormRegionAlias = "appFormRegion";
 
     /// <summary>Blocks that only arrange other blocks, so a form or a validator can pass over them to their contents.</summary>
-    public static readonly string[] LayoutAliases = [.. ColumnLayoutAliases, RegionAlias];
+    public static readonly string[] LayoutAliases = [.. ColumnLayoutAliases, RegionAlias, FormRegionAlias];
 
     public const string RichTextAlias = "appRichText";
     public const string HtmlAlias = "appHtml";

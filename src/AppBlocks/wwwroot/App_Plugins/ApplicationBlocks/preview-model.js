@@ -8,6 +8,12 @@ export const richText = value => typeof value === "string" ? value : value?.mark
 export const note = text => `<p class="preview-note">${escape(text)}</p>`;
 export const heading = text => text ? `<h3>${escape(text)}</h3>` : "";
 export const button = text => `<button type="button" disabled>${escape(text)}</button>`;
+export function codeSize(alias, content) {
+    if (alias !== "appCss" && alias !== "appScript") return;
+    const source = content?.[alias === "appCss" ? "css" : "script"] || "";
+    const lines = source ? source.split(/\r\n|[\r\n]/).length - Number(/[\r\n]$/.test(source)) : 0;
+    return `${lines} ${lines === 1 ? "line" : "lines"}`;
+}
 export function values(item, culture) {
     const result = {};
     for (const property of item?.values ?? []) {
@@ -54,10 +60,11 @@ export function renderAppBlock(alias, content = {}, settings = {}, nested = () =
     switch (alias) {
         case "appRichText": return `<div class="ah-rich-text">${richText(content.text) || note("Add rich text.")}</div>`;
         case "appHtml": return content.html || note("Add HTML.");
-        case "appCss": return note("Page stylesheet") + `<pre><code>${escape(content.css || "/* Add CSS */")}</code></pre>`;
-        case "appScript": return note("Page JavaScript — runs on the page only") + `<pre><code>${escape(content.script || "// Add JavaScript")}</code></pre>`;
+        case "appCss": return note(`CSS · ${codeSize(alias, content)}`);
+        case "appScript": return note(`JavaScript · ${codeSize(alias, content)}`);
+        case "appFormFullWidth": case "appFormColumns": case "appFormThreeColumns":
         case "appFullWidth": case "appColumns": case "appThreeColumns": return "";
-        case "appRegion": return title + (settings.collapsible ? note("Collapsible region") : "");
+        case "appRegion": case "appFormRegion": return title + (settings.collapsible ? note("Collapsible region") : "");
         case "appFieldset": return title + help;
         case "appForm": {
             const config = listItems(content.formInterface, culture)[0] ?? {};

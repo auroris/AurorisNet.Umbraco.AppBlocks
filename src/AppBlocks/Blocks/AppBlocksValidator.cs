@@ -15,6 +15,9 @@ using AppBlocks.Tabular;
 
 namespace AppBlocks.Blocks;
 
+public sealed record BlockLocation(Guid Key, string Label);
+public sealed record BlockProblem(string Message, IReadOnlyList<BlockLocation> Locations);
+
 /// <summary>
 /// Validates authored structure without executing a report or invoking a form operation. Forms, tabular forms and record owners
 /// use registered C# contracts or published data sources and their database schemas. Call <see cref="LoadAsync"/> before validating.
@@ -50,8 +53,11 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                     var sets = BlockValueSets.Read(json, contentTypes);
                     foreach (var set in sets) {
                         var warnings = new List<string>();
-                        var errors = Validate(set, warnings);
-                        if (errors.Count > 0) notification.CancelOperation(new EventMessage("AppBlocks", page.Name + ": " + string.Join(" ", errors), EventMessageType.Error));
+                        var errors = Problems(set, warnings);
+                        foreach (var error in errors) {
+                            var location = string.Join(" / ", error.Locations.Select(l => l.Label));
+                            notification.CancelOperation(new EventMessage("AppBlocks", $"{page.Name} · {property.Alias}: {error.Message}" + (location.Length > 0 ? $" ({location})" : ""), EventMessageType.Error));
+                        }
                         foreach (var warning in warnings.Distinct()) notification.Messages.Add(new EventMessage("AppBlocks", page.Name + ": " + warning, EventMessageType.Warning));
                     }
                 } catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException) {
@@ -74,22 +80,38 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         { return ["The block structure is invalid: " + error.Message]; }
     }
 
+    /// <summary>The publish checks and their block locations for a working copy in the editor.</summary>
+    public IReadOnlyList<BlockProblem> EditorProblems(string json) => Problems(BlockValueSets.Parse(json), null);
+
+    private IReadOnlyList<BlockProblem> Problems(BlockValue value, List<string>? warnings)
+    {
+        var locations = new Dictionary<int, List<BlockLocation>>();
+        return Validate(value, warnings, locations).Select((message, i) => new BlockProblem(message, locations.GetValueOrDefault(i) ?? [])).ToArray();
+    }
+
     /// <summary>
     /// A block value wherever a page holds one: content and layouts stand alone, a form judges what it holds, and fields, form actions
     /// and an Anti-spam block belong inside a form. A block this validator does not know is the site's own and is left to the site.
     /// </summary>
-    private IReadOnlyList<string> Validate(BlockValue value, List<string>? warnings)
+    private IReadOnlyList<string> Validate(BlockValue value, List<string>? warnings, Dictionary<int, List<BlockLocation>>? locations = null)
     {
         var errors = new List<string>();
         try {
             var data = value.ContentData.ToDictionary(d => d.Key);
             var visited = new HashSet<Guid>();
-            foreach (var item in BlockValueSets.Layout(value)) VisitContent(item);
+            var index = 0;
+            foreach (var item in BlockValueSets.Layout(value)) VisitContent(item, "", ++index);
 
-            void VisitContent(IBlockLayoutItem item) {
+            void VisitContent(IBlockLayoutItem item, string parent, int position) {
                 var key = item.ContentKey;
                 var block = data[key]; var alias = Alias(block);
-                if (alias == "appForm") { Form(item, block, data, visited, errors, warnings); return; }
+                var target = Location(block, alias, parent, position);
+                var start = errors.Count;
+                if (alias == "appForm") {
+                    Form(item, block, data, visited, errors, warnings, locations, target);
+                    Locate(start, errors.Count, locations, target);
+                    return;
+                }
                 if (!visited.Add(key)) throw new InvalidOperationException("Blocks cannot be repeated or cyclic.");
                 if (Plugin(alias) is { } plugin) plugin.Validate(BlockValueSets.Element(block), errors);
                 else if (alias == AppBlockSchema.AttachmentsAlias) Attachments(block, null, errors);
@@ -97,7 +119,9 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 else if (alias == AppBlockSchema.TabularAlias) Tabular(block, null, errors);
                 else if (alias == AppBlockSchema.AntiSpamAlias) errors.Add("Place the Anti-spam block inside the form it protects.");
                 else if (alias == "appActions" || AppBlockSchema.FieldAliases.Contains(alias)) errors.Add("Fields and form actions must be placed inside a form.");
-                foreach (var nested in BlockValueSets.Children(item)) VisitContent(nested);
+                Locate(start, errors.Count, locations, target);
+                var child = 0;
+                foreach (var nested in BlockValueSets.Children(item)) VisitContent(nested, target.Label, ++child);
             }
         } catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException) {
             errors.Add("The block structure or starting view is invalid: " + error.Message);
@@ -115,10 +139,28 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         if (node.ContentType.Alias != PaperReportLinks.ContentTypeAlias) errors.Add($"Select a Paper report node for Paper report; {node.Name} is not one.");
     }
 
-    private void Form(IBlockLayoutItem layout, BlockItemData block, Dictionary<Guid, BlockItemData> data, HashSet<Guid> visited, List<string> errors, List<string>? warnings)
+    private static void Locate(int start, int end, Dictionary<int, List<BlockLocation>>? locations, BlockLocation target)
+    {
+        if (locations is null) return;
+        for (var i = start; i < end; i++) locations.TryAdd(i, [target]);
+    }
+
+    private BlockLocation Location(BlockItemData block, string alias, string parent, int position)
+    {
+        var name = new[] { "heading", "label", "field" }.Select(p => Text(block, p)).FirstOrDefault(s => s.Length > 0)
+            ?? contentTypes?.Get(block.ContentTypeKey)?.Name
+            ?? (alias.StartsWith("app", StringComparison.Ordinal) ? alias[3..] : alias);
+        if (string.IsNullOrEmpty(name)) name = "Block";
+        return new(block.Key, parent.Length == 0 ? name : $"{parent} › {name} ({position})");
+    }
+
+    private void Form(IBlockLayoutItem layout, BlockItemData block, Dictionary<Guid, BlockItemData> data, HashSet<Guid> visited, List<string> errors, List<string>? warnings,
+        Dictionary<int, List<BlockLocation>>? locations, BlockLocation formLocation)
     {
         if (Text(block, "paperReport") is { Length: > 0 } paper) PaperReport(contents, paper, errors);
-        var definition = BlockValueSets.Parse(Text(block, "formInterface"));
+        var formInterface = Text(block, "formInterface");
+        if (string.IsNullOrWhiteSpace(formInterface)) { errors.Add("Each form needs exactly one Form Interface."); return; }
+        var definition = BlockValueSets.Parse(formInterface);
         if (definition is not SingleBlockValue) { errors.Add("Recreate the Form Interface using the Single Block editor."); return; }
         var interfaces = definition.ContentData.ToArray();
         var interfaceLayout = BlockValueSets.Layout(definition).ToArray();
@@ -130,21 +172,29 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         if (resource is null) { errors.Add("Select a registered C# form class or a published data source."); return; }
         // A data source's fields come from its database; without them every binding would look wrong.
         if (resource is SqlDataSource { Problem: { } problem }) { errors.Add($"The data source {resource.Alias} is not available: {problem}"); return; }
-        var fields = new Dictionary<string, BlockItemData>(StringComparer.Ordinal); var actions = 0; var checks = 0;
-        var links = new List<(string Binding, string Template)>();
-        void Visit(IBlockLayoutItem item, int depth) {
+        var fields = new Dictionary<string, (BlockItemData Block, BlockLocation Location)>(StringComparer.Ordinal);
+        var links = new List<(string Binding, string Template, BlockLocation Target)>();
+        var duplicates = new Dictionary<string, List<BlockLocation>>(StringComparer.Ordinal);
+        var actionBlocks = new List<BlockLocation>();
+        var checkBlocks = new List<BlockLocation>();
+        void Visit(IBlockLayoutItem item, int depth, string parent, int position) {
             var key = item.ContentKey;
             if (!visited.Add(key)) throw new InvalidOperationException("Blocks cannot be repeated or cyclic.");
             var child = data[key]; var alias = Alias(child);
+            var target = depth == 0 ? formLocation : Location(child, alias, parent, position);
+            var start = errors.Count;
             if (depth > 0 && (alias == "appForm" || Plugin(alias)?.RequiresUser == true)) errors.Add("Forms and reports cannot be nested inside a form.");
-            if (alias == "appActions") actions++;
-            if (alias == AppBlockSchema.AntiSpamAlias) { checks++; AntiSpam(child, errors, warnings); }
+            if (alias == "appActions") actionBlocks.Add(target);
+            if (alias == AppBlockSchema.AntiSpamAlias) { checkBlocks.Add(target); AntiSpam(child, errors, warnings); }
             else if (alias == AppBlockSchema.AttachmentsAlias) Attachments(child, resource, errors);
             else if (alias == AppBlockSchema.ScheduleAlias) Schedule(child, errors);
             else if (alias == AppBlockSchema.TabularAlias) Tabular(child, resource, errors);
             else if (AppBlockSchema.FieldAliases.Contains(alias)) {
                 var binding = Text(child, "field");
-                if (!fields.TryAdd(binding, child)) errors.Add($"Field '{binding}' appears more than once.");
+                if (!fields.TryAdd(binding, (child, target))) {
+                    if (!duplicates.TryGetValue(binding, out var copies)) duplicates[binding] = copies = [fields[binding].Location];
+                    copies.Add(target);
+                }
                 // A default of :APP.name that no provider declares would leave the field empty; a warning, as the provider is code that may come later.
                 if (providers is not null && Text(child, "defaultValue").Trim() is var initial && initial.StartsWith(":APP.", StringComparison.OrdinalIgnoreCase)
                     && providers.UndeclaredWarning([initial[5..]]) is { } undeclared)
@@ -154,13 +204,19 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 else if (!Compatible(alias, field, Text(child, "listOfValues").Length > 0)) errors.Add($"The block for '{binding}' does not match its {field.Kind} type.");
                 if (definitions is not null && alias is "appSelect" or AppBlockSchema.ShuttleAlias && Text(child, "listOfValues") is { Length: > 0 } selected && definitions.FindList(selected) is null)
                     errors.Add($"Select a published list of values for '{binding}'.");
-                if (alias == "appDisplay" && Text(child, AppBlockField.LinkTemplateAlias).Trim() is { Length: > 0 } template) links.Add((binding, template));
+                if (alias == "appDisplay" && Text(child, AppBlockField.LinkTemplateAlias).Trim() is { Length: > 0 } template) links.Add((binding, template, target));
             }
             else if (Plugin(alias) is { } plugin) plugin.Validate(BlockValueSets.Element(child), errors);
             else if (alias is not ("appForm" or "appFieldset" or "appActions") && !AppBlockSchema.LayoutAliases.Contains(alias) && !AppBlockSchema.ContentAliases.Contains(alias)) errors.Add("The form contains an unsupported block.");
-            foreach (var nested in BlockValueSets.Children(item)) Visit(nested, depth + 1);
+            Locate(start, errors.Count, locations, target);
+            var index = 0;
+            foreach (var nested in BlockValueSets.Children(item)) Visit(nested, depth + 1, target.Label, ++index);
         }
-        Visit(layout, 0);
+        Visit(layout, 0, "", 1);
+        foreach (var (binding, copies) in duplicates) {
+            locations?.Add(errors.Count, copies);
+            errors.Add($"Field '{binding}' appears more than once.");
+        }
         errors.AddRange(FieldRule.Problems(FieldRule.Authored(Text(block, "fieldRules"), resource.Fields), fields.Keys));
         var parent = Text(block, "parentForm");
         var linkField = Text(block, "linkField");
@@ -174,19 +230,21 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                     errors.Add("Give the parent and detail forms different record key query parameters.");
             }
         }
-        if (actions > 1) errors.Add("Use one Form actions block per form.");
-        if (checks > 1) errors.Add("Use one Anti-spam block per form.");
+        if (actionBlocks.Count > 1) { locations?.Add(errors.Count, actionBlocks); errors.Add("Use one Form actions block per form."); }
+        if (checkBlocks.Count > 1) { locations?.Add(errors.Count, checkBlocks); errors.Add("Use one Anti-spam block per form."); }
         // A link is built in the browser from the record the form loaded, which holds the form's own fields and no others.
-        foreach (var (binding, template) in links) {
+        foreach (var (binding, template, target) in links) {
+            var start = errors.Count;
             if (AppBlockField.LinkProblem(template) is { } unsafeLink) errors.Add($"The link template of '{binding}' is not one a page may link to. {unsafeLink}");
             foreach (var name in AppBlockField.LinkFields(template).Where(name => !fields.ContainsKey(name)))
                 errors.Add($"The link template of '{binding}' names {{{name}}}, which is not a field on this form. Add a field block for it; it may be hidden.");
+            Locate(start, errors.Count, locations, target);
         }
         // A form that edits some fields of existing records is a real use, so a required field it does not edit is a warning: the form
         // still updates, and a create is refused at run time, where FormDefinition.Validate asks for every required field.
         if (!Flag(configuration, "viewOnly")) {
             var missing = resource.Fields.Where(f => f.Required && !f.ReadOnly && !f.HasServerDefault)
-                .Where(f => f.Key != linkField).Where(f => !fields.TryGetValue(f.Key, out var item) || Flag(item, "readOnly") || Alias(item) == "appDisplay").Select(f => f.Key).ToArray();
+                .Where(f => f.Key != linkField).Where(f => !fields.TryGetValue(f.Key, out var item) || Flag(item.Block, "readOnly") || Alias(item.Block) == "appDisplay").Select(f => f.Key).ToArray();
             if (missing.Length > 0) warnings?.Add($"This form cannot create records: the required field{(missing.Length == 1 ? "" : "s")} {string.Join(", ", missing.Select(m => "'" + m + "'"))} {(missing.Length == 1 ? "is" : "are")} not editable in it.");
         }
     }

@@ -37,6 +37,26 @@ public sealed class FormClassTests
     }
 
     [Fact]
+    public void Duplicate_bindings_link_to_every_copy_in_its_own_region()
+    {
+        var validator = new AppBlocksValidator(new FormResourceRegistry([new Resource("tasks", new FormField("title", "Title", "text"))], []));
+        var grid = new AppBlockValues();
+        var first = grid.Field("appText", "title", new { label = "Original title" });
+        var second = grid.Field("appText", "title");
+        var third = grid.Field("appText", "title");
+        var current = grid.Add("appFormRegion", new { heading = "Current role" }).Place("content", first);
+        var proposed = grid.Add("appFormRegion", new { heading = "Proposed role" }).Place("content", second, third);
+        grid.Place(grid.Form("tasks", [current, proposed]));
+        var problem = Assert.Single(validator.EditorProblems(grid.ToJson()));
+        Assert.Equal(Assert.Single(validator.Validate(grid.ToJson())), problem.Message);
+        Assert.Equal(new[] { first.Key, second.Key, third.Key }, problem.Locations.Select(l => l.Key));
+        Assert.Contains("Current role", problem.Locations[0].Label);
+        Assert.Contains("Original title", problem.Locations[0].Label);
+        Assert.Contains("Proposed role", problem.Locations[1].Label);
+        Assert.NotEqual(problem.Locations[1].Label, problem.Locations[2].Label);
+    }
+
+    [Fact]
     public void Form_validation_explains_when_a_saved_interface_still_uses_Block_List()
     {
         var validator = new AppBlocksValidator(new FormResourceRegistry([new Resource("orders")], []));
@@ -72,6 +92,36 @@ public sealed class FormClassTests
         Assert.Equal(6, layout[1]!["areas"]![0]!["items"]![0]!["columnSpan"]!.GetValue<int>());
         Assert.Throws<ArgumentException>(() => new AppBlockValues().Add("appForm").Place("nowhere"));
         Assert.Throws<ArgumentException>(() => new AppBlockValues().Field(AppBlockSchema.RichTextAlias, "customer"));
+    }
+
+    [Fact]
+    public void Generated_layout_items_reference_their_own_default_settings_before_the_editor_opens()
+    {
+        static string Build()
+        {
+            var grid = new AppBlockValues();
+            var field = grid.Field("appText", "customer", id: "customer");
+            var columns = grid.Add("appFormColumns", id: "columns").Place("left", field);
+            grid.Place(grid.Add(AppBlockSchema.FormRegionAlias, id: "first").Place("content", columns),
+                grid.Add(AppBlockSchema.FormRegionAlias, id: "second"));
+            return grid.ToJson();
+        }
+
+        var json = Build();
+        Assert.Equal(json, Build());
+        using var document = JsonDocument.Parse(json);
+        var value = document.RootElement;
+        var items = value.GetProperty("layout").GetProperty("Umbraco.BlockGrid");
+        var columns = items[0].GetProperty("areas")[0].GetProperty("items")[0];
+        var settings = value.GetProperty("settingsData").EnumerateArray().ToDictionary(row => row.GetProperty("key").GetGuid());
+        Assert.Equal(3, settings.Count);
+        foreach (var (item, type) in new[] { (items[0], "appRegionSettings"), (columns, "appColumnsSettings"), (items[1], "appRegionSettings") })
+        {
+            Assert.True(settings.Remove(item.GetProperty("settingsKey").GetGuid(), out var row));
+            Assert.Equal(AppBlockSchema.Key(type), row.GetProperty("contentTypeKey").GetGuid());
+            Assert.Empty(row.GetProperty("values").EnumerateArray());
+        }
+        Assert.Equal(JsonValueKind.Null, columns.GetProperty("areas")[0].GetProperty("items")[0].GetProperty("settingsKey").ValueKind);
     }
 
     [Fact]

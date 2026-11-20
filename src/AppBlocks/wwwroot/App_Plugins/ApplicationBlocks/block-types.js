@@ -71,9 +71,29 @@ export const appBlockTypes = [
     "name": "Form"
   },
   {
+    "alias": "appFormColumns",
+    "key": "3d429154-64cd-c5a5-7dcb-f7a7ad7ddcad",
+    "name": "Form two columns"
+  },
+  {
+    "alias": "appFormFullWidth",
+    "key": "d9095210-699e-ec00-84c0-ba86037bf922",
+    "name": "Form full width"
+  },
+  {
     "alias": "appFormInterface",
     "key": "35e2a656-168d-e61b-fc2b-620ca2f59f99",
     "name": "Form Interface"
+  },
+  {
+    "alias": "appFormRegion",
+    "key": "9fda4545-d1b2-40db-f588-5bb4da76c018",
+    "name": "Form region"
+  },
+  {
+    "alias": "appFormThreeColumns",
+    "key": "424a57d3-9f88-e56c-7ff1-4c80b4e8b00a",
+    "name": "Form three columns"
   },
   {
     "alias": "appFormsContainer",

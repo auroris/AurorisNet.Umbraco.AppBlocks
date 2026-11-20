@@ -84,7 +84,7 @@ public static class AttachmentEndpoints
         return Results.Json(new {
             owner = Owner(scope),
             canWrite = scope.CanWrite,
-            canAdd = scope.CanAdd,
+            canAdd = scope.CanAdd && scope.Block!.Limits.AllowsUploads,
             purposes = scope.Block!.Purposes,
             maxFileSize = scope.Block.Limits.MaxFileSize,
             accept = scope.Block.Limits.Accept,
