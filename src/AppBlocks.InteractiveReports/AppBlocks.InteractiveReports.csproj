@@ -36,9 +36,9 @@
     <ProjectReference Include="$(InteractiveReportsRoot)/src/InteractiveReport.Client.FileDownload/InteractiveReport.Client.FileDownload.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseInteractiveReportsSource)' != 'true'">
-    <PackageReference Include="AurorisNet.InteractiveReports.AspNetCore" Version="1.0.2" />
-    <PackageReference Include="AurorisNet.InteractiveReports" Version="1.0.2" />
-    <PackageReference Include="AurorisNet.InteractiveReports.Client.FileDownload" Version="1.0.2" />
+    <PackageReference Include="AurorisNet.InteractiveReports.AspNetCore" Version="1.0.3" />
+    <PackageReference Include="AurorisNet.InteractiveReports" Version="1.0.3" />
+    <PackageReference Include="AurorisNet.InteractiveReports.Client.FileDownload" Version="1.0.3" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />

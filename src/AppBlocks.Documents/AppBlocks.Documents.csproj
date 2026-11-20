@@ -14,7 +14,7 @@
     <ProjectReference Include="../AppBlocks/AppBlocks.csproj" />
     <PackageReference Include="HtmlAgilityPack" Version="1.13.1" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.15" />
-    <PackageReference Include="AurorisNet.Pressroom.Client" Version="1.3.0" />
+    <PackageReference Include="AurorisNet.Pressroom.Client" Version="1.3.2" />
     <Using Include="Microsoft.AspNetCore.Builder" />
     <Using Include="Microsoft.AspNetCore.Hosting" />
     <Using Include="Microsoft.AspNetCore.Http" />

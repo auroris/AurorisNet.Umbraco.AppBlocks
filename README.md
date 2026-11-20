@@ -67,7 +67,7 @@ AppBlocks runs with no configuration. [Adding AppBlocks to a site](https://githu
 
 | Umbraco | Supported releases | Runtime |
 |---|---|---|
-| 18 | <!-- umbraco-releases 18 -->18.3.1<!-- /umbraco-releases --> | .NET 10 |
+| 18 | <!-- umbraco-releases 18 -->18.3.1 to 18.3.2<!-- /umbraco-releases --> | .NET 10 |
 
 The packages reference `Umbraco.Cms` 18.3.1, the release the tests run on.
 
