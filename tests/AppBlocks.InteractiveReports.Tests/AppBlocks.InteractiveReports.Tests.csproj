@@ -7,7 +7,7 @@
     <PackageReference Include="xunit.v3" Version="4.0.3" />
     <ProjectReference Include="../../src/AppBlocks.InteractiveReports/AppBlocks.InteractiveReports.csproj" />
     <!-- The drivers AppBlocks leaves to a site. SQLite and SQL Server come through Umbraco.Cms. -->
-    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Npgsql" Version="10.0.4" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.401" />
     <Using Include="Xunit" />
     <Compile Include="../AppBlocks.Tests/BlockPages.cs" Link="BlockPages.cs" />
