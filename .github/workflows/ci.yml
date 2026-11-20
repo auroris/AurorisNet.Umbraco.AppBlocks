@@ -1,7 +1,7 @@
 name: CI
 
 # Tests each pull request on the Umbraco release in Directory.Build.props, and merges a Dependabot update that passes.
-# An update of a package a project under src references then starts the Release workflow.
+# An update of a package a project under src references ships in the next weekly release.
 on:
   pull_request:
   workflow_dispatch:
@@ -61,6 +61,5 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     steps:
       - uses: auroris/AurorisNet.Build/actions/dependabot-release@main

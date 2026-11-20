@@ -115,7 +115,7 @@ The three test projects and `tests/clean-install/Invoke-CleanInstall.ps1` togeth
 
 ## Releases
 
-AppBlocks follows Umbraco. `umbraco-releases.yml` tests each new Umbraco 18 release with the three test projects. When they pass, it commits the release to `UmbracoReleases` in `Directory.Build.props` and starts `release.yml`. Dependabot covers the other packages.
+AppBlocks follows Umbraco. `umbraco-releases.yml` tests each new Umbraco 18 release with the three test projects. When they pass, it commits the release to `UmbracoReleases` in `Directory.Build.props`. Dependabot covers the other packages. Each week `weekly-release.yml` publishes the new Umbraco releases and the merged updates as one release.
 
 Versions are `MAJOR.MINOR.PATCH` with a prerelease series: `0.1.0-alpha.1`, then `0.1.0-alpha.2`. The four packages publish together under one version. The first release is started by hand, because there is no release tag to raise yet.
 
