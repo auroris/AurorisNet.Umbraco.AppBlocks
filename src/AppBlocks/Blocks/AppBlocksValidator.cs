@@ -6,6 +6,7 @@ using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Extensions;
 using AppBlocks.AntiSpam;
+using AppBlocks.AccountPickers;
 using AppBlocks.Attachments;
 using AppBlocks.DataSources;
 using AppBlocks.Forms;
@@ -113,7 +114,8 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                     return;
                 }
                 if (!visited.Add(key)) throw new InvalidOperationException("Blocks cannot be repeated or cyclic.");
-                if (Plugin(alias) is { } plugin) plugin.Validate(BlockValueSets.Element(block), errors);
+                if (Plugin(alias) is AccountPickerBlock) errors.Add("Place the account picker inside its form.");
+                else if (Plugin(alias) is { } plugin) plugin.Validate(BlockValueSets.Element(block), errors);
                 else if (alias == AppBlockSchema.AttachmentsAlias) Attachments(block, null, errors);
                 else if (alias == AppBlockSchema.ScheduleAlias) Schedule(block, errors);
                 else if (alias == AppBlockSchema.TabularAlias) Tabular(block, null, errors);
@@ -176,6 +178,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         var links = new List<(string Binding, string Template, BlockLocation Target)>();
         var duplicates = new Dictionary<string, List<BlockLocation>>(StringComparer.Ordinal);
         var actionBlocks = new List<BlockLocation>();
+        var pickers = new List<(AccountPickerSettings Settings, BlockLocation Location)>();
         var checkBlocks = new List<BlockLocation>();
         void Visit(IBlockLayoutItem item, int depth, string parent, int position) {
             var key = item.ContentKey;
@@ -206,6 +209,10 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                     errors.Add($"Select a published list of values for '{binding}'.");
                 if (alias == "appDisplay" && Text(child, AppBlockField.LinkTemplateAlias).Trim() is { Length: > 0 } template) links.Add((binding, template, target));
             }
+            else if (Plugin(alias) is AccountPickerBlock picker) {
+                try { pickers.Add((picker.ReadSettings(key => Text(child, key).Trim()), target)); }
+                catch (AccountPickerException error) { errors.Add(error.Message); }
+            }
             else if (Plugin(alias) is { } plugin) plugin.Validate(BlockValueSets.Element(child), errors);
             else if (alias is not ("appForm" or "appFieldset" or "appActions") && !AppBlockSchema.LayoutAliases.Contains(alias) && !AppBlockSchema.ContentAliases.Contains(alias)) errors.Add("The form contains an unsupported block.");
             Locate(start, errors.Count, locations, target);
@@ -213,6 +220,18 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             foreach (var nested in BlockValueSets.Children(item)) Visit(nested, depth + 1, target.Label, ++index);
         }
         Visit(layout, 0, "", 1);
+        var pickerFields = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (settings, target) in pickers) {
+            var start = errors.Count;
+            try {
+                settings.CheckBindings(pickerFields,
+                    field => fields.TryGetValue(field, out var item) && Alias(item.Block) == "appText" && !Flag(item.Block, "readOnly")
+                        && resource.Fields.Any(f => f.Key == field && f.Kind == "text" && !f.ReadOnly),
+                    field => fields.ContainsKey(field) && resource.Fields.Any(f => f.Key == field && f.Kind == "text" && f.ReadOnly));
+            }
+            catch (AccountPickerException error) { errors.Add(error.Message); }
+            Locate(start, errors.Count, locations, target);
+        }
         foreach (var (binding, copies) in duplicates) {
             locations?.Add(errors.Count, copies);
             errors.Add($"Field '{binding}' appears more than once.");

@@ -1,6 +1,11 @@
 // Element identities from AppBlocks' owned schema; also used to preview nested forms. BlockPreviewTests keeps it in step with the schema.
 export const appBlockTypes = [
   {
+    "alias": "appUmbracoAccountPicker",
+    "key": "56d572c9-2339-06cc-1ce8-4276cd9eeb7b",
+    "name": "Umbraco Account Picker"
+  },
+  {
     "alias": "appActions",
     "key": "a6f2bd72-53a0-41ab-3e1d-21fbb2c25edb",
     "name": "Form actions"

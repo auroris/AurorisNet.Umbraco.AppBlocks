@@ -98,6 +98,32 @@ The browser runtime formats dates, times and file sizes for the page's language,
 
 | Id | English |
 | --- | --- |
+| `pickerFind` | Find account |
+| `pickerSelectedAccount` | Selected account |
+| `pickerClear` | Clear selection |
+| `pickerManual` | Enter manually |
+| `pickerSignIn` | Sign in to choose an account. |
+| `pickerChecking` | Checking the selection… |
+| `pickerSelected` | {name} selected. |
+| `pickerCached` | Using a recent cached result. |
+| `pickerUnavailable` | This selection could not be validated. Try again. |
+| `pickerCleared` | Account cleared. |
+| `pickerUnlinked` | Directory link cleared. Enter the person’s details. |
+| `pickerAllowPopup` | Allow popups for this site, then try again. |
+| `pickerQuery` | Name or username |
+| `pickerSearch` | Search |
+| `pickerResults` | Matching accounts |
+| `pickerEmpty` | No matching accounts. Try another name. |
+| `pickerOpenFromForm` | Open this search from the form. |
+| `pickerMinLength` | Enter at least {count} characters to search. |
+| `pickerSearching` | Searching… |
+| `pickerClosed` | The form has closed. Reopen it to choose an account. |
+| `pickerLimit` | Showing up to {count} matches. Refine your search if needed. |
+| `pickerOneMatch` | One match. Select a result. |
+| `pickerMatches` | {count} matches. Select a result. |
+| `pickerSearchFailed` | The search could not be completed. Try again. |
+| `pickerMember` | Member |
+| `pickerUser` | Backoffice User |
 | `loading` | Loading… |
 | `saving` | Saving… |
 | `deleting` | Deleting… |

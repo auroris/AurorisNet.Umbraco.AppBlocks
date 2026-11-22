@@ -68,8 +68,9 @@ public sealed class ApplicationAccessPolicy(IUserService users, IOptions<Adminis
     // Member and backoffice IDs belong to separate account stores. Keep their browser state and
     // submission receipts separate, preserving existing member keys. An anonymous visitor has no
     // account and so no key: this is empty for them, which must never be used as anyone's identity.
+    internal const string BackOfficeKeyPrefix = "backoffice:";
     public static string UserKey(ClaimsPrincipal user) =>
-        (IsBackOfficeIdentity(user) ? "backoffice:" : "") + user.FindFirstValue(ClaimTypes.NameIdentifier);
+        (IsBackOfficeIdentity(user) ? BackOfficeKeyPrefix : "") + user.FindFirstValue(ClaimTypes.NameIdentifier);
 
     /// <summary>
     /// The approved, not locked-out User a backoffice principal names, read from the store so its

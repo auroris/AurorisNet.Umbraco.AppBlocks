@@ -123,6 +123,14 @@
     },
     {
       "type": "blockEditorCustomView",
+      "alias": "AppBlocks.Preview.appUmbracoAccountPicker",
+      "name": "Umbraco Account Picker preview",
+      "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
+      "forContentTypeAlias": "appUmbracoAccountPicker",
+      "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "blockEditorCustomView",
       "alias": "AppBlocks.Preview.appActions",
       "name": "Form actions preview",
       "element": "/App_Plugins/ApplicationBlocks/block-preview.js",

@@ -2,6 +2,33 @@
 // it changes into <script type="application/json" data-appblocks-strings>, read once here; an id it leaves out, or a value
 // that is not text, keeps the English. {name} stands for a value filled in when the text is shown.
 const strings = {
+    pickerFind: "Find account",
+    pickerSelectedAccount: "Selected account",
+    pickerClear: "Clear selection",
+    pickerManual: "Enter manually",
+    pickerSignIn: "Sign in to choose an account.",
+    pickerChecking: "Checking the selection…",
+    pickerSelected: "{name} selected.",
+    pickerCached: "Using a recent cached result.",
+    pickerUnavailable: "This selection could not be validated. Try again.",
+    pickerCleared: "Account cleared.",
+    pickerUnlinked: "Directory link cleared. Enter the person’s details.",
+    pickerAllowPopup: "Allow popups for this site, then try again.",
+    pickerQuery: "Name or username",
+    pickerSearch: "Search",
+    pickerResults: "Matching accounts",
+    pickerEmpty: "No matching accounts. Try another name.",
+    pickerOpenFromForm: "Open this search from the form.",
+    pickerMinLength: "Enter at least {count} characters to search.",
+    pickerSearching: "Searching…",
+    pickerClosed: "The form has closed. Reopen it to choose an account.",
+    pickerLimit: "Showing up to {count} matches. Refine your search if needed.",
+    pickerOneMatch: "One match. Select a result.",
+    pickerMatches: "{count} matches. Select a result.",
+    pickerSearchFailed: "The search could not be completed. Try again.",
+    pickerMember: "Member",
+    pickerUser: "Backoffice User",
+    cancel: "Cancel",
     loading: "Loading…",
     saving: "Saving…",
     deleting: "Deleting…",
@@ -102,11 +129,17 @@ const strings = {
     rowsSaveFailedReload: "The rows could not be saved. Reload the page and try again.",
     nothingToSave: "Nothing to save.",
 };
-try {
-    const overrides = JSON.parse(document.querySelector("script[data-appblocks-strings]")?.textContent || "{}") ?? {};
-    for (const [id, text] of Object.entries(overrides)) if (Object.hasOwn(strings, id) && typeof text === "string") strings[id] = text;
-} catch { /* A table that is not JSON leaves every text in English rather than stop the blocks. */ }
-export const t = (id, values = {}) => strings[id].replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match);
+// A picker popup takes its interface language from the page that opened it.
+export function textForPage(page) {
+    let overrides;
+    try { overrides = JSON.parse(page?.querySelector("script[data-appblocks-strings]")?.textContent || "{}"); }
+    catch { /* Use the shipped English if the page's overrides are invalid. */ }
+    return (id, values = {}) => {
+        const text = typeof overrides?.[id] === "string" ? overrides[id] : strings[id];
+        return text.replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match);
+    };
+}
+export const t = textForPage(globalThis.document);
 // Dates, times and sizes follow the page's language, as the server's own text does, or the browser's when the page names
 // none or one the browser does not know.
 const locale = (() => { try { return Intl.getCanonicalLocales(document.documentElement.lang || [])[0]; } catch { return undefined; } })();

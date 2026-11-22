@@ -91,6 +91,7 @@ The packages reference `Umbraco.Cms` 18.3.1, the release the tests run on.
 | [Display value](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/display-value.md) | Read-only values, and values shown as links |
 | [Shuttle field](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/shuttle.md) | Ordered selections stored as one line of CSV |
 | [Color picker](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/color-picker.md) | Hex color fields |
+| [Umbraco Account Picker](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/account-picker.md) | Select Members and backoffice Users in forms and implement another account source |
 | [Schedule block](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/schedule.md) | Rows, bars and markers from two data sources |
 | [Localisation](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/localisation.md) | The blocks' texts in the site's languages, and every text id |
 | [Worked example](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/activity-schedule-example.md) | A multi-tenant activity schedule: pages, tables, data sources, blocks and C# |

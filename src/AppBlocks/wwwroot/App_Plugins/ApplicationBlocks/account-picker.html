@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-picker-text="pickerFind">Find account</title>
+    <link rel="stylesheet" href="account-picker.css">
+</head>
+<body class="app-directory-page">
+    <main class="app-directory-window">
+        <header>
+            <h1 data-picker-text="pickerFind">Find account</h1>
+        </header>
+        <form data-search-form>
+            <label for="person-query" data-picker-text="pickerQuery">Name or username</label>
+            <div class="app-directory-search">
+                <input id="person-query" type="search" autocomplete="off" maxlength="256" aria-describedby="search-help">
+                <button type="submit" data-picker-text="pickerSearch">Search</button>
+            </div>
+            <p id="search-help">Enter at least 2 characters.</p>
+        </form>
+        <p data-search-status role="status" aria-live="polite"></p>
+        <ul data-results data-picker-label="pickerResults" aria-label="Matching accounts"></ul>
+        <footer><button type="button" data-cancel data-picker-text="cancel">Cancel</button></footer>
+    </main>
+    <script type="module" src="account-picker-search.js"></script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 using static AppBlocks.ServiceDecoration;
 using AppBlocks.AntiSpam;
+using AppBlocks.AccountPickers;
 using AppBlocks.Api;
 using AppBlocks.Connections;
 using Microsoft.AspNetCore.Authorization;
@@ -63,6 +64,10 @@ public static class AppBlocksExtensions
         services.AddScoped<AppPageAccess>();
         services.AddScoped<FormResourceRegistry>();
         services.AddScoped<FormSubmissionService>();
+        services.AddSingleton<IAppBlockPlugin, UmbracoAccountPickerBlock>();
+        services.AddKeyedScoped<IAccountPickerProvider, UmbracoAccountPicker>(UmbracoAccountPickerBlock.AliasName);
+        services.AddScoped<AccountPickerLookup>();
+        services.AddScoped<IFormSubmissionProcessor>(AccountPickerForm.FromServices);
         // The C# folder: compiled at run time only when the site brings a compiler, and read by the registries beside registered classes.
         services.AddOptions<Code.CodeOptions>().Bind(builder.Config.GetSection(Code.CodeOptions.Section));
         services.AddSingleton<Code.CodeCompilation>();
@@ -109,6 +114,8 @@ public static class AppBlocksExtensions
     public static void MapAppBlocks(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapApplicationForms();
+        endpoints.MapGet(AppBlocksRoutes.Under(endpoints.ServiceProvider.GetService<IConfiguration>(), "account-picker/{pageKey:guid}/{blockKey:guid}"),
+            (HttpContext http, Guid pageKey, Guid blockKey, AccountPickerLookup lookup, CancellationToken ct) => lookup.GetAsync(http, pageKey, blockKey, ct));
         endpoints.MapAttachments();
         endpoints.MapTabular();
         endpoints.MapApiEndpoints();

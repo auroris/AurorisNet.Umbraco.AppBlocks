@@ -1,0 +1,31 @@
+@using System.Text.Json
+@using AppBlocks.AccountPickers
+@using AppBlocks.Blocks
+@using Umbraco.Extensions
+@model AppBlockView
+@inject IEnumerable<IAppBlockPlugin> Plugins
+@inject AppBlocksText Text
+@inject AppPageAssets Assets
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@{
+    if (Model.Form is null) { return; }
+    var alias = Model.Block.Content.ContentType.Alias;
+    var settings = Plugins.OfType<AccountPickerBlock>().Single(p => p.Alias == alias).ReadSettings(Model.Block.Content);
+    var showCurrentName = settings.NameField.Length == 0 || Model.Form.Fields.Any(f =>
+        f.Content.Value<string>("field") == settings.NameField && AppBlockField.IsHidden(f.Content));
+    if (Model.Anonymous && !settings.Permits(null)) {
+        <p role="status">@Text["pickerSignIn", "Sign in to choose an account."]</p>
+        return;
+    }
+    var endpoint = Context.Request.PathBase + AppBlocks.AppBlocksRoutes.Under(Configuration, $"account-picker/{Model.Page.Key}/{Model.Block.ContentKey}");
+    if (Model.Form.Culture is { } culture) endpoint += "?appCulture=" + Uri.EscapeDataString(culture);
+    var options = JsonSerializer.Serialize(new { settings.IdentityField, settings.NameField, settings.AllowManualEntry, settings.AllowsEmpty,
+        settings.FieldMappings, settings.FallbackFields, settings.CompactUpperFields }, JsonSerializerOptions.Web);
+    Assets.AddStylesheet(Url.Content("~/App_Plugins/ApplicationBlocks/account-picker.css"));
+}
+<div class="app-people" data-app-account-picker data-block-alias="@alias" data-endpoint="@endpoint" data-settings="@options">
+    @if (showCurrentName) { <input type="text" data-current-name readonly aria-label="@Text["pickerSelectedAccount", "Selected account"]" /> }
+    <button type="button" data-find>@(string.IsNullOrWhiteSpace(settings.Label) ? Text["pickerFind", "Find account"] : settings.Label)</button>
+    <button type="button" data-manual hidden>@(settings.AllowManualEntry ? Text["pickerManual", "Enter manually"] : Text["pickerClear", "Clear selection"])</button>
+    <span data-status role="status" aria-live="polite"></span>
+</div>
