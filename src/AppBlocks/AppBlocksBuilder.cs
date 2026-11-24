@@ -49,6 +49,21 @@ public sealed class AppBlocksBuilder
         return this;
     }
 
+    internal HashSet<Guid> SiteOwnedDefinitions { get; } = [];
+
+    /// <summary>
+    /// Leaves a package's definition to the site once it is installed, for a host that keeps a version of its own, such as the Forms
+    /// container grid with the site's allowed blocks, and imports it with its other definitions. The installer creates the definition
+    /// when it is missing and never resets it, at startup or in a Reinstall, and the Definitions screen leaves it out of what it
+    /// reports as changed.
+    /// </summary>
+    public AppBlocksBuilder SiteOwnsDefinition(params Guid[] keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        foreach (var key in keys) SiteOwnedDefinitions.Add(key);
+        return this;
+    }
+
     internal List<Setup.BlockGridAllowance> BlockGridAllowances { get; } = [];
 
     /// <summary>

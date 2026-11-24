@@ -14,7 +14,7 @@ At startup AppBlocks installs its element types and data types through Umbraco's
 - Automatic installation follows `Umbraco:CMS:PackageMigration:RunSchemaAndContentMigrations`.
 - The types sit under **AppBlocks** folders in the Data Types and Document Types trees, with subfolders for Forms, Data sources and Interactive Reports.
 
-**Settings → AppBlocks → Definitions** shows which package definitions are installed. **Reinstall** resets every definition to the installed package, and **Uninstall** removes them all. [Developing AppBlocks](developing.md#who-owns-the-definitions) describes both.
+**Settings → AppBlocks → Definitions** shows which package definitions are installed, and which of them the installed version of the package has changed since. **Reinstall** resets every definition to the installed package, and **Uninstall** removes them all. [Developing AppBlocks](developing.md#who-owns-the-definitions) describes both.
 
 Install `AurorisNet.Umbraco.AppBlocks.InteractiveReports` for interactive reports and `AurorisNet.Umbraco.AppBlocks.Documents` for documents. Each depends on AppBlocks and registers itself. See the [Interactive Reports](interactive-reports.md) and [Documents](documents.md) guides.
 
@@ -225,6 +225,7 @@ AppBlocks runs with no configuration. `src/AppBlocks/appsettings-schema.json` de
 | `AppBlocks:AdministratorGroups` | none | Backoffice User Group aliases admitted beside Umbraco's Administrators to AppBlocks' Settings screens, the Backing Classes editor, and the data source and API endpoint **Test** actions. Umbraco's section and node permissions still apply. |
 | `AppBlocks:CodeDirectory` | `AppBlocks/Code` | The [Backing Classes](csharp-editor.md) folder. |
 | `AppBlocks:DataRoot` | the content root | The folder whose `App_Data` holds AppBlocks' settings files and its fallback database files. |
+| `AppBlocks:Definitions:UpdateAtStartup` | `false` | Whether a start resets each package definition that the installed version changed. See [Definitions a new version changes](developing.md#definitions-a-new-version-changes). |
 | `AppBlocks:Forms:MaxBodySize` | `1048576` | The largest form submission, in bytes. A larger one is answered with 413. |
 | `AppBlocks:DataSources:CommandTimeoutSeconds` | `30` | How long a data source statement may run. `0` waits without limit. A statement that runs out of time is answered with 503. |
 | `AppBlocks:DataSources:MaxChanges` | `200` | The most row changes in one tabular save, or in one block's rows of a form's save. |
@@ -435,6 +436,60 @@ string json = forms.ToJson();
 builder.AddAppBlocks(appBlocks => appBlocks.AllowInBlockGrid("Main content", AppBlockSchema.FormsContainerAlias));
 ```
 
-`AllowInBlockGrid(blockGridDataTypeName, elementTypeAlias, columnSpan, rowSpan, areaKey)` adds the element to the named Block Grid data type once both exist: at startup, after Umbraco finishes installation, and when the element type is saved. Without `areaKey` the block may sit at the grid's root and in any area. With one, named by key or alias, it may sit in that area only. An element the grid already lists keeps the settings the site gave it.
+`AllowInBlockGrid(blockGridDataTypeName, elementTypeAlias, columnSpan, rowSpan, areaKey)` adds the element to the named Block Grid data type once both exist: at startup, after Umbraco finishes installation, and when the element type is saved. Without `areaKey` the block may sit at the grid's root and in any area. With one, named by key or alias, it may sit in that area only. An element the grid already lists keeps the settings the site gave it. A host that puts a Block Grid data type back at a point of its own, such as an import of its saved definitions, applies the registrations again with `BlockGridAllowances.ApplyAsync`.
 
 **Page-wide CSS and JavaScript.** A site whose document types carry page-wide CSS and JavaScript in properties hands them to the blocks' asset writer from its layout, with `AppPageAssets.RegisterPage(page, navigation, published, httpContext, cssAlias, scriptAlias)`. The code of the page and of each ancestor, root first, comes before the CSS and JavaScript blocks' own. The aliases default to `css` and `javascript`.
+
+### Pages that change between releases
+
+An application that installs pages from code, and lets editors change them afterwards, carries those pages from one release to the next with `ContentStepRunner`. A new site gets every page as the current build writes it. A site that an earlier build installed runs each change it has not run yet, once, in order.
+
+```csharp
+public sealed class NoticePages(IServiceScopeFactory scopes) : INotificationAsyncHandler<UmbracoApplicationStartedNotification>
+{
+    public async Task HandleAsync(UmbracoApplicationStartedNotification notification, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        // The package's definitions first, as the handlers of this notification run in no set order.
+        await scope.ServiceProvider.GetRequiredService<SchemaInstaller>().EnsureAsync(ct);
+        var contents = scope.ServiceProvider.GetRequiredService<IContentService>();
+        var patcher = scope.ServiceProvider.GetRequiredService<ContentPatcher>();
+        await scope.ServiceProvider.GetRequiredService<ContentStepRunner>().RunAsync("Notices",
+            install: _ => { NoticeInstaller.InstallPages(contents); return Task.CompletedTask; },
+            steps: [
+                new ContentStep("0001-v1.0.1-lead-time-notice", _ =>
+                {
+                    patcher.Patch(contents.GetById(NoticesPageKey)!, "blocks", NoticeBlocks.WithLeadTimeNotice);
+                    return Task.CompletedTask;
+                }),
+            ], ct);
+    }
+}
+```
+
+| Site | What `RunAsync` does |
+|---|---|
+| The plan has installed nothing here | Runs `install`, and records the site at the last step. `install` writes the pages as this build has them, with the result of every step in them |
+| An earlier build installed the pages | Runs each step after the site's position, in order |
+| The site is at the last step | Nothing |
+
+The plan is the application's name for its content, and it stays the same across releases. The site's position is one entry in Umbraco's key-value table, `AppBlocks:ContentSteps:<plan>`.
+
+Name each step with the next number, the release that ships it and the change, as [run-once scripts](connections.md#a-schema-that-changes-between-releases) are named. Steps run in the ordinal order of their names, and `RunAsync` refuses a list whose names are out of order. A shipped step keeps its name and what it does, and stays in the list, so a site that skipped releases runs the steps of each.
+
+Each step runs inside one Umbraco scope, together with the record that it ran:
+
+- **A step that throws stops the run** with a `ContentStepException`. Its changes to Umbraco's database roll back, the site stays at the step before, and the next start runs the step again.
+- **What a step writes elsewhere stays written**, such as rows in the application's own database. Write those so that a second run changes nothing.
+- **A site that another build took further is left alone.** When the site has run a step that sorts after the build's last one, `RunAsync` runs nothing and throws a `ContentStepException` with `SiteFromAnotherBuild` set. Install that build, or restore the backup of Umbraco's database taken before it was installed.
+- **`RunAsync` opens each step's scope itself**, so call it where no Umbraco scope is open, as startup code is.
+
+`install` runs outside those scopes, so a page it publishes is in the published cache for the pages it publishes next. When `install` throws, nothing is recorded and the next start runs it again. Write it to find what it already created, as an installer that looks its pages up by key does.
+
+**Changing a page an editor may have changed.** `ContentPatcher.Patch(content, property, change)` applies a change to the stored value of one property, such as the JSON of a page's blocks. `change` takes the value and returns the new one, or null for a value that already has the change. The published version takes the change and is published again. A draft that an editor saved since the last publish stays a draft and takes the same change, so the editor's unpublished work is neither published nor lost. Pass `culture` for a document type that varies by culture, and `name` to rename the node. `Patch` answers false when both versions already were as the change leaves them.
+
+**A site installed before its application had steps.** `Record(plan, "")` marks the site's content as installed. `RunAsync` then runs the steps on it and leaves `install` alone.
+
+**Nodes with no editor's changes to keep** need no steps. [`OwnedNodeInstaller`](#nodes-a-package-generates) rewrites them whenever their definition changes.
+
+**Keeping the two routes equal.** A new site reaches its pages through `install` and an updated one through the steps, so a step and the matching change to `install` are written together. `AppBlocks.Testing` lists a site's pages as text and compares the listing with a file under source control, for a new installation and for a site updated from the previous release. See [Content checks](../src/AppBlocks.Testing/README.md#content-checks).

@@ -88,7 +88,11 @@ dotnet run --project tests/AppBlocks.InteractiveReports.Tests -- -noLogo
 
 `src/AppBlocks.Testing` holds the HTTP clients a site's tests use to drive the forms, attachments, tabular, report and paper-report endpoints, with the helpers for running Umbraco in a test process. `AppBlocks.Tests` references the project and tests the clients against the endpoints.
 
+It also holds `SchemaCheck` and `SchemaListing`, which an application's tests run on the scripts of its application database. `SchemaCheckTests` covers them on SQLite and on LocalDB.
+
 - Change a client in the same commit as the endpoint protocol it drives.
+- Change `SchemaListing` only with care for the applications that keep its listings under source control: a change to its output makes each of them write its listing again.
+- The same holds for `ContentListing`, which lists a site's documents and their blocks for `ContentCheck` to compare with a file. `ContentListingTests` covers both.
 - Keep the package free of any test framework reference, because sites test with different runners.
 
 ## Uppy assets
@@ -119,7 +123,32 @@ Saved block values are read through Umbraco's Block Grid, Block List and Single 
 
 ## Who owns the definitions
 
-Each package’s `Schema/` folder defines its current element types, data types and document types. Startup installs missing definitions through Umbraco’s package importer. To apply edited definitions on an existing installation, use Reinstall.
+Each package’s `Schema/` folder defines its current element types, data types and document types. Startup installs missing definitions through Umbraco’s package importer. A definition that a new version of the package changes reaches an existing site through Reinstall, or at startup on a site that asks for it.
+
+### Definitions a new version changes
+
+The installer records each definition it creates or resets. The record is the SHA-256 of the definition as the package had it, kept in Umbraco's key-value table under `AppBlocks:Definition:<key>`. A definition whose file differs from its record was changed by a version of the package installed since.
+
+| Where | What it shows or does |
+|---|---|
+| Startup | Logs a warning that names the changed definitions, and leaves them as the site has them |
+| **Settings → AppBlocks → Definitions** | Shows how many definitions of each package the installed version changed, with their names |
+| **Reinstall** | Resets every definition and records it |
+| Startup with `AppBlocks:Definitions:UpdateAtStartup` set to `true` | Resets the changed definitions and records them. A definition whose record matches stays as the site has it |
+
+Set `AppBlocks:Definitions:UpdateAtStartup` on a site where the application owns the definitions, so that a release applies them with no step in the backoffice. A reset does to one definition what Reinstall does to all: content keeps its values by property alias, and the values of a property the package no longer has are removed. The log names each definition a start resets.
+
+A site installed before the installer kept records has none. Startup counts those definitions and logs the count. Reinstall records them, and so does the first start with `UpdateAtStartup`, which resets each of them once.
+
+`SchemaInstaller.UpdateAsync` does the same from code, for a host that installs definitions at a point of its own choosing.
+
+**A definition the site keeps its own version of.** A host that imports its own version of a package's definition, such as the Forms container grid with the site's allowed blocks, registers the definition's key:
+
+```csharp
+builder.AddAppBlocks(appBlocks => appBlocks.SiteOwnsDefinition(formsContainerGridKey));
+```
+
+The installer creates that definition when it is missing and otherwise leaves it to the site, at startup and in a Reinstall, whose result says so. The Definitions screen leaves it out of the changed definitions.
 
 ### Reinstall
 

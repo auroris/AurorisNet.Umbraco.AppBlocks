@@ -1,5 +1,7 @@
 using System.Net;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core;
@@ -20,14 +22,38 @@ namespace AppBlocks.Setup;
 /// Installs missing package definitions from the current schema for a fresh site, and on request resets every definition to
 /// the schema or removes them all. Automatic installation respects Umbraco’s package schema setting.
 /// </summary>
+/// <remarks>
+/// Each definition the installer creates or resets is recorded in Umbraco's key-value table, under <c>AppBlocks:Definition:&lt;key&gt;</c>,
+/// as the SHA-256 of the definition the build had. A later build whose definition differs from the record has changed it: a start
+/// says so and leaves the site's definition alone, or resets it when <see cref="UpdateSetting"/> is true.
+/// </remarks>
 public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeService dataTypes,
     IContentTypeContainerService contentFolders, IDataTypeContainerService dataFolders,
     PropertyEditorCollection editors, IConfigurationEditorJsonSerializer serializer, IPackagingService packaging,
     ICoreScopeProvider scopes, ILogger<SchemaInstaller> logger, IEnumerable<AppBlocksSchema> schemas,
     SchemaProperties properties, IOptions<PackageMigrationSettings> migrationSettings, AppCaches caches, IIdKeyMap keys, IKeyValueService keyValues,
     IMediaTypeService mediaTypes, IMemberTypeService memberTypes,
-    SchemaUsage usage)
+    SchemaUsage usage, IConfiguration configuration, Connections.AppBlocksBuilder registrations)
 {
+    /// <summary>The setting that has a start reset each definition whose record differs from this build's. It is false unless the site sets it.</summary>
+    public const string UpdateSetting = "AppBlocks:Definitions:UpdateAtStartup";
+
+    /// <summary>The prefix of the key-value entries that record each definition as the installer last wrote it on this site.</summary>
+    public const string RecordPrefix = "AppBlocks:Definition:";
+
+    /// <summary>The key-value entry that records one definition.</summary>
+    public static string RecordKey(Guid definition) => RecordPrefix + definition.ToString("D");
+
+    /// <summary>The SHA-256 of a definition as its package has it, whatever the indentation and line endings of its file.</summary>
+    public static string Fingerprint(XElement definition)
+    {
+        var text = new StringBuilder();
+        // Line breaks inside a value are written as they were read, so the same file gives the same fingerprint on every platform.
+        using (var writer = System.Xml.XmlWriter.Create(text, new System.Xml.XmlWriterSettings { OmitXmlDeclaration = true, NewLineHandling = System.Xml.NewLineHandling.None }))
+            definition.WriteTo(writer);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
+    }
+
     /// <summary>The key-value entry that <see cref="UninstallAsync"/> sets, so that no start installs the definitions again until <see cref="ReinstallAsync"/>.</summary>
     public const string UninstalledKey = "AppBlocks.Definitions.Uninstalled";
 
@@ -36,7 +62,10 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
     /// <summary>Whether <see cref="UninstallAsync"/> removed the definitions and nothing has installed them since.</summary>
     public bool Uninstalled => keyValues.GetValue(UninstalledKey) == "true";
 
-    /// <summary>Installs what is missing. After an uninstall it does nothing, and says so, until a reinstall.</summary>
+    /// <summary>
+    /// Installs what is missing, and logs which installed definitions this build has changed since. When <see cref="UpdateSetting"/>
+    /// is true it resets those as <see cref="UpdateAsync"/> does. After an uninstall it does nothing, and says so, until a reinstall.
+    /// </summary>
     public async Task EnsureAsync(CancellationToken ct)
     {
         if (!migrationSettings.Value.RunSchemaAndContentMigrations) return;
@@ -45,17 +74,30 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
             logger.LogInformation("The AppBlocks definitions were uninstalled from this site. Nothing installs until they are reinstalled from Settings > AppBlocks > Definitions.");
             return;
         }
-        await RunAsync(() => InstallAsync(force: false, ct), ct);
+        var mode = configuration.GetValue<bool>(UpdateSetting) ? Reset.Changed : Reset.None;
+        await RunAsync(() => InstallAsync(mode, ct), ct);
+    }
+
+    /// <summary>
+    /// Installs what is missing and resets each installed definition whose record differs from this build's: one the build changed
+    /// since the installer last wrote it here, and one installed before records were kept. A definition whose record matches stays
+    /// as the site has it, with any change an administrator made to it. After an uninstall it does nothing, and says so in a note.
+    /// </summary>
+    public async Task<SchemaChange> UpdateAsync(CancellationToken ct)
+    {
+        if (Uninstalled) return new SchemaChange(0, 0, 0, ["The definitions were uninstalled from this site, so nothing was updated."]);
+        return await RunAsync(() => InstallAsync(Reset.Changed, ct), ct);
     }
 
     /// <summary>
     /// Resets every definition to the schema, in place and by key, and installs what is missing: names, properties, allowed children,
     /// data type settings and folders. Content of these types keeps its values, except those of a property the schema no longer has,
-    /// and a site's own type that took one of the aliases is left alone. All of it in one transaction, like an install.
+    /// and a site's own type that took one of the aliases is left alone. So is a definition the site registered as its own
+    /// (<c>SiteOwnsDefinition</c>), which a note names. All of it in one transaction, like an install.
     /// </summary>
     public async Task<SchemaChange> ReinstallAsync(CancellationToken ct)
     {
-        var change = await RunAsync(() => InstallAsync(force: true, ct), ct);
+        var change = await RunAsync(() => InstallAsync(Reset.All, ct), ct);
         logger.LogInformation("Reinstalled the AppBlocks definitions: {Created} created, {Updated} reset. {Notes}", change.Created, change.Updated, string.Join(" ", change.Notes));
         return change;
     }
@@ -76,15 +118,29 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
     public async Task<DefinitionsStatus> StatusAsync(CancellationToken ct)
     {
         var packages = new List<DefinitionsPackage>();
+        var recorded = Recorded();
         foreach (var schema in schemas.DistinctBy(s => s.Assembly))
         {
             ct.ThrowIfCancellationRequested();
             var name = schema.Assembly.GetName().Name!;
             var declared = 0;
             var installed = 0;
-            foreach (var definition in schema.Definitions("ContentTypes")) { declared++; if (contentTypes.Get(Key(definition)) is not null) installed++; }
-            foreach (var definition in schema.Definitions("DataTypes")) { declared++; if (await dataTypes.GetAsync(Key(definition)) is not null) installed++; }
-            packages.Add(new DefinitionsPackage(name, name, Version(schema.Assembly), declared, installed));
+            var unrecorded = 0;
+            var changed = new List<string>();
+            void Count(XElement definition, bool present)
+            {
+                declared++;
+                if (!present) return;
+                installed++;
+                // A definition the site keeps its own version of is the site's to compare.
+                if (registrations.SiteOwnedDefinitions.Contains(Key(definition))) return;
+                var stored = recorded.GetValueOrDefault(RecordKey(Key(definition)));
+                if (stored is null) unrecorded++;
+                else if (stored != Fingerprint(definition)) changed.Add(Name(definition));
+            }
+            foreach (var definition in schema.Definitions("ContentTypes")) Count(definition, contentTypes.Get(Key(definition)) is not null);
+            foreach (var definition in schema.Definitions("DataTypes")) Count(definition, await dataTypes.GetAsync(Key(definition)) is not null);
+            packages.Add(new DefinitionsPackage(name, name, Version(schema.Assembly), declared, installed, changed, unrecorded));
         }
         return new DefinitionsStatus(Uninstalled, packages);
     }
@@ -105,18 +161,55 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
         finally { Gate.Release(); }
     }
 
-    private async Task<SchemaChange> InstallAsync(bool force, CancellationToken ct)
+    /// <summary>Which of the definitions a site already has an install resets to the schema.</summary>
+    private enum Reset
     {
+        /// <summary>None of them: a start that installs what is missing.</summary>
+        None,
+        /// <summary>Those whose record differs from this build's definition, and those with no record.</summary>
+        Changed,
+        /// <summary>Every one: a reinstall.</summary>
+        All,
+    }
+
+    /// <summary>What the installer last wrote of each definition on this site, by <see cref="RecordKey"/>.</summary>
+    private IReadOnlyDictionary<string, string?> Recorded() => keyValues.FindByKeyPrefix(RecordPrefix) ?? new Dictionary<string, string?>();
+
+    private async Task<SchemaChange> InstallAsync(Reset mode, CancellationToken ct)
+    {
+        // One read, before the transaction opens.
+        var recorded = Recorded();
         // Roll back folders and definitions together, so a retry cannot mistake a partial type for a customization.
         using var scope = scopes.CreateCoreScope();
         var change = new Change();
         var created = await ImportMissingAsync(change, ct);
+        var records = new Dictionary<Guid, string>();
+        var behind = new List<string>();
+        var unrecorded = 0;
+        // Whether to reset a definition the site has. One created or reset now is recorded as this build has it. One left alone is
+        // counted when the build has changed it since, or when nothing recorded it.
+        bool Resets(XElement definition)
+        {
+            var key = Key(definition);
+            var fingerprint = Fingerprint(definition);
+            var stored = recorded.GetValueOrDefault(RecordKey(key));
+            var isNew = created.Contains(key);
+            // A definition the site keeps its own version of is installed when missing and never reset.
+            var sites = registrations.SiteOwnedDefinitions.Contains(key);
+            var resets = !isNew && !sites && (mode == Reset.All || mode == Reset.Changed && stored != fingerprint);
+            if ((isNew || resets) && stored != fingerprint) records[key] = fingerprint;
+            if (resets && mode == Reset.Changed) change.Notes.Add($"Updated '{Name(definition)}' to this build's definition.");
+            if (sites && !isNew && mode == Reset.All) change.Notes.Add($"Left '{Name(definition)}' as it is, because the site keeps its own version of it.");
+            if (!isNew && !resets && !sites && stored is null) unrecorded++;
+            if (!isNew && !resets && !sites && stored is not null && stored != fingerprint) behind.Add(Name(definition));
+            return resets;
+        }
         foreach (var definition in Definitions("DataTypes"))
         {
             ct.ThrowIfCancellationRequested();
             var key = Key(definition);
             var existing = await dataTypes.GetAsync(key);
-            if (existing is not null && force && !created.Contains(key))
+            if (existing is not null && Resets(definition))
             {
                 var (info, editor, storage, configuration) = Editor(definition, editors, serializer);
                 var folder = await FolderAsync(dataFolders, Value(info, "Folder"));
@@ -144,13 +237,14 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
                 if (contentTypes.Get(alias) is { } taken)
                 {
                     // The site's, by its key, and left alone whatever the schema says, so the package's type goes uninstalled.
-                    if (force) change.Notes.Add($"Left the site's own '{taken.Name}' ({alias}) alone, so the package's {alias} is not installed.");
+                    if (mode == Reset.All) change.Notes.Add($"Left the site's own '{taken.Name}' ({alias}) alone, so the package's {alias} is not installed.");
                     continue;
                 }
                 throw new InvalidOperationException($"The package importer did not install content type '{alias}' ({key}).");
             }
+            var resets = Resets(definition);
             if (created.Contains(key)) { touched.Add((definition, existing, false)); continue; }
-            if (!force) continue;
+            if (!resets) continue;
             await ResetAsync(existing, definition, change);
             var reset = await contentTypes.UpdateAsync(existing, Constants.Security.SuperUserKey);
             if (!reset.Success) throw new InvalidOperationException($"AppBlocks could not reset content type '{alias}' ({key}): {reset.Result}.");
@@ -180,9 +274,18 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
         }
 
         ct.ThrowIfCancellationRequested();
-        if (force) keyValues.SetValue(UninstalledKey, "false");
+        foreach (var (key, fingerprint) in records) keyValues.SetValue(RecordKey(key), fingerprint);
+        if (mode == Reset.All) keyValues.SetValue(UninstalledKey, "false");
         scope.Complete();
-        if (change.Created > 0 && !force) logger.LogInformation("Installed {Count} missing AppBlocks definitions.", change.Created);
+        if (change.Created > 0 && mode != Reset.All) logger.LogInformation("Installed {Count} missing AppBlocks definitions.", change.Created);
+        if (change.Updated > 0 && mode == Reset.Changed)
+            logger.LogInformation("Updated {Count} AppBlocks definitions to this build's. {Notes}", change.Updated, string.Join(" ", change.Notes));
+        if (behind.Count > 0)
+            logger.LogWarning("This build changed {Count} AppBlocks definitions since they were installed on this site, and they stay as installed: {Names}. "
+                + "Reinstall them from Settings > AppBlocks > Definitions, or set {Setting} to true so that a start updates them.", behind.Count, string.Join(", ", behind), UpdateSetting);
+        if (unrecorded > 0)
+            logger.LogInformation("{Count} AppBlocks definitions on this site have no record of the build that installed them, so a build that changes them "
+                + "goes unnoticed. A reinstall from Settings > AppBlocks > Definitions records them.", unrecorded);
         return change.Result();
     }
 
@@ -451,6 +554,7 @@ public sealed class SchemaInstaller(IContentTypeService contentTypes, IDataTypeS
         => (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString() ?? "").Split('+')[0];
 
     private static Guid Key(XElement definition) => Guid.Parse(definition.Attribute("Key")!.Value);
+    private static string Name(XElement definition) => Value(definition.Element("Info")!, "Name");
     private static string Value(XElement element, string name) => SchemaProperties.Value(element, name);
     private static int? OptionalInt(XElement element, string name) => Value(element, name) is { Length: > 0 } value ? int.Parse(value) : null;
 

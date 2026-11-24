@@ -30,7 +30,7 @@ Blocks follow the Public Access of their page. Data source groups, row restricti
 | `AurorisNet.Umbraco.AppBlocks` | Forms, field blocks, attachments, tabular forms, schedules, anti-spam, SQL data sources, API endpoints and connections |
 | `AurorisNet.Umbraco.AppBlocks.InteractiveReports` | The Interactive Report block and saved views. Depends on AppBlocks |
 | `AurorisNet.Umbraco.AppBlocks.Documents` | Documents as HTML or PDF, and printing through Pressroom. Depends on AppBlocks |
-| `AurorisNet.Umbraco.AppBlocks.Testing` | HTTP clients that drive the blocks' endpoints from a site's tests |
+| `AurorisNet.Umbraco.AppBlocks.Testing` | HTTP clients that drive the blocks' endpoints from a site's tests, and checks for the scripts of an application database |
 
 The assemblies, namespaces and settings use the name `AppBlocks`.
 
@@ -83,7 +83,7 @@ The packages reference `Umbraco.Cms` 18.3.1, the release the tests run on.
 |---|---|
 | [Adding AppBlocks to a site](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/site-integration.md) | Rendering, styling, backoffice previews, access and caching, every setting, and the extension points for companion packages |
 | [Business rules](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/business-rules.md) | Identity, groups, data source access, backing classes, attachments, validation and concurrency. Also shown under **Settings → AppBlocks → Business rules** |
-| [Connections](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/connections.md) | The default database, extra connections, application databases with schema scripts, upload storage and database drivers |
+| [Connections](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/connections.md) | The default database, extra connections, application databases with schema scripts and how to change a schema between releases, upload storage and database drivers |
 | [Database setup](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/database-setup.md) | The tables AppBlocks creates, and what to do when the database account may not create them |
 | [API endpoints](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/api-endpoints.md) | Rows of a data source as JSON over GET: routes, parameters, access and the browser client |
 | [Backing Classes](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/csharp-editor.md) | Writing form classes and backing classes in the backoffice of a development site |
@@ -97,7 +97,7 @@ The packages reference `Umbraco.Cms` 18.3.1, the release the tests run on.
 | [Worked example](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/activity-schedule-example.md) | A multi-tenant activity schedule: pages, tables, data sources, blocks and C# |
 | [Interactive Reports package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/interactive-reports.md) | Report blocks, saved views, printing and report access |
 | [Documents package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/documents.md) | Document nodes, templates, Pressroom configurations and the output service |
-| [Testing package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/src/AppBlocks.Testing/README.md) | The endpoint clients and the helpers for running Umbraco in a test process |
+| [Testing package](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/src/AppBlocks.Testing/README.md) | The endpoint clients, the helpers for running Umbraco in a test process, the schema checks and the content checks |
 | [Developing AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/developing.md) | Building, testing, the demo site and how definitions change between versions |
 
 ## Developing

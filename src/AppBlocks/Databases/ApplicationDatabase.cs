@@ -73,7 +73,9 @@ public static class ApplicationDatabase
     /// <c>&lt;name&gt;/&lt;file&gt;</c>, <c>&lt;name&gt;/migrations/&lt;file&gt;</c> or <c>&lt;name&gt;/once/&lt;step&gt;</c>, so schemas
     /// sharing a database keep their own rows. A row written before rows carried the name, such as <c>migrations/&lt;file&gt;</c>, is taken
     /// over by the first schema that expects it, so an existing database runs nothing again. A run-once script whose text no longer
-    /// matches its recorded hash stops the ensure with an <see cref="ApplicationSchemaException"/> naming it. Any failure throws
+    /// matches its recorded hash stops the ensure with an <see cref="ApplicationSchemaException"/> naming it. So does a database that
+    /// has run a run-once script later than any the schema has, before anything runs: another build of the application changed it
+    /// (<see cref="ApplicationSchemaException.DatabaseFromAnotherBuild"/>). Any failure throws
     /// <see cref="ApplicationSchemaException"/> naming the script, and the next call tries again.
     /// </summary>
     public static Task EnsureAsync(DbConnection connection, ApplicationSchema schema, CancellationToken ct = default)
@@ -91,7 +93,8 @@ public static class ApplicationDatabase
     internal static async Task EnsureOrAcceptAsync(DbConnection connection, ApplicationSchema schema, IReadOnlyList<string> tables, CancellationToken ct)
     {
         try { await EnsureOnceAsync(connection, schema, sync: false, ct); }
-        catch (DbException) when (!ct.IsCancellationRequested)
+        // Tables another build has taken further are not tables to get on with, however readable they are.
+        catch (DbException error) when (!ct.IsCancellationRequested && error is not ApplicationSchemaException { DatabaseFromAnotherBuild: true })
         {
             if (!await DatabaseInspector.TablesReadableAsync(connection, tables, ct)) throw;
             Ensured[(connection.ConnectionString, schema.Id)].Done = true;
@@ -149,9 +152,10 @@ public static class ApplicationDatabase
             var migrations = schema.Migrations(dialect);
             var table = schema.Table;
             await ExecuteAsync(connection, null, dialect, VersionTable(dialect, table), sync, ct);
+            var applied = await AppliedAsync(connection, table, sync, ct);
+            // Before anything runs: a database another build has taken further is left exactly as it is.
+            FromThisBuild(schema, dialect, migrations, applied);
             foreach (var (name, content) in scripts) await RunAsync(connection, dialect, table, schema.Name + "/" + name, name, content, sync, ct);
-            var applied = migrations.Count > 0 || schema.Steps.Any(step => step.Once is not null)
-                ? await AppliedAsync(connection, table, sync, ct) : new Dictionary<string, string>();
             var ran = scripts.Count;
             foreach (var (name, content) in migrations)
             {
@@ -189,6 +193,26 @@ public static class ApplicationDatabase
     }
 
     /// <summary>
+    /// Stops the ensure when the database has run a run-once script of this schema that the build does not have and that sorts after
+    /// the build's last one. Run-once scripts are numbered in the order they are written, so such a script came from another build of
+    /// the application, usually a newer one, and that build's tables may not fit this build's statements. A recorded script that
+    /// sorts before the build's last one is a script the application has since retired, and is passed over, as every recorded script
+    /// is when the build has no run-once scripts to compare with.
+    /// </summary>
+    private static void FromThisBuild(ApplicationSchema schema, string dialect, IReadOnlyList<(string Name, byte[] Content)> migrations, Dictionary<string, string> applied)
+    {
+        if (migrations.Count == 0) return;
+        var prefix = schema.Name + "/" + ApplicationSchema.MigrationsFolder + "/";
+        var last = migrations[^1].Name;
+        var later = applied.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).Select(key => key[prefix.Length..])
+            .Where(name => string.CompareOrdinal(name, last) > 0).Order(StringComparer.Ordinal).FirstOrDefault();
+        if (later is null) return;
+        throw new ApplicationSchemaException($"This database has run {dialect}/{ApplicationSchema.MigrationsFolder}/{later} of schema {schema.Name}, which this build does not have "
+            + $"and which sorts after its last run-once script, {last}. Another build of the application, usually a newer one, changed this database, "
+            + "so nothing was run against it. Install that build, or restore the database backup taken before it was installed.") { DatabaseFromAnotherBuild = true };
+    }
+
+    /// <summary>
     /// One script with its version row <paramref name="key"/> in one transaction, so a failed script leaves neither. The row the
     /// script had before rows carried the schema's name, its bare file name <paramref name="name"/>, goes with it.
     /// </summary>
@@ -223,10 +247,11 @@ public static class ApplicationDatabase
     private static string Text(byte[] content) => Encoding.UTF8.GetString(content).TrimStart('﻿');
 
     /// <summary>
-    /// A run-once script's hash: SHA-256 of its text with any byte order mark removed and CRLF line endings read as LF, so a checkout
-    /// that converts line endings is the same script.
+    /// A run-once script's hash, as the version table records it: SHA-256 of its text with any byte order mark removed and CRLF line
+    /// endings read as LF, so a checkout that converts line endings is the same script. A test or a release step can compare a
+    /// script's bytes with the hash a database or a list of shipped scripts holds.
     /// </summary>
-    internal static string MigrationHash(byte[] content) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Text(content).Replace("\r\n", "\n"))));
+    public static string MigrationHash(byte[] content) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Text(content).Replace("\r\n", "\n"))));
 
     /// <summary>A run-once script that ran under one hash and now has another is not run again, and the ensure stops until someone decides.</summary>
     private static void Unchanged(string label, string table, string recorded, string hash)
@@ -381,4 +406,11 @@ public static class ApplicationDatabase
 /// A schema script or step that failed, or a run-once script that changed after it ran. It is a <see cref="DbException"/>, so the
 /// data source engine answers as it does for a database it cannot open, and the next open tries the schema again.
 /// </summary>
-public sealed class ApplicationSchemaException(string message, Exception? inner = null) : DbException(message, inner);
+public sealed class ApplicationSchemaException(string message, Exception? inner = null) : DbException(message, inner)
+{
+    /// <summary>
+    /// True when the ensure stopped because the database has run a run-once script that this build does not have and that sorts after
+    /// its last one: another build of the application, usually a newer one, changed the database, and nothing was run against it.
+    /// </summary>
+    public bool DatabaseFromAnotherBuild { get; init; }
+}

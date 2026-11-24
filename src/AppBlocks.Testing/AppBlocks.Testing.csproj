@@ -2,7 +2,7 @@
   <PropertyGroup>
     <PackageId>AurorisNet.Umbraco.AppBlocks.Testing</PackageId>
     <Title>AppBlocks Testing for Umbraco</Title>
-    <Description>HTTP clients that drive AppBlocks' forms, attachments, tabular, report and paper-report endpoints the way the browser runtime does, and helpers for running Umbraco in a test process. No test framework dependency; failures throw TestSiteException.</Description>
+    <Description>HTTP clients that drive AppBlocks' forms, attachments, tabular, report and paper-report endpoints the way the browser runtime does, helpers for running Umbraco in a test process, checks for the scripts of an application database, and a listing of a site's content to compare with a file under source control. No test framework dependency; failures throw TestSiteException, SchemaCheckException or ContentCheckException.</Description>
     <PackageTags>umbraco;appblocks;testing</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

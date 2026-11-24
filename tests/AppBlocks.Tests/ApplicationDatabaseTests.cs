@@ -140,6 +140,38 @@ public sealed class ApplicationDatabaseTests
     }
 
     [Fact]
+    public void A_database_another_build_took_further_stops_the_ensure_before_anything_runs()
+    {
+        var root = Folder(("sqlite/migrations/0001-base.sql", "CREATE TABLE NOTES (ID INTEGER PRIMARY KEY);"),
+            ("sqlite/migrations/0002-body.sql", "ALTER TABLE NOTES ADD COLUMN BODY TEXT NULL;"));
+        var file = Path.Combine(root, "newer.db");
+        using (var connection = Open(file)) ApplicationDatabase.Ensure(connection, ApplicationSchema.FromDirectory(root, "notes"));
+
+        // An older build has the first script only, with an ensure script and a step that would otherwise run.
+        const string view = "DROP VIEW IF EXISTS NOTE_IDS; CREATE VIEW NOTE_IDS AS SELECT ID FROM NOTES;";
+        var older = Folder(("sqlite/migrations/0001-base.sql", "CREATE TABLE NOTES (ID INTEGER PRIMARY KEY);"), ("sqlite/010-views.sql", view));
+        var steps = 0;
+        using (var connection = Open(file))
+        {
+            var error = Assert.Throws<ApplicationSchemaException>(() => ApplicationDatabase.Ensure(connection, ApplicationSchema.FromDirectory(older, "notes").Then((_, _) => steps++)));
+            Assert.True(error.DatabaseFromAnotherBuild);
+            Assert.Contains("sqlite/migrations/0002-body.sql", error.Message);
+            Assert.Contains("its last run-once script, 0001-base.sql", error.Message);
+        }
+        Assert.Equal(0, steps);
+        Assert.Equal(0L, Scalar(file, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'NOTE_IDS'"));
+        Assert.Equal(2L, Scalar(file, "SELECT COUNT(*) FROM APP_SCHEMA"));
+
+        // A build that retired the first script and has later ones finds nothing ahead of it. Nor does a schema with no run-once scripts to compare.
+        var retired = Folder(("sqlite/migrations/0002-body.sql", "ALTER TABLE NOTES ADD COLUMN BODY TEXT NULL;"),
+            ("sqlite/migrations/0003-title.sql", "ALTER TABLE NOTES ADD COLUMN TITLE TEXT NULL;"));
+        using (var connection = Open(file)) ApplicationDatabase.Ensure(connection, ApplicationSchema.FromDirectory(retired, "notes"));
+        Assert.Equal(1L, Scalar(file, "SELECT COUNT(*) FROM pragma_table_info('NOTES') WHERE name = 'TITLE'"));
+        using (var connection = Open(file)) ApplicationDatabase.Ensure(connection, ApplicationSchema.FromDirectory(Folder(("sqlite/010-views.sql", view)), "notes"));
+        Assert.Equal(1L, Scalar(file, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'NOTE_IDS'"));
+    }
+
+    [Fact]
     public void Two_schemas_in_one_database_keep_their_own_rows()
     {
         // Both have a 001-init.sql of their own, ensure and run-once, and a step of the same name.

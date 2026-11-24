@@ -111,13 +111,50 @@ Every row starts with the schema's `Name`, so two application databases whose co
 - Restore the script and put the change in a new file, or
 - check the database by hand and delete the script's row in the version table, so the script runs again.
 
-The hash ignores a byte order mark and reads CRLF line endings as LF, so a checkout that converts line endings produces the same hash. A recorded script whose file is gone is ignored.
+The hash ignores a byte order mark and reads CRLF line endings as LF, so a checkout that converts line endings produces the same hash.
+
+**A database that another build has taken further stays as it is.** Run-once scripts are numbered in the order they are written. When the database has run a script that the build does not have, and that script sorts after the build's last one, another build of the application changed the database, usually a newer one installed before a rollback. AppBlocks runs nothing against it and throws an `ApplicationSchemaException` whose `DatabaseFromAnotherBuild` is true, naming the script. Install the build the database belongs to, or restore the database backup taken before that build was installed.
+
+A recorded script that sorts before the build's last one is a script the application has retired, and is passed over. So is every recorded script when the schema has no run-once scripts to compare with.
 
 A script or step that fails throws an `ApplicationSchemaException` that names it. It leaves no row and runs again on the next open.
 
 Each run-once script records its row before its statements run. A second process that starts at the same moment waits for the first and then skips the script.
 
 **Oracle commits around DDL, so on Oracle the row is written after the statements.** A run-once script that fails partway may leave part of its work behind, and two processes that start together against an empty Oracle schema may both try it. After deploying a run-once script to Oracle, start one process first.
+
+### A schema that changes between releases
+
+Run-once scripts carry a schema from one release to the next. A new database and an updated one run the same scripts in the same order, so both reach the same tables:
+
+| Script | Holds |
+|---|---|
+| `migrations/0001-v1.0.0-base.sql` | The tables, indexes and starting rows of the first release |
+| `migrations/0002-v1.0.1-due-date.sql` | One later change. Name each script with the next number, the release that ships it and the change |
+| Ensure scripts | Views and triggers, written to replace what is there: `CREATE OR ALTER` on SQL Server, `DROP ... IF EXISTS` and `CREATE` on SQLite |
+
+Scripts run in ordinal file-name order, which the leading number fixes. A release number alone would sort `1.0.10` before `1.0.9`.
+
+Keep tables and their rows in run-once scripts once a schema will change. An ensure script that creates a table runs at every start against each later shape of that table, while a new database still starts from the shape it creates, so every later script has to work from both. A row an ensure script inserts when missing also comes back after a run-once script deletes it.
+
+A schema's ensure scripts run before its run-once scripts. Views and triggers that read tables from run-once scripts therefore go in a schema folder of their own, which a step ensures afterwards:
+
+```csharp
+var root = Path.Combine(builder.Environment.ContentRootPath, "Schema");
+var views = ApplicationSchema.FromDirectory(Path.Combine(root, "Views"));
+builder.AddAppBlocks(connections => connections.AddApplicationDatabase("NoticesDb",
+    ApplicationSchema.FromDirectory(root).Then((connection, _) => ApplicationDatabase.Ensure(connection, views))));
+```
+
+Three rules keep the scripts dependable after a release:
+
+- **A shipped script keeps its text and its file name.** A changed script stops the ensure, as [Changed and failed scripts](#changed-and-failed-scripts) describes. A renamed script has no row, so it runs a second time.
+- **A script assumes the schema that the script before it left.** Leave `IF NOT EXISTS` checks out of run-once scripts. A database in another state then fails the script. On SQLite, SQL Server and PostgreSQL the script's transaction rolls back and the data stays as it was.
+- **Every SQL Server constraint has a name.** A later script drops or changes a constraint by its name, and a name SQL Server makes up differs in every database.
+
+Scripts go forward only. To return to an earlier release, restore the database backup taken before the update: the earlier build stops when it meets a database that a later one changed.
+
+`AppBlocks.Testing` checks these rules in the application's tests and keeps a listing of the resulting schema under source control. See [Schema checks](../src/AppBlocks.Testing/README.md#schema-checks).
 
 ## Database drivers
 

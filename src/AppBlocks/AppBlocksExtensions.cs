@@ -52,7 +52,12 @@ public static class AppBlocksExtensions
         services.AddTransient<Setup.SchemaUsage>();
         // For packages that generate content nodes from code, such as their API endpoints and lists of values.
         services.AddTransient<Setup.OwnedNodeInstaller>();
+        // For applications that install pages from code and change them between releases while editors change them too.
+        services.AddTransient<Setup.ContentStepRunner>();
+        services.AddTransient<Setup.ContentPatcher>();
         // The element types packages allow in a site's Block Grid data types, once the definitions are installed.
+        // Also resolvable on its own, for a host that applies them at a point of its own.
+        services.AddTransient<Setup.BlockGridAllowances>();
         builder.AddNotificationAsyncHandler<UmbracoApplicationStartedNotification, Setup.BlockGridAllowances>();
         builder.AddNotificationAsyncHandler<Umbraco.Cms.Infrastructure.Migrations.Notifications.MigrationPlansExecutedNotification, Setup.BlockGridAllowances>();
         builder.AddNotificationAsyncHandler<ContentTypeSavedNotification, Setup.BlockGridAllowances>();

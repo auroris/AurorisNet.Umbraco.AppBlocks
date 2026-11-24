@@ -43,6 +43,8 @@ public sealed class DefinitionsTests
         var declared = package.GetProperty("declared").GetInt32();
         Assert.True(declared > 30);
         Assert.Equal(declared, package.GetProperty("installed").GetInt32());
+        Assert.Equal(0, package.GetProperty("changed").GetArrayLength());
+        Assert.Equal(0, package.GetProperty("unrecorded").GetInt32());
 
         // What an editor might have done to the package's definitions in the backoffice.
         var types = services.GetRequiredService<IContentTypeService>();
@@ -95,6 +97,93 @@ public sealed class DefinitionsTests
         Assert.Equal(2, lines.Rows.Count);
         status = await admin.GetFromJsonAsync<JsonElement>(Api);
         Assert.False(status.GetProperty("uninstalled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A_definition_the_build_changed_is_noticed_at_a_start_and_reset_when_the_site_asks_for_it()
+    {
+        // The site keeps its own version of the Forms container grid, as a host that imports that data type with its own blocks does.
+        await using var site = await BlockSite.BootAsync(configure: builder =>
+            ((AppBlocks.Connections.AppBlocksBuilder)builder.Services.Single(d => d.ServiceType == typeof(AppBlocks.Connections.AppBlocksBuilder)).ImplementationInstance!)
+                .SiteOwnsDefinition(FormsContainerGrid));
+        using var scope = site.CreateScope();
+        var services = scope.ServiceProvider;
+        var types = services.GetRequiredService<IContentTypeService>();
+        var dataTypes = services.GetRequiredService<IDataTypeService>();
+        await WaitForInstallAsync(types);
+        var keyValues = services.GetRequiredService<IKeyValueService>();
+        var installer = services.GetRequiredService<SchemaInstaller>();
+        // The installer as a site that sets AppBlocks:Definitions:UpdateAtStartup has it.
+        var updating = ActivatorUtilities.CreateInstance<SchemaInstaller>(services, new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [SchemaInstaller.UpdateSetting] = "true" }).Build());
+        var schema = services.GetServices<AppBlocksSchema>().DistinctBy(s => s.Assembly).Single();
+        var declared = schema.Definitions("ContentTypes").Concat(schema.Definitions("DataTypes")).Count();
+        async Task<DefinitionsPackage> StatusAsync() => Assert.Single((await installer.StatusAsync(default)).Packages);
+        async Task RenameAsync(string alias, string name)
+        {
+            var type = types.Get(alias)!;
+            type.Name = name;
+            Assert.True((await types.UpdateAsync(type, Constants.Security.SuperUserKey)).Success);
+        }
+
+        // A new site records each definition as the build has it, whatever the layout of its file.
+        var formDefinition = schema.Definitions("ContentTypes").Single(d => d.Attribute("Alias")!.Value == "appForm");
+        var formRecord = SchemaInstaller.RecordKey(Guid.Parse(formDefinition.Attribute("Key")!.Value));
+        Assert.Equal(SchemaInstaller.Fingerprint(formDefinition), keyValues.GetValue(formRecord));
+        foreach (var definition in schema.Definitions("ContentTypes").Concat(schema.Definitions("DataTypes")))
+        {
+            var indented = definition.ToString();
+            Assert.Equal(SchemaInstaller.Fingerprint(definition), SchemaInstaller.Fingerprint(System.Xml.Linq.XElement.Parse(indented.Replace("\r\n", "\n"))));
+            Assert.Equal(SchemaInstaller.Fingerprint(definition), SchemaInstaller.Fingerprint(System.Xml.Linq.XElement.Parse(indented.Replace("\r\n", "\n").Replace("\n", "\r\n"))));
+        }
+        var status = await StatusAsync();
+        Assert.Empty(status.Changed);
+        Assert.Equal(0, status.Unrecorded);
+
+        // As if an earlier build had installed another definition of the form and of the grid, and an administrator renamed two types
+        // and the grid since.
+        keyValues.SetValue(formRecord, new string('0', 64));
+        keyValues.SetValue(SchemaInstaller.RecordKey(FormsContainerGrid), new string('0', 64));
+        await RenameAsync("appForm", "Site form");
+        await RenameAsync("appText", "Site text");
+        var grid = (await dataTypes.GetAsync(FormsContainerGrid))!;
+        grid.Name = "Site grid";
+        Assert.True((await dataTypes.UpdateAsync(grid, Constants.Security.SuperUserKey)).Success);
+
+        // A start notices the one the build changed and leaves both as the site has them.
+        await installer.EnsureAsync(default);
+        Assert.Equal(["Form"], (await StatusAsync()).Changed);
+        Assert.Equal("Site form", types.Get("appForm")!.Name);
+
+        // A site that asks for it has that one reset and recorded. A definition the build did not change keeps the site's edit.
+        await updating.EnsureAsync(default);
+        Assert.Equal("Form", types.Get("appForm")!.Name);
+        Assert.Equal("Site text", types.Get("appText")!.Name);
+        Assert.Equal(SchemaInstaller.Fingerprint(formDefinition), keyValues.GetValue(formRecord));
+        Assert.Empty((await StatusAsync()).Changed);
+        var nothing = await installer.UpdateAsync(default);
+        Assert.Equal((0, 0), (nothing.Created, nothing.Updated));
+
+        // A site installed before builds kept records has none. A start counts those definitions and leaves them, and an update
+        // resets and records every one, as a reinstall does.
+        using (var database = services.GetRequiredService<Umbraco.Cms.Infrastructure.Scoping.IScopeProvider>().CreateScope(autoComplete: true))
+            database.Database.Execute("DELETE FROM umbracoKeyValue WHERE [key] LIKE @0", SchemaInstaller.RecordPrefix + "%");
+        services.GetRequiredService<Umbraco.Cms.Core.Cache.AppCaches>().IsolatedCaches.ClearAllCaches();
+        await installer.EnsureAsync(default);
+        Assert.Equal(declared - 1, (await StatusAsync()).Unrecorded);
+        Assert.Equal("Site text", types.Get("appText")!.Name);
+        var update = await installer.UpdateAsync(default);
+        Assert.Equal((0, declared - 1), (update.Created, update.Updated));
+        Assert.Equal("Text box", types.Get("appText")!.Name);
+        status = await StatusAsync();
+        Assert.Equal((0, 0), (status.Changed.Count, status.Unrecorded));
+
+        // The grid the site keeps its own version of stayed the site's throughout, and a reinstall leaves it too and says so.
+        Assert.Equal("Site grid", (await dataTypes.GetAsync(FormsContainerGrid))!.Name);
+        var reinstalled = await installer.ReinstallAsync(default);
+        Assert.Equal(declared - 1, reinstalled.Updated);
+        Assert.Contains(reinstalled.Notes, note => note.Contains("'AppBlocks: Forms container'") && note.Contains("keeps its own version"));
+        Assert.Equal("Site grid", (await dataTypes.GetAsync(FormsContainerGrid))!.Name);
     }
 
     [Fact]

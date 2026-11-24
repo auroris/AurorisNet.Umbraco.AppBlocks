@@ -6,7 +6,9 @@ public sealed record SchemaChange(int Created, int Updated, int Deleted, IReadOn
 /// <summary>Where a package's definitions stand on this site.</summary>
 /// <param name="Declared">The definitions in the package's schema.</param>
 /// <param name="Installed">How many of them are on the site, by key.</param>
-public sealed record DefinitionsPackage(string Id, string Name, string Version, int Declared, int Installed);
+/// <param name="Changed">The names of the installed definitions that this build has changed since the installer last wrote them on the site.</param>
+/// <param name="Unrecorded">How many installed definitions have no record of the build that installed them, as those installed before records were kept.</param>
+public sealed record DefinitionsPackage(string Id, string Name, string Version, int Declared, int Installed, IReadOnlyList<string> Changed, int Unrecorded);
 
 /// <param name="Uninstalled">Whether the definitions were uninstalled and nothing has installed them since.</param>
 public sealed record DefinitionsStatus(bool Uninstalled, IReadOnlyList<DefinitionsPackage> Packages);

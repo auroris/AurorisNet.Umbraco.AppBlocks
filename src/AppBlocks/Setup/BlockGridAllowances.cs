@@ -28,6 +28,12 @@ public sealed class BlockGridAllowances(AppBlocksBuilder builder, IRuntimeState 
 
     public Task HandleAsync(MigrationPlansExecutedNotification notification, CancellationToken ct) => InstallAndApplyAsync(ct);
 
+    /// <summary>
+    /// Installs the definitions that are missing and applies every registration now. For a host that changes Block Grid data types at a
+    /// point of its own, such as an import of its saved definitions, and uses the grids before the site has started.
+    /// </summary>
+    public Task ApplyAsync(CancellationToken ct) => InstallAndApplyAsync(ct);
+
     private async Task InstallAndApplyAsync(CancellationToken ct)
     {
         using var scope = services.CreateScope();
