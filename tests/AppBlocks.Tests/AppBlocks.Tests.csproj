@@ -11,7 +11,7 @@
     <!-- The endpoint clients AppBlocks ships for site tests, tested here against the endpoints they drive. -->
     <ProjectReference Include="../../src/AppBlocks.Testing/AppBlocks.Testing.csproj" />
     <!-- The drivers AppBlocks leaves to a site. SQLite and SQL Server come through Umbraco.Cms. -->
-    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Npgsql" Version="11.0.0" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.401" />
     <Using Include="Xunit" />
     <Using Include="AppBlocks.Testing" />
