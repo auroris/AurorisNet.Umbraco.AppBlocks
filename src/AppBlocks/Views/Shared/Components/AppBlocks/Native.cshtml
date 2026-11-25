@@ -1,5 +1,10 @@
 @using AppBlocks.Blocks
 @model AppBlocksPage
+@if (Model.Blocks?.FirstOrDefault() is { Content.ContentType.Alias: AppBlockSchema.HtmlAlias } html)
+{
+    @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", new AppBlockView(Model.Page, html, MemberId: Model.MemberId, Variables: Model.Variables))
+    return;
+}
 @* Assets are self-contained: the host layout does not need AppBlocks tag helpers or imports. *@
 @if (!Context.Items.ContainsKey("AppBlocks.NativeAssets"))
 {

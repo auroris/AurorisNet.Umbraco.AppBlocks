@@ -7,8 +7,8 @@
     wide as the area spans, as in the backoffice, so a span means the same in both places.
 
     A field's width replaces the span the backoffice gives it, and ah-grid__item--width-N names the
-    width the editor chose. CSS and JavaScript blocks and hidden fields take no cell: their partial
-    still runs, to register the code or render the hidden input, but without a grid item around it.
+    width the editor chose. Raw HTML renders directly into the grid. Assets and hidden fields
+    also run their partial without a grid item around them.
 *@
 @if (Model.Items.Any())
 {

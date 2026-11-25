@@ -437,6 +437,10 @@
 .app-report-actions { display: flex; justify-content: flex-end; margin: 0 0 .5rem; }
 .app-report-actions a { padding: .4rem .9rem; font-size: .875rem; }
 
+/* Raw HTML elements are direct grid children. Give them a full row unless the author sets their placement. */
+:where(.ah-grid > :not(.ah-grid__item, .umb-block-grid__layout-item)) { grid-column: 1 / -1; min-width: 0; }
+:where(.ah-grid > button) { place-self: start; }
+
 /* ---------- Native blocks: layout without a site theme ---------- */
 
 .appblocks-native .ah-grid { display: grid; grid-template-columns: repeat(var(--umb-block-grid--grid-columns, 12), minmax(0, 1fr)); gap: 1rem 1.25rem; }
