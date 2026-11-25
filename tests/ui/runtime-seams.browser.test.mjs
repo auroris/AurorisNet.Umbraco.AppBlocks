@@ -416,13 +416,14 @@ test('a failed list refresh survives completed-upload cleanup and removal of a f
                 && !document.querySelector('[data-attachment-add-label]').textContent.startsWith('Uploading'));
             assert.equal(requests.filter(request => request.method === 'GET').length, 2);
             if (uploadFails) await page.locator('.uppy-Dashboard-Item-action--remove').click();
-            assert.equal(await page.locator('.uppy-Dashboard-Item').count(), 0);
+            assert.equal(await page.locator('.uppy-Dashboard-Item').count(), uploadFails ? 0 : 1);
             assert.equal(await page.locator('.app-attachments-upload-errors').isVisible(), true);
             assert.equal(await page.locator('.app-attachments-upload-errors').textContent(), problem);
             await closeUploader(page);
             assert.equal(await page.locator('.app-attachments-errors').isVisible(), true);
             assert.equal(await page.locator('.app-attachments-errors').textContent(), problem);
             await openUploader(page);
+            assert.equal(await page.locator('.uppy-Dashboard-Item').count(), 0);
             assert.equal(await page.locator('.app-attachments-upload-errors').isVisible(), true);
             assert.equal(requests.filter(request => request.method === 'POST').length, 1, 'refresh failure never retries the upload');
             assert.deepEqual(errors, []);
@@ -456,10 +457,15 @@ test('the upload dialog stays usable while finished uploads are listed, and file
         assert.equal(requests.filter(r => r.method === 'POST').length, 2, 'a file added while the list is read goes up at once');
         releaseList();
         await page.locator('.app-attachment', { hasText: 'second.pdf' }).waitFor();
-        await page.waitForFunction(() => !document.querySelector('.uppy-Dashboard-Item'));
+        assert.equal(await page.locator('.uppy-Dashboard-Item').count(), 2);
+        assert.equal(await page.locator('.uppy-Dashboard-Item', { hasText: 'first.pdf' }).isVisible(), true);
         assert.equal(requests.filter(r => r.method === 'GET').length, 3, 'the list is read once more for the file that finished meanwhile');
         assert.deepEqual(await page.evaluate(() => window.changed), [{ id: null, operation: 'upload' }, { id: null, operation: 'upload' }]);
         assert.equal(await page.locator('[data-attachment-label]').inputValue(), 'For March', 'an open dialog keeps its details');
+        await closeUploader(page);
+        await openUploader(page);
+        assert.equal(await page.locator('.uppy-Dashboard-Item').count(), 0);
+        assert.equal(await page.locator('.app-attachment').count(), 2);
         assert.deepEqual(errors, []);
     } finally { releaseList?.(); await page.close(); }
 });

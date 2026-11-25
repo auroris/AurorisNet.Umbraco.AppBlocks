@@ -20,7 +20,7 @@
     var endpoint = Context.Request.PathBase + AppBlocks.AppBlocksRoutes.Under(Configuration, $"account-picker/{Model.Page.Key}/{Model.Block.ContentKey}");
     if (Model.Form.Culture is { } culture) endpoint += "?appCulture=" + Uri.EscapeDataString(culture);
     var options = JsonSerializer.Serialize(new { settings.IdentityField, settings.NameField, settings.AllowManualEntry, settings.AllowsEmpty,
-        settings.FieldMappings, settings.FallbackFields, settings.CompactUpperFields }, JsonSerializerOptions.Web);
+        settings.FieldMappings, settings.PrefillMappings, settings.FallbackFields, settings.CompactUpperFields }, JsonSerializerOptions.Web);
     Assets.AddStylesheet(Url.Content("~/App_Plugins/ApplicationBlocks/account-picker.css"));
 }
 <div class="app-people" data-app-account-picker data-block-alias="@alias" data-endpoint="@endpoint" data-settings="@options">

@@ -39,6 +39,7 @@ public record AccountPickerSettings
     public string NameField { get; init; } = "";
     public string Label { get; init; } = "";
     public Dictionary<string, string> FieldMappings { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> PrefillMappings { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> FallbackFields { get; init; } = new(StringComparer.Ordinal);
     public string[] CompactUpperFields { get; init; } = [];
     public bool AllowManualEntry { get; init; }
@@ -53,6 +54,7 @@ public record AccountPickerSettings
         yield return IdentityField;
         if (NameField.Length > 0) yield return NameField;
         foreach (var field in FieldMappings.Values) yield return field;
+        foreach (var field in PrefillMappings.Values) yield return field;
     }
 
     internal void CheckBindings(HashSet<string> owned, Func<string, bool> writable, Func<string, bool> mirror)

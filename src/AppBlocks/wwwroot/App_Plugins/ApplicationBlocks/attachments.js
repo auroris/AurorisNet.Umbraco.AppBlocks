@@ -118,7 +118,13 @@ export function mountAttachments(root) {
     });
     root.querySelector("[data-attachment-close]")?.addEventListener("click", () => dialog.close());
     const resetDetails = () => { if (!dialog.open && !unfinished()) for (const field of details()) field.value = ""; };
-    dialog?.addEventListener("close", resetDetails);
+    function dismissCompleted() {
+        if (dialog.open) return;
+        for (const file of uploader?.getFiles() ?? [])
+            if (file.progress.uploadComplete && !file.error) uploader.removeFile(file.id);
+        resetDetails();
+    }
+    dialog?.addEventListener("close", dismissCompleted);
     dialog?.addEventListener("cancel", event => { if (saving || busy) event.preventDefault(); });
     // Enter in upload metadata must not submit the enclosing record form.
     dialog?.addEventListener("keydown", event => { if (event.key === "Enter" && event.target.matches("input")) event.preventDefault(); });
@@ -248,14 +254,11 @@ export function mountAttachments(root) {
         try {
             do {
                 refreshAgain = false;
-                // What finished before the list was asked for is what it shows; anything finishing meanwhile waits a round.
-                const listed = uploader.getFiles().filter(file => file.progress.uploadComplete && !file.error).map(file => file.id);
                 const announced = uploaded.splice(0);
                 await load(true);
-                for (const id of listed) if (uploader.getFile(id)) uploader.removeFile(id);
                 // A list that could not be read keeps saying so; otherwise the notice is the first failed file's, or nothing.
                 if (state) { const failed = failedFile(); if (failed) failUpload(failed.error, failed.id); else clearUpload(); }
-                resetDetails();
+                dismissCompleted();
                 for (const detail of announced) root.dispatchEvent(new CustomEvent("app-attachments:changed", { bubbles: true, detail }));
             } while (refreshAgain && root.isConnected);
         } finally { refreshing = false; syncBusy(); }

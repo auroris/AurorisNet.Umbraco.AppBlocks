@@ -18,7 +18,8 @@ export function mountAccountPicker(box, {
     const boundName = settings.nameField ? field(settings.nameField) : null;
     const name = box.querySelector("[data-current-name]") || boundName, identity = field(settings.identityField);
     const mappings = Object.entries(settings.fieldMappings || {}), fallbacks = settings.fallbackFields || {};
-    if (!name || !identity || (settings.nameField && !boundName) || mappings.some(([, key]) => !field(key))) return;
+    const selectionMappings = [...mappings, ...Object.entries(settings.prefillMappings || {})];
+    if (!name || !identity || (settings.nameField && !boundName) || selectionMappings.some(([, key]) => !field(key))) return;
     box.dataset.mounted = "true";
     const find = box.querySelector("[data-find]"), manual = box.querySelector("[data-manual]"), status = box.querySelector("[data-status]");
     const normalize = (key, value) => (settings.compactUpperFields || []).includes(key) ? (value || "").replace(/\s/g, "").toUpperCase() : value || "";
@@ -87,13 +88,13 @@ export function mountAccountPicker(box, {
             const attributes = Object.fromEntries(Object.entries(person.attributes || {}).map(([key, value]) => [key.toLowerCase(), value]));
             identity.value = selectedKey; name.value = person.displayName;
             if (boundName) boundName.value = name.value;
-            for (const [attribute, key] of mappings) {
+            for (const [attribute, key] of selectionMappings) {
                 const value = attribute.toLowerCase() === "displayname" ? person.displayName : attributes[attribute.toLowerCase()];
                 field(key).value = normalize(key, value);
                 if (fallbacks[key] && field(fallbacks[key])) field(fallbacks[key]).value = field(key).value;
             }
             // Dispatch only after every field is updated, so observers see one complete identity.
-            for (const input of [identity, boundName || name, ...mappings.map(([, key]) => field(key))]) changed(input);
+            for (const input of [identity, boundName || name, ...selectionMappings.map(([, key]) => field(key))]) changed(input);
             lock(); status.classList.remove("app-picker-error");
             status.textContent = t("pickerSelected", { name: person.displayName });
             if (selected.cached) status.textContent += " " + t("pickerCached");
