@@ -26,7 +26,8 @@ public sealed record BlockProblem(string Message, IReadOnlyList<BlockLocation> L
 public sealed class AppBlocksValidator(FormResourceRegistry resources, PublishedDataCatalog? definitions = null, IContentService? contents = null,
     IOptions<AttachmentSettings>? attachments = null, ScheduleSources? schedules = null,
     IContentTypeService? contentTypes = null, IEnumerable<IAppBlockPlugin>? plugins = null, AntiSpamGate? antiSpam = null,
-    DataSources.BindVariableProviders? providers = null, IOptions<TabularOptions>? tabular = null, IOptions<ScheduleOptions>? scheduleOptions = null)
+    DataSources.BindVariableProviders? providers = null, IOptions<TabularOptions>? tabular = null, IOptions<ScheduleOptions>? scheduleOptions = null,
+    Umbraco.Cms.Core.Security.IBackOfficeSecurityAccessor? security = null, Authentication.ApplicationAccessPolicy? access = null)
     : INotificationAsyncHandler<ContentPublishingNotification>
 {
     private static readonly string[] Aliases = ["appForm", "appFormInterface", "appFieldset", "appActions", AppBlockSchema.AttachmentsAlias, AppBlockSchema.AntiSpamAlias,
@@ -52,6 +53,17 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 if (string.IsNullOrWhiteSpace(json)) continue;
                 try {
                     var sets = BlockValueSets.Read(json, contentTypes);
+                    if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+                    {
+                        var publishedJson = page.GetValue(property.Alias, culture, published: true)?.ToString();
+                        var publishedReports = ReportSources(publishedJson);
+                        var draftReports = ReportSources(json);
+                        if (draftReports.Any(entry => !publishedReports.TryGetValue(entry.Key, out var existing) || existing != entry.Value))
+                        {
+                            notification.CancelOperation(new EventMessage("AppBlocks", $"{page.Name} · {property.Alias}: Only AppBlocks administrators may add or change Interactive Report data sources.", EventMessageType.Error));
+                            continue;
+                        }
+                    }
                     foreach (var set in sets) {
                         var warnings = new List<string>();
                         var errors = Problems(set, warnings);
@@ -67,6 +79,16 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             }
             }
         }
+    }
+
+    private Dictionary<Guid, string> ReportSources(string? json)
+    {
+        var result = new Dictionary<Guid, string>();
+        if (string.IsNullOrWhiteSpace(json)) return result;
+        foreach (var set in BlockValueSets.Read(json, contentTypes))
+            foreach (var item in set.ContentData)
+                if (Alias(item) == "appReport") result[item.Key] = Text(item, "dataSource");
+        return result;
     }
 
     /// <summary>The errors publishing would report for one block value, as JSON; blank is an empty value and has none.</summary>

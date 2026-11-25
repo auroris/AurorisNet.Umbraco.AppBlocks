@@ -127,6 +127,8 @@ public static class ScheduleValidation
         if (settings.DaysBefore < 0 || settings.DaysBefore > maxDays || settings.DaysAfter < 0 || settings.DaysAfter > maxDays)
             errors.Add($"The schedule's days before and after today must be whole numbers from 0 to {maxDays}.");
         if (ScheduleSettings.ParseScale(scaleText) is null) errors.Add($"The schedule's columns must be {ScheduleSettings.DaysOption} or {ScheduleSettings.HoursOption}.");
+        if (!string.IsNullOrWhiteSpace(settings.LinkTemplate) && Blocks.AppBlockField.LinkProblem(settings.LinkTemplate) is { } linkProblem)
+            errors.Add(linkProblem);
         return errors;
 
         void Source(string role, string alias, string[] expected)

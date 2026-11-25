@@ -29,13 +29,15 @@ public sealed class ApplicationAccessPolicy(IUserService users, IOptions<Adminis
     /// Whether the backoffice User is in Umbraco's Administrators group or one of <see cref="AdministratorOptions.AdministratorGroups"/>,
     /// for the backoffice's own management screens; no application permission follows from it.
     /// </summary>
-    public async Task<bool> IsBackOfficeAdministratorAsync(ClaimsPrincipal principal)
+    public bool IsBackOfficeAdministrator(IUser? user)
     {
-        var user = await ActiveUserAsync(principal);
         var others = administrators?.Value.AdministratorGroups ?? [];
-        return user is not null && user.Groups.Any(group => group.Alias.Equals(Constants.Security.AdminGroupAlias, StringComparison.OrdinalIgnoreCase)
+        return user is { IsApproved: true, IsLockedOut: false } && user.Groups.Any(group => group.Alias.Equals(Constants.Security.AdminGroupAlias, StringComparison.OrdinalIgnoreCase)
             || others.Any(alias => group.Alias.Equals(alias?.Trim(), StringComparison.OrdinalIgnoreCase)));
     }
+
+    public async Task<bool> IsBackOfficeAdministratorAsync(ClaimsPrincipal principal)
+        => IsBackOfficeAdministrator(await ActiveUserAsync(principal));
 
     public async Task<ClaimsPrincipal?> BackOfficeAdministratorAsync(HttpContext context)
     {

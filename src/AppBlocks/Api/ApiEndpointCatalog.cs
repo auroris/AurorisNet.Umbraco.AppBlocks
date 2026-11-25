@@ -171,7 +171,9 @@ public sealed class ApiEndpointCatalog(IUmbracoContextFactory contexts, IDocumen
         // Where an endpoint sits is the editors' choice: any published endpoint whose ancestors are all published answers.
         foreach (var root in roots)
         {
-            if (!navigation.TryGetDescendantsKeysOfType(root, Alias, out var keys)) continue;
+            var keys = new List<Guid>();
+            if (await cache.GetByIdAsync(root, false) is { } rootNode && rootNode.ContentType.Alias == Alias) keys.Add(root);
+            if (navigation.TryGetDescendantsKeysOfType(root, Alias, out var descendants)) keys.AddRange(descendants);
             foreach (var key in keys)
             {
                 if (await cache.GetByIdAsync(key, false) is not { } node || !await PublishedPathAsync(cache, key)) continue;
@@ -215,13 +217,19 @@ public sealed class ApiEndpointCatalog(IUmbracoContextFactory contexts, IDocumen
 /// Publishing an endpoint checks it as a request would read it, against its source's schema, and refuses a route another published
 /// endpoint, or another endpoint in the same publish, already answers, and an alias another one has.
 /// </summary>
-public sealed class ApiEndpointValidator(ApiEndpointCatalog catalog, IMemberGroupService groups, BindVariableProviders? providers = null)
+public sealed class ApiEndpointValidator(ApiEndpointCatalog catalog, IMemberGroupService groups, BindVariableProviders? providers = null,
+    Umbraco.Cms.Core.Security.IBackOfficeSecurityAccessor? security = null, Authentication.ApplicationAccessPolicy? access = null)
     : INotificationAsyncHandler<ContentPublishingNotification>
 {
     public async Task HandleAsync(ContentPublishingNotification notification, CancellationToken cancellationToken)
     {
         var nodes = notification.PublishedEntities.Where(n => n.ContentType.Alias == ApiEndpointCatalog.Alias).ToArray();
         if (nodes.Length == 0) return;
+        if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+        {
+            notification.CancelOperation(new EventMessage("API endpoint", "Only AppBlocks administrators may publish API endpoints.", EventMessageType.Error));
+            return;
+        }
         await catalog.LoadAsync();
         var names = new MemberGroupNames((await groups.GetAllAsync()).ToArray());
         var batch = new List<ApiEndpointDefinition>();

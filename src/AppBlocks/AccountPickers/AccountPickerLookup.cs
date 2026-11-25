@@ -23,6 +23,9 @@ public sealed class AccountPickerLookup(AppBlockContent content, AppPageAccess a
         if (forms.Length != 1) return Results.NotFound();
         var form = await FormDefinition.ResolveAsync(page, forms[0].ContentKey, resources, catalog, culture, plugins);
         if (form is null) return Results.NotFound();
+        if (form.ViewOnly) return Results.StatusCode(403);
+        if (FormResourceAccess.Refusal(form.Resource, visitor) is { } refusal) return Results.StatusCode(refusal);
+        if (form.Resource is SqlDataSource sql && !await sql.MayWriteAsync(visitor, ct)) return Results.StatusCode(403);
         try
         {
             var picker = AccountPickerForm.Definitions(form, types).SingleOrDefault(p => p.BlockKey == blockKey);

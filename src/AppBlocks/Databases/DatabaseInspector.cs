@@ -184,5 +184,13 @@ public static class DatabaseInspector
         catch (DbException) { return null; }
     }
 
-    private static string Quote(DatabaseDialect kind, string table) => kind == DatabaseDialect.SqlServer ? $"[{table}]" : $"\"{table}\"";
+    private static string Quote(DatabaseDialect kind, string table)
+    {
+        string QuotePart(string part) => kind == DatabaseDialect.SqlServer
+            ? $"[{part.Replace("]", "]]")}]"
+            : $"\"{part.Replace("\"", "\"\"")}\"";
+        return AppBlocks.DataSources.TableName.Parse(table) is { } parsed
+            ? (parsed.Schema is { Length: > 0 } schema ? QuotePart(schema) + "." : "") + QuotePart(parsed.Name)
+            : QuotePart(table);
+    }
 }

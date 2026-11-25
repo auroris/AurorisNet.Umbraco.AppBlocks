@@ -89,12 +89,13 @@ internal static class DataSourcePlanner
         var start = errors.Count;
         var d = definition;
         if (!Enum.IsDefined(d.Concurrency)) errors.Add("Select a valid concurrency mode.");
+        var bracketIdentifiers = dialect.Kind is DatabaseDialect.SqlServer or DatabaseDialect.Sqlite;
         TableName? table = null;
         SqlTemplate? query = null;
-        if (SqlTemplate.IsQuery(d.Source)) query = SqlTemplate.Parse(d.Source, SqlUse.RowSource, "The row source", errors);
+        if (SqlTemplate.IsQuery(d.Source)) query = SqlTemplate.Parse(d.Source, SqlUse.RowSource, "The row source", errors, bracketIdentifiers);
         else if ((table = TableName.Parse(d.Source)) is null)
             errors.Add("Enter the row source as a table name, such as ORDERS or dbo.ORDERS, or as a SELECT statement.");
-        var restriction = d.RowRestriction is { } predicate ? SqlTemplate.Parse(predicate, SqlUse.RowRestriction, "The row restriction", errors) : null;
+        var restriction = d.RowRestriction is { } predicate ? SqlTemplate.Parse(predicate, SqlUse.RowRestriction, "The row restriction", errors, bracketIdentifiers) : null;
         var insert = Statement(d.CustomStatements.Insert, "insert");
         var update = Statement(d.CustomStatements.Update, "update");
         var delete = Statement(d.CustomStatements.Delete, "delete");
@@ -300,12 +301,12 @@ internal static class DataSourcePlanner
         };
 
         SqlTemplate? Statement(string? text, string label)
-            => text is null ? null : SqlTemplate.Parse(dialect.Statement(text), SqlUse.Statement, $"The custom {label} statement", errors);
+            => text is null ? null : SqlTemplate.Parse(dialect.Statement(text), SqlUse.Statement, $"The custom {label} statement", errors, bracketIdentifiers);
 
         void Compile(SqlTemplate statement, string label)
         {
             // SQLite's and PostgreSQL's EXPLAIN take one statement, and Npgsql would run any that follow it, so each is checked on its own;
-            // the others compile the text whole, as it runs. Nothing runs either way.
+            // the others compile the text whole, as it runs. Always run inside a rolled-back transaction as defense in depth.
             foreach (var part in dialect.Kind is DatabaseDialect.Sqlite or DatabaseDialect.Postgres ? statement.Statements : [statement.Text])
             {
                 if (!dialect.Compiles(part))
@@ -313,16 +314,24 @@ internal static class DataSourcePlanner
                     warnings?.Add($"Publishing does not check the custom {label} statement: the database cannot compile {SqlTemplate.FirstWord(part)?.ToUpperInvariant()} without running it.");
                     continue;
                 }
-                if (SqlTemplate.Parse(part, SqlUse.Statement, "", []) is not { } single) continue;
+                if (SqlTemplate.Parse(part, SqlUse.Statement, "", [], bracketIdentifiers) is not { } single) continue;
+                DbTransaction? transaction = null;
                 try
                 {
+                    try { transaction = connection.BeginTransaction(); }
+                    catch (Exception error) when (error is NotSupportedException or NotImplementedException) { }
                     var parameters = new SqlParameters(dialect, commandTimeout);
-                    using var command = parameters.Command(connection, null, dialect.CompileOnly(single.Render(parameters, Nothing)));
+                    using var command = parameters.Command(connection, transaction, dialect.CompileOnly(single.Render(parameters, Nothing)));
                     dialect.ConfigureCompilation(command);
                     using var reader = command.ExecuteReader();
                     while (reader.Read()) { }
                 }
                 catch (DbException error) { errors.Add($"The custom {label} statement does not compile: {error.Message}"); return; }
+                finally
+                {
+                    try { transaction?.Rollback(); } catch (DbException) { } catch (InvalidOperationException) { }
+                    transaction?.Dispose();
+                }
             }
         }
     }

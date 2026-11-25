@@ -60,7 +60,7 @@ public sealed class ApiEndpointAuthoringController(IContentService content, IAut
             if (request.Route?.FirstOrDefault(pair => pair.Key.Equals(parameter, StringComparison.OrdinalIgnoreCase)).Value is { Length: > 0 } value) route[parameter] = value;
             else errors.Add($"Enter a sample value for :{parameter}.");
         if (errors.Count > 0) return Ok(new ApiEndpointTestResult(errors, null, null, null));
-        var query = request.Query?.Where(pair => SqlTemplate.IsIdentifier(pair.Key) && pair.Value.Length > 0)
+        var query = request.Query?.Where(pair => SqlTemplate.IsIdentifier(pair.Key) && pair.Value is { Length: > 0 })
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase) ?? [];
         // The User as the site sees a backoffice ticket; the resolver reads their current standing and groups from the store.
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Key.ToString())], Umbraco.Cms.Core.Constants.Security.BackOfficeAuthenticationType));

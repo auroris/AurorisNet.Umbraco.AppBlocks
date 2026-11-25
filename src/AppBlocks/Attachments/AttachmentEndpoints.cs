@@ -93,6 +93,37 @@ public static class AttachmentEndpoints
         });
     }
 
+    private static string ExtractFileName(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return "";
+        var slash = raw.LastIndexOfAny(['/', '\\']);
+        return (slash >= 0 ? raw[(slash + 1)..] : raw).Trim();
+    }
+
+    private static bool IsValidFileName([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? name)
+        => name is { Length: > 0 and <= 260 } && !name.EndsWith('.') && !name.Any(char.IsControl)
+            && name.IndexOfAny(['/', '\\', '<', '>', ':', '"', '|', '?', '*']) < 0;
+
+    private static string SafeStoredContentType(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || raw.Length > 200) return MediaTypeNames.Application.Octet;
+        return MediaTypeHeaderValue.TryParse(raw.Trim(), out var parsed) && parsed.MediaType.HasValue
+            ? parsed.MediaType.Value : MediaTypeNames.Application.Octet;
+    }
+
+    private static string SafeDownloadContentType(string? stored)
+    {
+        if (!MediaTypeHeaderValue.TryParse(stored?.Trim(), out var parsed) || !parsed.MediaType.HasValue)
+            return MediaTypeNames.Application.Octet;
+        var media = parsed.MediaType.Value;
+        return media.Equals("text/html", StringComparison.OrdinalIgnoreCase)
+            || media.Equals("application/xhtml+xml", StringComparison.OrdinalIgnoreCase)
+            || media.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase)
+            || media.Equals("text/javascript", StringComparison.OrdinalIgnoreCase)
+            || media.Equals("application/javascript", StringComparison.OrdinalIgnoreCase)
+            ? MediaTypeNames.Application.Octet : media;
+    }
+
     /// <summary>The owner the list names: the record's resource and key, or for pending files the resource and no key.</summary>
     private static object Owner(AttachmentScope scope) => new { alias = scope.Owner!.ResourceAlias, key = scope.SubmissionKey is null ? scope.Owner.Key : null };
 
@@ -107,7 +138,7 @@ public static class AttachmentEndpoints
         http.Response.Headers.XContentTypeOptions = "nosniff";
         // The stored name and type come from the uploader; the disposition keeps the browser from showing the file in place.
         http.Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileNameStar = file.Value.FileName, FileName = SafeAscii(file.Value.FileName) }.ToString();
-        return Results.Bytes(file.Value.Bytes, file.Value.ContentType);
+        return Results.Bytes(file.Value.Bytes, SafeDownloadContentType(file.Value.ContentType));
     }
 
     /// <summary>
@@ -132,19 +163,31 @@ public static class AttachmentEndpoints
         catch (Exception error) when (error is InvalidDataException or BadHttpRequestException or IOException) { return Results.Problem(TooLarge(limits), statusCode: 413); }
         if (form.Files.GetFile("file") is not { } part) return Results.Problem("Choose a file to upload.", statusCode: 422);
         if (part.Length > limits.MaxFileSize) return Results.Problem(TooLarge(limits), statusCode: 413);
-        var fileName = Path.GetFileName(part.FileName ?? "").Trim();
-        if (fileName.Length is 0 or > 260) return Results.Problem("The file needs a name of at most 260 characters.", statusCode: 422);
+        var fileName = ExtractFileName(part.FileName);
+        if (!IsValidFileName(fileName)) return Results.Problem("Use a filename of at most 260 characters, without path separators or special characters.", statusCode: 422);
         if (!limits.Accepts(fileName)) return Results.Problem(limits.Accept is { } accepted
             ? $"Files of this type are not accepted here. Accepted: {accepted}."
             : "The site's and this block's allowed file types do not overlap. No file types are accepted here.", statusCode: 415);
-        var contentType = string.IsNullOrWhiteSpace(part.ContentType) || part.ContentType.Length > 200 ? MediaTypeNames.Application.Octet : part.ContentType.Trim();
+        var contentType = SafeStoredContentType(part.ContentType);
+        var attachmentSettings = http.RequestServices.GetService<IOptions<AttachmentSettings>>()?.Value ?? new AttachmentSettings();
+        var existing = await Run(() => store.ListAsync(scope.Owner!, ct));
+        if (existing.Problem is not null) return existing.Problem;
+        if (attachmentSettings.MaxFilesPerOwner > 0 && existing.Value!.Count >= attachmentSettings.MaxFilesPerOwner)
+            return Results.Problem($"This record already has the maximum of {attachmentSettings.MaxFilesPerOwner} files.", statusCode: 422);
+        var existingBytes = existing.Value!.Sum(item => item.Size);
+        if (attachmentSettings.MaxTotalBytesPerOwner > 0 && existingBytes + part.Length > attachmentSettings.MaxTotalBytesPerOwner)
+            return Results.Problem("Uploading this file would exceed the total file size allowed for this record.", statusCode: 413);
         AttachmentUpload upload;
         await using (var stream = part.OpenReadStream())
         using (var buffer = new MemoryStream((int)Math.Min(part.Length, int.MaxValue)))
         {
             await stream.CopyToAsync(buffer, ct);
             if (buffer.Length > limits.MaxFileSize) return Results.Problem(TooLarge(limits), statusCode: 413);
-            upload = new(fileName, contentType, buffer.ToArray());
+            if (attachmentSettings.MaxTotalBytesPerOwner > 0 && existingBytes + buffer.Length > attachmentSettings.MaxTotalBytesPerOwner)
+                return Results.Problem("Uploading this file would exceed the total file size allowed for this record.", statusCode: 413);
+            var bytes = buffer.TryGetBuffer(out var segment) && segment.Offset == 0 && segment.Array!.Length == buffer.Length
+                ? segment.Array : buffer.ToArray();
+            upload = new(fileName, contentType, bytes);
         }
         string? Field(string name) => form.TryGetValue(name, out var values) && values.Count == 1 ? values[0] : null;
         var purpose = Field("purpose"); var label = Field("label"); var notes = Field("notes");
@@ -171,8 +214,7 @@ public static class AttachmentEndpoints
         try { rename = await http.Request.ReadFromJsonAsync<AttachmentRename>(ct); }
         catch (Exception error) when (error is JsonException or BadHttpRequestException) { return Results.BadRequest(); }
         var name = rename?.FileName?.Trim();
-        if (name is not { Length: > 0 and <= 260 } || name.EndsWith('.') || name.Any(char.IsControl)
-            || name.IndexOfAny(['/', '\\', '<', '>', ':', '"', '|', '?', '*']) >= 0)
+        if (!IsValidFileName(name))
             return Results.Problem("Use a filename of at most 260 characters, without path separators or special characters.", statusCode: 422);
         if (!scope.Block!.Limits.Accepts(name)) return Results.Problem("The filename must use a file type this block accepts.", statusCode: 415);
         var result = await Run(() => store.RenameAsync(scope.Owner!, id, name, AttachmentAccess.Actor(scope.User!), ct));

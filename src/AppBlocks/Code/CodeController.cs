@@ -173,7 +173,7 @@ public sealed class CodeController(CodeCompilation compilation, ApplicationAcces
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             logger.LogWarning(error, "The C# folder could not be changed.");
-            return Problem("The C# folder could not be changed: " + error.Message, statusCode: 422);
+            return Problem("The C# folder could not be changed. Check the server logs and folder permissions.", statusCode: 422);
         }
         catch (Exception error) when (error is System.Data.Common.DbException or Connections.DatabaseDrivers.MissingDriverException)
         {

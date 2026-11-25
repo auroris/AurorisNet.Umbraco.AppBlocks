@@ -84,12 +84,20 @@ internal sealed class MemberGroupNames(IReadOnlyList<IMemberGroup> all)
 /// other published data sources, and the backing class it names must be registered.
 /// </summary>
 public sealed class DataSourcePublishValidator(DataSourceRuntime runtime, IMemberGroupService groups, DataSourceCatalog catalog,
-    IEnumerable<IFormResource> code, DataSourceHandlers? handlers = null, Code.CompiledTypes? compiled = null, BindVariableProviders? providers = null)
+    IEnumerable<IFormResource> code, DataSourceHandlers? handlers = null, Code.CompiledTypes? compiled = null, BindVariableProviders? providers = null,
+    Umbraco.Cms.Core.Security.IBackOfficeSecurityAccessor? security = null, Authentication.ApplicationAccessPolicy? access = null)
     : INotificationAsyncHandler<ContentPublishingNotification>
 {
     public async Task HandleAsync(ContentPublishingNotification notification, CancellationToken cancellationToken)
     {
-        foreach (var content in notification.PublishedEntities.Where(c => c.ContentType.Alias == DataSourceSchema.SqlAlias))
+        var nodes = notification.PublishedEntities.Where(c => c.ContentType.Alias == DataSourceSchema.SqlAlias).ToArray();
+        if (nodes.Length == 0) return;
+        if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+        {
+            notification.CancelOperation(new EventMessage("Data source", "Only AppBlocks administrators may publish SQL data sources.", EventMessageType.Error));
+            return;
+        }
+        foreach (var content in nodes)
         {
             var warnings = new List<string>();
             var errors = await ValidateAsync(content.Key, content.Name ?? "", alias => content.GetValue(alias), warnings);

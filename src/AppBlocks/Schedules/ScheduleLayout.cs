@@ -212,7 +212,8 @@ public sealed class ScheduleLayout
             result.Append(match is null ? "" : Uri.EscapeDataString(ScheduleColumns.Text(bar, match)));
             position = close + 1;
         }
-        return result.ToString();
+        var resolved = result.ToString();
+        return Blocks.AppBlockField.IsSafeLink(resolved) ? resolved : null;
     }
 }
 

@@ -46,6 +46,11 @@ public sealed class ConnectionCatalog(IConfiguration configuration, IWebHostEnvi
     public const string ApplicationDatabaseFile = "AppBlocks.sqlite.db";
     public const string AttachmentsConnection = "AttachmentsDb";
     public const string AttachmentsDatabaseFile = "Attachments.sqlite.db";
+
+    /// <summary>Whether <paramref name="name"/> is a system-owned internal database (Umbraco CMS or separate attachments store).</summary>
+    public static bool IsSystemConnection(string name) =>
+        name.Equals(UmbracoConnection, StringComparison.OrdinalIgnoreCase)
+        || name.Equals(AttachmentsConnection, StringComparison.OrdinalIgnoreCase);
     /// <summary>The provider of a registered connection that neither declares a dialect nor can be recognized without opening it.</summary>
     public const string UnknownProvider = "unknown";
     private readonly ConcurrentDictionary<string, string> detectedProviders = new(StringComparer.OrdinalIgnoreCase);

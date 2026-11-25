@@ -24,7 +24,9 @@ internal static class ReportPrintEndpoints
 
     internal static void MapReportPrinting(this IEndpointRouteBuilder endpoints, string prefix)
     {
-        var group = endpoints.MapGroup(prefix + "/{name}/print");
+        var configuration = endpoints.ServiceProvider.GetService<IConfiguration>();
+        var limit = configuration?.GetValue<long?>("AppBlocks:Forms:MaxBodySize") ?? AppBlocks.Forms.FormEndpoints.DefaultMaxBodySize;
+        var group = endpoints.MapGroup(prefix + "/{name}/print").WithMetadata(new RequestSizeLimitAttribute(limit));
         group.AddEndpointFilter(async (context, next) => {
             var http = context.HttpContext;
             http.Response.Headers.CacheControl = "no-store";

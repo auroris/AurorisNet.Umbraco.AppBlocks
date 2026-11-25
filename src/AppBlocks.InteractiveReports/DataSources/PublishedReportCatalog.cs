@@ -41,8 +41,13 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
     public Guid? ReportOwner(string alias) { _ = Reports; return reportOwners.TryGetValue(alias.Trim(), out var key) ? key : null; }
     public DataSourceDefinition? SourceForReport(string name) => ReportNodes.GetValueOrDefault(name)?.DataSource;
 
-    public DataSourceDefinition? ResolveBlockSource(Guid key, string selection, ICollection<string> errors) =>
-        ReportBlockSource.Read(key, selection, name => managed?.List().Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true, errors);
+    public DataSourceDefinition? ResolveBlockSource(Guid key, string selection, ICollection<string> errors)
+    {
+        var allowSystem = configuration.GetValue("AppBlocks:AllowSystemConnectionsInReportBlocks", false);
+        return ReportBlockSource.Read(key, selection, name =>
+            (allowSystem || !AppBlocks.Connections.ConnectionCatalog.IsSystemConnection(name))
+            && managed?.List().Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true, errors);
+    }
 
     /// <summary>Whether access requires an account, the source binds the caller, or its schema cannot be read to tell.</summary>
     public bool RequiresSignedInReader(DataSourceDefinition source) => !DataSourceQueries.CanRead(source, DataSourceUser.Anonymous)
@@ -82,8 +87,8 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
         if (!string.IsNullOrEmpty(report.DataSource) || !string.IsNullOrEmpty(report.Provider)) errors.Add("Use a registered connection; report options cannot contain database connection strings or providers.");
         // Context parameters bind server-owned values: a data source's bind variables supply them, never content.
         if (report.ContextParams is { Count: > 0 }) errors.Add("Report options cannot contain contextParams; a data source's row restriction binds the signed-in person.");
-        // The source name is the server's too: a node naming another report would borrow that report's access decisions.
-        report.DataSource = null; report.Provider = null; report.ContextParams = null; report.SourceName = null;
+        // The source name and authorization are the server's too: a node cannot borrow another report's access decisions or inject authorization rules via options JSON.
+        report.DataSource = null; report.Provider = null; report.ContextParams = null; report.SourceName = null; report.Authorization = null;
         report.Name = alias;
         if (Text(value, "title") is { Length: > 0 } title) report.Title = title;
         if (Text(value, "controls") is { Length: > 0 } controls)
@@ -199,7 +204,12 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
                     if (report is null) { reports.Remove(alias); unavailableReports.Add(alias); }
                     else if (nodes.TryAdd(report.Alias, report))
                     {
-                        if (configured.CurrentValue.Reports.ContainsKey(report.Alias)) warnings.Replaced(report.Alias);
+                        if (configured.CurrentValue.Reports.TryGetValue(report.Alias, out var seed))
+                        {
+                            warnings.Replaced(report.Alias);
+                            // Preserve the configured report's authorization so a content node cannot downgrade a built-in admin report.
+                            if (seed.Authorization is not null) report.Definition.Authorization = seed.Authorization;
+                        }
                         reports[report.Alias] = report.Definition;
                     }
                 }

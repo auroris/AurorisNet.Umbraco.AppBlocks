@@ -325,7 +325,7 @@ public static partial class CodeRecipes
         code.AppendLine("}");
         code.AppendLine();
         code.AppendLine($"public sealed class {recipe.ClassName}(IApplicationConnectionFactory connections, IDataSourceUserResolver users, ILogger<{recipe.ClassName}> logger)");
-        code.AppendLine($"    : FormResource<{input}, {input}>");
+        code.AppendLine($"    : FormResource<{input}, {input}>, AppBlocks.Attachments.IAttachmentOwner");
         code.AppendLine("{");
         code.AppendLine($"    private const string ConnectionName = {Literal(recipe.Connection)};");
         code.AppendLine("    private static readonly bool UseChecksum = false;");
@@ -356,6 +356,9 @@ public static partial class CodeRecipes
         code.AppendLine($"    public override bool RequireMember => {(membersOnly ? "true" : "false")};");
         code.AppendLine();
         AppendAccess(code, recipe);
+        code.AppendLine();
+        code.AppendLine("    public async ValueTask<bool> MayWriteAttachmentsAsync(FormRecord record, FormExecutionContext context, CancellationToken ct)");
+        code.AppendLine("        => await CallerAsync(context, ct) is { } user && CanWrite(user);");
         code.AppendLine();
         code.AppendLine("    public override async Task<FormResult> InitializeAsync(FormExecutionContext context, CancellationToken ct)");
         code.AppendLine("    {");

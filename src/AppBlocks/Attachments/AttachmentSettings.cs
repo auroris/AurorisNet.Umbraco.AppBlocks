@@ -35,6 +35,18 @@ public sealed class AttachmentSettings
     /// </summary>
     public int PendingLifetimeHours { get; set; } = 24;
 
+    /// <summary>Maximum number of active files permitted per record or pending submission. 50 unless configured.</summary>
+    public int MaxFilesPerOwner { get; set; } = 50;
+
+    /// <summary>Maximum combined bytes of active files permitted per record or pending submission. 100 MB unless configured.</summary>
+    public long MaxTotalBytesPerOwner { get; set; } = 100L * 1024 * 1024;
+
+    /// <summary>
+    /// Whether anonymous visitors may upload pending files before submitting a form that has an Anti-spam block.
+    /// Off by default so anonymous uploads cannot bypass Anti-spam checks.
+    /// </summary>
+    public bool AllowAnonymousPendingWithAntiSpam { get; set; }
+
     public string ConnectionName => string.IsNullOrWhiteSpace(Connection) ? DefaultConnection : Connection.Trim();
 }
 

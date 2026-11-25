@@ -52,6 +52,7 @@ public sealed class AppBlocksSettingsController(ConnectionCatalog connections, C
     public IActionResult Kinds() => Ok(DatabaseKinds.All.Select(kind => new { provider = kind.ProviderName(), name = kind.DisplayName() }));
 
     [HttpGet("tables")]
+    [Authorize(Policy = AppBlocksAuthorization.AdministratorPolicy)]
     public async Task<IActionResult> Tables(string connection = ConnectionCatalog.ApplicationConnection, CancellationToken ct = default)
     {
         Response.Headers.CacheControl = "no-store";

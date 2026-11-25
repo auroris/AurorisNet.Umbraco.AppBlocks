@@ -130,7 +130,7 @@ public sealed class RecaptchaV3Service(IHttpClientFactory clients) : SiteVerifyS
         // A v2 key answers success with no score, which says nothing about this visitor and means the block has the wrong keys.
         if (!reply.TryGetProperty("score", out var score) || !score.TryGetDecimal(out var value))
             return AntiSpamAnswer.Unavailable($"{Name} sent no score. Check that the keys are reCAPTCHA v3 keys.");
-        if (reply.TryGetProperty("action", out var action) && action.ValueKind == JsonValueKind.String && action.GetString() != Action) return AntiSpamAnswer.Failed;
+        if (!reply.TryGetProperty("action", out var action) || action.ValueKind != JsonValueKind.String || action.GetString() != Action) return AntiSpamAnswer.Failed;
         return value >= request.ScoreThreshold ? AntiSpamAnswer.Passed : AntiSpamAnswer.Failed;
     }
 }

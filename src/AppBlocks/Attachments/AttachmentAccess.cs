@@ -51,11 +51,12 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         if (scope.Status != 200) return AttachmentScope.Refused(scope.Status, scope.Problem!);
         var block = AttachmentBlock.Read(scope.Item!.Content, settings.Value);
         var context = new FormExecutionContext(scope.User!, pageKey, blockKey, Definition, Parameters: scope.Parameters);
-        var write = !block.ReadOnly && (scope.Resource is IAttachmentOwner rule
+        var viewOnly = block.OwnedByForm && scope.Form?.ViewOnly == true;
+        var write = !block.ReadOnly && !viewOnly && (scope.Resource is IAttachmentOwner rule
             ? await rule.MayWriteAttachmentsAsync(scope.Record!, context, ct)
-            : scope.User!.Identity?.IsAuthenticated == true);
+            : scope.User!.Identity?.IsAuthenticated == true && (scope.Record!.Capabilities.Update || scope.Record.Capabilities.Delete));
         // A resource may let a caller it does not let write add files all the same.
-        var add = write || !block.ReadOnly && scope.Resource is IAddOnlyAttachmentOwner additions
+        var add = write || !block.ReadOnly && !viewOnly && scope.Resource is IAddOnlyAttachmentOwner additions
             && await additions.MayAddAttachmentsAsync(scope.Record!, context, ct);
         return new(200, null, block, scope.User, new AttachmentOwner(scope.Resource!.Alias, scope.OwnerKey), write, CanAdd: add,
             Resource: scope.Resource, Parameters: scope.Parameters);
@@ -71,7 +72,7 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         var scope = await owners.ResolveAsync(pageKey, blockKey, AppBlockSchema.AttachmentsAlias, Words, Owner, Definition, ct, allowAnonymous: true, newRecord: true);
         if (scope.Status != 200) return AttachmentScope.Refused(scope.Status, scope.Problem!);
         var block = AttachmentBlock.Read(scope.Item!.Content, settings.Value);
-        if (!await AllowsNewUploadsAsync(block, scope.Form!, scope.User!, pageKey, blockKey, scope.Parameters, ct))
+        if (!await AllowsNewUploadsAsync(block, scope.Form!, scope.User!, pageKey, blockKey, scope.Parameters, ct, settings.Value))
             return AttachmentScope.Refused(404, "Save the record before adding files.");
         return new(200, null, block, scope.User, AttachmentOwner.Pending(scope.Resource!.Alias, submissionKey, scope.User!), true, submissionKey, CanAdd: true,
             Resource: scope.Resource, Parameters: scope.Parameters);
@@ -92,9 +93,10 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
     /// files only where the class lets them create a record and write its files, and an adoption then succeeds.
     /// </summary>
     public static async Task<bool> AllowsNewUploadsAsync(AttachmentBlock block, FormDefinition form, ClaimsPrincipal user, Guid pageKey, Guid blockKey,
-        IReadOnlyDictionary<string, string>? parameters, CancellationToken ct)
+        IReadOnlyDictionary<string, string>? parameters, CancellationToken ct, AttachmentSettings? attachmentSettings = null)
     {
         if (block.ReadOnly || !block.OwnedByForm || form.ViewOnly || FormResourceAccess.Refusal(form.Resource, user) is not null) return false;
+        if (user.Identity?.IsAuthenticated != true && form.AntiSpam.Count > 0 && attachmentSettings?.AllowAnonymousPendingWithAntiSpam != true) return false;
         var initialized = await form.Resource.InitializeAsync(new FormExecutionContext(user, pageKey, form.Block.ContentKey, form.Revision, Parameters: parameters), ct);
         if (initialized.Status != 200 || initialized.Record is not { Capabilities.Create: true } record) return false;
         return form.Resource is IAttachmentOwner rule

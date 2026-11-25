@@ -230,7 +230,18 @@ internal sealed class DataSourceReceipts(TimeProvider? time = null, IOptions<Dat
     public ValueTask AddAsync(string submission, DataSourceReceipt receipt, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        if (receipts.Count > settings.ReceiptCapacity) foreach (var stale in receipts.Where(r => r.Value.Expires <= now).Select(r => r.Key).ToArray()) receipts.TryRemove(stale, out _);
+        var capacity = Math.Max(1, settings.ReceiptCapacity);
+        if (receipts.Count >= capacity)
+        {
+            foreach (var stale in receipts.Where(r => r.Value.Expires <= now).Select(r => r.Key).ToArray())
+                receipts.TryRemove(stale, out _);
+            if (receipts.Count >= capacity)
+            {
+                var overflow = receipts.Count - capacity + Math.Max(1, capacity / 10);
+                foreach (var oldest in receipts.OrderBy(r => r.Value.Expires).Take(overflow).Select(r => r.Key).ToArray())
+                    receipts.TryRemove(oldest, out _);
+            }
+        }
         receipts[submission] = (receipt, now + TimeSpan.FromMinutes(settings.ReceiptLifetimeMinutes));
         return ValueTask.CompletedTask;
     }

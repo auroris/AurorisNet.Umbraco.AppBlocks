@@ -571,7 +571,7 @@ internal class ClosedRecords : IFormResource
     public string ContractVersion => "1";
     public IReadOnlyList<FormField> Fields { get; } = [new("name", "Your name", "text")];
     public virtual Task<FormResult> LoadAsync(string key, FormExecutionContext context, CancellationToken ct)
-        => Task.FromResult(FormResult.Ok(new(key, "1", new Dictionary<string, object?> { ["name"] = "A record" }, new())));
+        => Task.FromResult(FormResult.Ok(new(key, "1", new Dictionary<string, object?> { ["name"] = "A record" }, new(Update: context.Member.Identity?.IsAuthenticated == true))));
     public Task<FormResult> InitializeAsync(FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
     public Task<FormResult> CreateAsync(JsonElement input, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());
     public Task<FormResult> UpdateAsync(string key, JsonElement input, string? checksum, FormExecutionContext context, CancellationToken ct) => Task.FromResult(FormResult.Denied());

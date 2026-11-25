@@ -14,6 +14,9 @@ public sealed class PaperReportDelivery(DocumentOutputService outputs)
             ? DocumentOutputService.Html(request)
             : await outputs.RenderDefaultPdfAsync(request, ct);
         http.Response.RegisterForDispose(result);
+        http.Response.Headers.XContentTypeOptions = "nosniff";
+        if (result.ContentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+            http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; sandbox";
         http.Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("inline") { FileNameStar = result.FileName }.ToString();
         return Results.Stream(result.Content, result.ContentType);
     }

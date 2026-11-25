@@ -105,6 +105,9 @@ internal sealed class SqlTemplate
     /// <summary>The first word of code, past comments and opening parentheses; null when there is none.</summary>
     public static string? FirstWord(string sql) => new Scanner(sql).FirstWord();
 
+    /// <summary>Whether the first non-comment token is an opening parenthesis (e.g. PostgreSQL EXPLAIN option list).</summary>
+    internal static bool StartsWithParenthesis(string sql) => new Scanner(sql).StartsWithParenthesis();
+
     /// <summary>Whether a row source is a query rather than a table name: its first word is SELECT or WITH.</summary>
     public static bool IsQuery(string source)
     {
@@ -113,7 +116,7 @@ internal sealed class SqlTemplate
     }
 
     /// <param name="label">Names the SQL in messages, such as "The row restriction".</param>
-    public static SqlTemplate? Parse(string sql, SqlUse use, string label, ICollection<string> errors)
+    public static SqlTemplate? Parse(string sql, SqlUse use, string label, ICollection<string> errors, bool bracketIdentifiers = true)
     {
         var start = errors.Count;
         var parts = new List<object>();
@@ -137,7 +140,7 @@ internal sealed class SqlTemplate
                 i = alternative;
                 continue;
             }
-            if (c is '\'' or '"' or '`' or '[')
+            if (c is '\'' or '"' or '`' || (bracketIdentifiers && c == '['))
             {
                 var end = Scanner.EndOfQuoted(sql, i);
                 if (end < 0) { errors.Add($"{label} has an unterminated string or quoted name."); return null; }
@@ -219,10 +222,12 @@ internal sealed class SqlTemplate
             if (!inList) errors.Add($"{label} uses :USER_GROUPS outside IN (:USER_GROUPS); it stands for a list of groups.");
         }
         if (use == SqlUse.RowSource && !IsQuery(sql)) errors.Add($"{label} must start with SELECT or WITH.");
-        // Publishing compiles a statement on SQL Server between SET NOEXEC ON and OFF; one that changed those settings itself could run then.
-        if (use == SqlUse.Statement && tokens.Zip(tokens.Skip(1)).FirstOrDefault(pair => pair.First.Equals("SET", StringComparison.OrdinalIgnoreCase)
-            && (pair.Second.Equals("NOEXEC", StringComparison.OrdinalIgnoreCase) || pair.Second.Equals("PARSEONLY", StringComparison.OrdinalIgnoreCase))) is ({ } set, { } option))
-            errors.Add($"{label} cannot use {set.ToUpperInvariant()} {option.ToUpperInvariant()}: publishing sets it to check the statement without running it.");
+        // Publishing compiles a statement on SQL Server between SET NOEXEC ON and OFF; forbid NOEXEC, PARSEONLY and FMTONLY anywhere in the statement (including comma-separated SET lists).
+        if (use == SqlUse.Statement && tokens.FirstOrDefault(token =>
+            token.Equals("NOEXEC", StringComparison.OrdinalIgnoreCase)
+            || token.Equals("PARSEONLY", StringComparison.OrdinalIgnoreCase)
+            || token.Equals("FMTONLY", StringComparison.OrdinalIgnoreCase)) is { } option)
+            errors.Add($"{label} cannot use SET {option.ToUpperInvariant()}: publishing sets it to check the statement without running it.");
         if (literal.Length > 0) parts.Add(literal.ToString());
         statements.Add(sql[statementStart..]);
         return errors.Count == start
@@ -254,6 +259,20 @@ internal sealed class SqlTemplate
     /// <summary>A forward-only reader over code, skipping strings, quoted names and comments.</summary>
     private readonly struct Scanner(string sql)
     {
+        public bool StartsWithParenthesis()
+        {
+            var i = 0;
+            while (i < sql.Length)
+            {
+                var c = sql[i];
+                if (char.IsWhiteSpace(c)) { i++; continue; }
+                if (c == '-' && i + 1 < sql.Length && sql[i + 1] == '-') { var end = sql.IndexOf('\n', i); if (end < 0) return false; i = end; continue; }
+                if (c == '/' && i + 1 < sql.Length && sql[i + 1] == '*') { var end = EndOfComment(sql, i); if (end < 0) return false; i = end; continue; }
+                return c == '(';
+            }
+            return false;
+        }
+
         public string? FirstWord()
         {
             var i = 0;

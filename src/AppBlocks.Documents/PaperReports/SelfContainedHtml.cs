@@ -131,8 +131,14 @@ public sealed partial class SelfContainedHtml(IWebHostEnvironment environment, I
                 logger.LogWarning("Paper report asset {Asset} is not a URL; its reference is kept.", text);
                 return null;
             }
-            return await Read(uri) is { } asset ? "data:" + asset.MediaType + ";base64," + Convert.ToBase64String(asset.Bytes) + uri.Fragment : null;
+            return await Read(uri) is { } asset ? "data:" + asset.MediaType + ";base64," + Convert.ToBase64String(asset.Bytes) + SafeFragment(uri.Fragment) : null;
         }
+
+        static string SafeFragment(string fragment)
+            => string.IsNullOrEmpty(fragment) ? "" : fragment.Replace("\\", "%5C").Replace("\"", "%22").Replace(")", "%29").Replace("'", "%27");
+
+        static string EscapeStyleEnd(string css)
+            => Regex.Replace(css, @"</style", @"\3c /style", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         async Task<string> Css(string css, Uri relativeTo, HashSet<Uri> importing)
         {
@@ -169,14 +175,14 @@ public sealed partial class SelfContainedHtml(IWebHostEnvironment environment, I
                 if (await Read(uri) is not { } asset) continue;
                 var style = document.CreateElement("style");
                 if (link.Attributes["media"] is { } media) style.SetAttributeValue("media", media.Value);
-                style.InnerHtml = await Css(Encoding.UTF8.GetString(asset.Bytes), uri, [uri]);
+                style.InnerHtml = EscapeStyleEnd(await Css(Encoding.UTF8.GetString(asset.Bytes), uri, [uri]));
                 link.ParentNode!.ReplaceChild(style, link);
             }
             else if (link.GetAttributeValue("rel", "").Contains("icon", StringComparison.OrdinalIgnoreCase) && await Data(href, documentUri) is { } icon)
                 link.SetAttributeValue("href", icon);
         }
         foreach (var style in document.DocumentNode.SelectNodes("//style")?.ToArray() ?? [])
-            style.InnerHtml = await Css(style.InnerHtml, documentUri, []);
+            style.InnerHtml = EscapeStyleEnd(await Css(style.InnerHtml, documentUri, []));
         foreach (var node in document.DocumentNode.SelectNodes("//*[@style]")?.ToArray() ?? [])
             node.SetAttributeValue("style", await Css(HtmlEntity.DeEntitize(node.GetAttributeValue("style", "")), documentUri, []));
         foreach (var node in document.DocumentNode.SelectNodes("//img|//source|//script|//video|//audio|//*[local-name()='image']")?.ToArray() ?? [])
@@ -206,7 +212,7 @@ public sealed partial class SelfContainedHtml(IWebHostEnvironment environment, I
         if (allowed?.Allows(address) == true) return false;
         if (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any)) return true;
         return address.AddressFamily == AddressFamily.InterNetwork
-            ? address.GetAddressBytes() is [169, 254, ..] or [10, ..] or [172, >= 16 and <= 31, ..] or [192, 168, ..] or [100, >= 64 and <= 127, ..]
+            ? address.GetAddressBytes() is [0, ..] or [169, 254, ..] or [10, ..] or [172, >= 16 and <= 31, ..] or [192, 168, ..] or [100, >= 64 and <= 127, ..]
             : address.IsIPv6LinkLocal || address.IsIPv6UniqueLocal || address.IsIPv6SiteLocal;
     }
 

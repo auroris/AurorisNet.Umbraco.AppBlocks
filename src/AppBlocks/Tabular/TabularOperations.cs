@@ -26,6 +26,7 @@ internal static class TabularOperations
         for (var i = 0; i < sent.Count; i++)
         {
             var change = sent[i];
+            if (change is null) return new(422, i, "Each change must be an object.");
             if (Operation(change.Operation) is not { } operation) return new(422, i, "Each change is a create, an update or a delete.");
             if (operation == RowOperation.Create && block.HideAdd) return new(403, i, "This tabular form does not add rows.");
             if (operation == RowOperation.Update && block.HideEdit) return new(403, i, "This tabular form does not change saved rows.");

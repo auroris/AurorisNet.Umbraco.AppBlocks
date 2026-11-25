@@ -13,6 +13,11 @@ public sealed class CodeOptions
     public const string Section = "AppBlocks";
     /// <summary>The C# folder, relative to the content root unless rooted. Keep it equal to the <c>AppBlocksCodeDirectory</c> MSBuild property.</summary>
     public string CodeDirectory { get; set; } = CodeFolder.DefaultDirectory;
+    /// <summary>
+    /// Allows runtime C# compilation outside the Development environment when a Roslyn compiler assembly is present.
+    /// Defaults to false so production sites that transitively ship Roslyn never execute backoffice-authored C# unintentionally.
+    /// </summary>
+    public bool EnableRuntimeCompilation { get; set; }
 }
 
 /// <summary>The extension points AppBlocks reads from the compiled folder, in the order the section lists them.</summary>
@@ -93,7 +98,8 @@ public sealed class CodeCompilation : IHostedService, IDisposable
     private Timer? debounce;
 
     public CodeCompilation(IHostEnvironment environment, IOptions<CodeOptions> options, IServiceScopeFactory scopes, ILogger<CodeCompilation> logger)
-        : this(CodeFolder.Under(environment.ContentRootPath, options.Value.CodeDirectory), RoslynCompiler.Find(), scopes, logger) { }
+        : this(CodeFolder.Under(environment.ContentRootPath, options.Value.CodeDirectory),
+            environment.IsDevelopment() || options.Value.EnableRuntimeCompilation ? RoslynCompiler.Find() : null, scopes, logger) { }
 
     internal CodeCompilation(CodeFolder folder, RoslynCompiler? compiler, IServiceScopeFactory scopes, ILogger<CodeCompilation> logger)
     {

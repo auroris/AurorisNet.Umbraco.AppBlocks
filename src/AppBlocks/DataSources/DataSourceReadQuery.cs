@@ -50,7 +50,12 @@ public sealed class DataSourceReadQuery
             var column = plan.Field(linkField) ?? plan.Columns.FirstOrDefault(c => c.Column.Equals(linkField, StringComparison.OrdinalIgnoreCase));
             if (column is null) throw new DataSourceException($"The report source has no detail link field '{linkField}'.");
             var typed = FieldValues.FromValue(parentKey, column.Kind, out var valid, plan.Definition.DateTimes);
-            var bound = valid ? plan.Dialect.ToDatabase(typed, column.Kind, column.Target, plan.Definition.DateTimes) : null;
+            object? bound = null;
+            if (valid)
+            {
+                try { bound = plan.Dialect.ToDatabase(typed, column.Kind, column.Target, plan.Definition.DateTimes); }
+                catch (DataSourceException) { bound = null; }
+            }
             match.Add((column.Column, parameters.Add(bound)));
         }
         var sql = plan.Dialect.Select(from, plan.ReadColumns, match, where);

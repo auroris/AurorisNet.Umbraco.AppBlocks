@@ -20,7 +20,10 @@ public static class TabularEndpoints
 
     public static void MapTabular(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup(Route(endpoints.ServiceProvider.GetService<IConfiguration>()) + "/{pageKey:guid}/{blockKey:guid}");
+        var configuration = endpoints.ServiceProvider.GetService<IConfiguration>();
+        var limit = configuration?.GetValue<long?>("AppBlocks:Forms:MaxBodySize") ?? FormEndpoints.DefaultMaxBodySize;
+        var group = endpoints.MapGroup(Route(configuration) + "/{pageKey:guid}/{blockKey:guid}")
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(limit));
         group.MapGet("", List);
         group.MapGet("/new", ListNew);
         group.MapPost("", Save);

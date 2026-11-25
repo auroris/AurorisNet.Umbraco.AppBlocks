@@ -251,13 +251,14 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     private static async Task<long> InsertFileAsync(DbConnection connection, DbTransaction transaction, AttachmentUpload file, string by, DateTime now, CancellationToken ct)
     {
         var kind = DatabaseKinds.Of(connection);
+        var isOracle = kind is DatabaseDialect.Oracle or DatabaseDialect.Oracle11g;
         var sql = "INSERT INTO APP_ATTACHMENT (FILE_NAME, CONTENT_TYPE, SIZE, SHA256, CONTENT, UPLOADED_BY, UPLOADED_AT)"
             + (kind == DatabaseDialect.SqlServer ? " OUTPUT INSERTED.ATTACHMENT_ID" : "")
             + " VALUES (@name, @type, @size, @hash, @content, @by, @now)"
-            + kind switch { DatabaseDialect.SqlServer => "", DatabaseDialect.Oracle => " RETURNING ATTACHMENT_ID INTO @id", _ => " RETURNING ATTACHMENT_ID" };
+            + (kind == DatabaseDialect.SqlServer ? "" : isOracle ? " RETURNING ATTACHMENT_ID INTO @id" : " RETURNING ATTACHMENT_ID");
         await using var command = Command(connection, transaction, sql, ("@name", file.FileName), ("@type", file.ContentType), ("@size", (long)file.Bytes.Length),
             ("@hash", Convert.ToHexString(SHA256.HashData(file.Bytes)).ToLowerInvariant()), ("@content", file.Bytes), ("@by", by), ("@now", now));
-        if (kind != DatabaseDialect.Oracle) return Convert.ToInt64(await command.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        if (!isOracle) return Convert.ToInt64(await command.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
         // Oracle hands a RETURNING value back through an output parameter, whose value may be the driver's own number type, so it is read as text.
         var id = command.CreateParameter();
         id.ParameterName = "id";
@@ -338,23 +339,24 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     private static DbCommand Command(DbConnection connection, DbTransaction? transaction, string sql, params (string Name, object? Value)[] parameters)
     {
         var kind = DatabaseKinds.Of(connection);
+        var isOracle = kind is DatabaseDialect.Oracle or DatabaseDialect.Oracle11g;
         var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = Sql(kind, sql);
         // Oracle binds by position unless told otherwise, and the store's SQL uses some parameters twice.
-        if (kind == DatabaseDialect.Oracle) AppBlocks.DataSources.OracleDialect.Instance.ConfigureCommand(command);
+        if (isOracle) AppBlocks.DataSources.OracleDialect.Instance.ConfigureCommand(command);
         foreach (var (name, value) in parameters)
         {
             var parameter = command.CreateParameter();
-            parameter.ParameterName = kind == DatabaseDialect.Oracle ? name.TrimStart('@') : name;
+            parameter.ParameterName = isOracle ? name.TrimStart('@') : name;
             parameter.Value = value ?? DBNull.Value;
             // SQL Server needs to be told a blob is varbinary(max) and a time is datetime2, and Oracle that a blob is a BLOB rather than a RAW,
             // which holds 2000 bytes. SQLite and PostgreSQL bind by the value's type: a blob, and for PostgreSQL a UTC time as timestamptz.
             if (kind == DatabaseDialect.SqlServer && value is byte[]) { parameter.DbType = DbType.Binary; parameter.Size = -1; }
             else if (kind == DatabaseDialect.SqlServer && value is DateTime) parameter.DbType = DbType.DateTime2;
-            else if (kind == DatabaseDialect.Oracle && value is byte[] && parameter.GetType().GetProperty("OracleDbType") is { CanWrite: true } type && type.PropertyType.IsEnum)
+            else if (isOracle && value is byte[] && parameter.GetType().GetProperty("OracleDbType") is { CanWrite: true } type && type.PropertyType.IsEnum)
                 type.SetValue(parameter, Enum.Parse(type.PropertyType, "Blob"));
-            else if (kind == DatabaseDialect.Oracle && value is DateTime) parameter.DbType = DbType.DateTime;
+            else if (isOracle && value is DateTime) parameter.DbType = DbType.DateTime;
             command.Parameters.Add(parameter);
         }
         return command;

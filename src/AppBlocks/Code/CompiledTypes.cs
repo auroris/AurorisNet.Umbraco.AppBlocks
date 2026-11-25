@@ -8,10 +8,11 @@ namespace AppBlocks.Code;
 /// it is first asked for, so a recompile reaches the next request. A class that cannot be made is left out and logged; the section has
 /// already reported it.
 /// </summary>
-public sealed class CompiledTypes(CodeCompilation compilation, IServiceProvider services, ILogger<CompiledTypes> logger)
+public sealed class CompiledTypes(CodeCompilation compilation, IServiceProvider services, ILogger<CompiledTypes> logger) : IDisposable, IAsyncDisposable
 {
     private readonly Dictionary<Type, object> made = [];
     private readonly HashSet<Type> making = [];
+    private readonly List<object> disposables = [];
 
     /// <summary>
     /// The compiled classes implementing <typeparamref name="T"/>. A class whose constructor asks, through a registry, for the classes of its own
@@ -26,13 +27,37 @@ public sealed class CompiledTypes(CodeCompilation compilation, IServiceProvider 
             var instances = new List<T>();
             foreach (var type in compilation.Serving.Of(typeof(T)))
             {
-                try { instances.Add((T)ActivatorUtilities.CreateInstance(services, type)); }
+                try
+                {
+                    var instance = (T)ActivatorUtilities.CreateInstance(services, type);
+                    instances.Add(instance);
+                    if (instance is IDisposable or IAsyncDisposable) disposables.Add(instance);
+                }
                 catch (Exception error) { logger.LogWarning(error, "The compiled class {Type} could not be constructed and is not used.", type.FullName); }
             }
             made[typeof(T)] = instances;
             return instances;
         }
         finally { making.Remove(typeof(T)); }
+    }
+
+    public void Dispose()
+    {
+        for (var i = disposables.Count - 1; i >= 0; i--)
+        {
+            if (disposables[i] is IDisposable disposable) disposable.Dispose();
+        }
+        disposables.Clear();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        for (var i = disposables.Count - 1; i >= 0; i--)
+        {
+            if (disposables[i] is IAsyncDisposable asyncDisposable) await asyncDisposable.DisposeAsync();
+            else if (disposables[i] is IDisposable disposable) disposable.Dispose();
+        }
+        disposables.Clear();
     }
 }
 

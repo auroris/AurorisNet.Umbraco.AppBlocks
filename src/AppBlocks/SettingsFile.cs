@@ -10,7 +10,7 @@ namespace AppBlocks;
 internal sealed class SettingsFile<T>(Func<string> path, Func<string?, T> parse)
 {
     private sealed record Version(string Path, bool Exists, DateTime Written, long Length, T Value);
-    private Version? current;
+    private volatile Version? current;
 
     public T Read()
     {
@@ -21,7 +21,13 @@ internal sealed class SettingsFile<T>(Func<string> path, Func<string?, T> parse)
             return known.Value;
         // Stamped before the read: a write in between leaves a stamp older than the file, so the next read parses it again.
         var (exists, written, length) = file.Exists ? (true, file.LastWriteTimeUtc, file.Length) : (false, default, 0L);
-        var value = parse(exists ? File.ReadAllText(file.FullName) : null);
+        string? text = null;
+        if (exists)
+        {
+            try { text = File.ReadAllText(file.FullName); }
+            catch (FileNotFoundException) { exists = false; written = default; length = 0L; }
+        }
+        var value = parse(text);
         current = new(file.FullName, exists, written, length, value);
         return value;
     }

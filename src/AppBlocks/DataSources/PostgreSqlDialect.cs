@@ -16,8 +16,9 @@ public sealed class PostgreSqlDialect : SqlDialect
     public override string CompileOnly(string statement) => "EXPLAIN " + statement;
     // Npgsql's own timeout wraps a TimeoutException; the server's statement_timeout cancels with SQLSTATE 57014.
     internal override bool IsTimeout(DbException error) => base.IsTimeout(error) || error.SqlState == "57014";
-    // EXPLAIN takes no procedure call or anonymous block.
-    internal override bool Compiles(string statement) => SqlTemplate.FirstWord(statement)?.ToUpperInvariant() is not ("CALL" or "DO");
+    // EXPLAIN takes only plain DML/query statements; reject option lists like (ANALYZE true) or non-DML verbs like ANALYZE/CALL/DO.
+    internal override bool Compiles(string statement) => !SqlTemplate.StartsWithParenthesis(statement)
+        && SqlTemplate.FirstWord(statement)?.ToUpperInvariant() is "SELECT" or "INSERT" or "UPDATE" or "DELETE" or "MERGE" or "WITH";
 
     public override string? KindOf(string storeType) => storeType.ToLowerInvariant() switch {
         "bool" or "boolean" => FieldKinds.Checkbox,
