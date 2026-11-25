@@ -55,7 +55,7 @@ The tests in `tests/ui` drive the backoffice screens and the browser runtime wit
 node --test tests/ui/
 ```
 
-They load Playwright from the checkout at `../AurorisNet.InteractiveReports`, after `npm ci` there. Set `INTERACTIVE_REPORTS_ROOT` for a checkout elsewhere. Set `BROWSER_PATH` to an installed Chromium browser when Playwright's own is missing.
+Run `npm ci` and `npm run build:client` in `../AurorisNet.InteractiveReports` first. The tests load Playwright and the built report widget from that checkout. Set `INTERACTIVE_REPORTS_ROOT` for a checkout elsewhere. Set `BROWSER_PATH` to an installed Chromium browser when Playwright's own is missing.
 
 ## Clean-install test
 

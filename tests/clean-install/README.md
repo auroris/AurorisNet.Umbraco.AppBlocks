@@ -12,14 +12,14 @@ pwsh -NoProfile -File tests/clean-install/Invoke-CleanInstall.ps1
 
 | Parameter | Default | What it does |
 |---|---|---|
-| `-InteractiveReportsRoot` | `../AurorisNet.InteractiveReports` | The Interactive Reports checkout whose projects the script packs, and whose `node_modules` supply Playwright. Run `npm ci` there first |
+| `-InteractiveReportsRoot` | `../AurorisNet.InteractiveReports` | The checkout that supplies Playwright. Run `npm ci` there first |
 | `-Port` | `5189` | The port the test sites listen on |
 
 The browser is Playwright's Chromium, or Microsoft Edge. The test sites run only while the checks run.
 
 ## What it sets up
 
-The script packs the projects into a local feed and creates two sites with the Umbraco template matching the version in `Directory.Build.props`:
+The script packs AppBlocks and its two companions into a local feed. The sites restore their declared dependencies from NuGet and use the Umbraco template version in `Directory.Build.props`.
 
 1. **core**: AppBlocks alone.
 2. **companions**: AppBlocks with the Interactive Reports and Documents packages.

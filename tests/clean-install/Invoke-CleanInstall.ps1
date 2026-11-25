@@ -5,7 +5,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$run = Join-Path $repository ('artifacts/clean-install-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+# Keep the isolated package cache short enough for MSBuild to publish Umbraco's longest static asset paths on Windows.
+$run = Join-Path $repository ('artifacts/clean-install-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $feed = New-Item -ItemType Directory -Path (Join-Path $run 'feed')
 $address = "http://localhost:$Port"
 $password = 'Clean!AppBlocks-' + [guid]::NewGuid().ToString('N')
@@ -61,16 +62,9 @@ $previous = @{}
 foreach ($name in @('APPBLOCKS_CLEAN_SITE', 'APPBLOCKS_CLEAN_URL', 'APPBLOCKS_CLEAN_STAGE', 'INTERACTIVE_REPORTS_ROOT')) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 try {
     Invoke-Checked 'template.log' { dotnet new install "Umbraco.Templates@$umbracoVersion" --force }
-    $projects = @(
-        (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.Core'),
-        (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.AspNetCore'),
-        (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.Client.Json'),
-        (Join-Path $InteractiveReportsRoot 'src/InteractiveReport.Client.FileDownload'),
-        'src/AppBlocks', 'src/AppBlocks.InteractiveReports', 'src/AppBlocks.Documents'
-    )
-    foreach ($project in $projects) {
+    foreach ($project in 'src/AppBlocks', 'src/AppBlocks.InteractiveReports', 'src/AppBlocks.Documents') {
         $name = Split-Path $project -Leaf
-        Invoke-Checked "pack-$name.log" { dotnet pack $project -c Release -o $feed.FullName --nologo -v minimal "-p:InteractiveReportsRoot=$InteractiveReportsRoot" }
+        Invoke-Checked "pack-$name.log" { dotnet pack $project -c Release -o $feed.FullName --nologo -v minimal -p:UseInteractiveReportsSource=false }
     }
     @'
 <?xml version="1.0" encoding="utf-8"?>
