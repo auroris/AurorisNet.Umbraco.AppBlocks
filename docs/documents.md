@@ -59,7 +59,7 @@ A document is served at `/api/paper-reports/{key}`, where the key is the node's 
 - A GET request never submits to a printer.
 - A PDF failure falls back to HTML and is logged.
 
-**A document always needs a signed-in Member or backoffice User**, on a page without Public Access too. Access is checked against Umbraco's Public Access, which only the site's `IProtectedPageAdmission` can relax, and against the data source's read permissions. Knowing a document's URL grants no access.
+**A document requires a member session**, including on open pages. Standalone sites that enable `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` can authorize backoffice Users directly. Access is checked against Umbraco's Public Access, which only the site's `IProtectedPageAdmission` can relax, and against the data source's read permissions. Knowing a document's URL grants no access.
 
 ## Styling and assets
 

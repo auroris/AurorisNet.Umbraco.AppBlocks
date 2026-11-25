@@ -8,6 +8,8 @@ The application has three rules:
 - **One C# class decides who may edit.** A backoffice User allowed to edit the calling page may change its tenant's schedule. Anyone else needs to be a Member of that tenant's editors group. Anyone signed in may read.
 - **SQL stays tenant-blind.** The data sources filter and restrict on `:APP.tenant`, a value the application computes, so one set of nodes serves every tenant and a new club is a page copy.
 
+This standalone example grants website access to backoffice editors. Set `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` to `true` to supply their identity to the schedule’s business rules.
+
 ## The pages
 
 ```text

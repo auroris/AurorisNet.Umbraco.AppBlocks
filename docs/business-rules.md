@@ -46,6 +46,8 @@ Two things apply to every layer.
 
 In Umbraco, a **Member** signs in to the website and can belong to **Member Groups**. A **User** signs in to the backoffice and can belong to **User Groups**. A **backoffice administrator** is a User in the Administrators User Group.
 
+Website requests carry only the Member identity by default. A standalone site that authorizes backoffice groups directly can enable `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` to supply both accounts to its rules. The examples involving backoffice sessions below assume that option is enabled.
+
 A C# `IFormResource` receives a `FormExecutionContext`. Despite its name, the `Member` property can contain an Umbraco Member's principal, a backoffice User's principal, both identities together or, on a page without Public Access, an unauthenticated principal for an anonymous visitor. It is never null. AppBlocks supplies the identities; your application decides which account types and groups may perform each operation. Never take the signed-in account's identity from submitted form fields.
 
 Begin every operation with a sign-in check unless you mean that operation to be public, as generated samples do:
@@ -97,7 +99,7 @@ var canDeletePage = account.CanDeletePage;
 var isBackOfficeAdministrator = account.IsInUserGroup("admin"); // Umbraco's Administrators User Group alias.
 ```
 
-A browser can be signed in to both accounts at once. In that case `account.IsMember && account.IsBackOfficeUser` is true. Each account has its own details; AppBlocks does not link them by matching names, emails or numeric IDs:
+A site using both account types can receive both sessions at once. In that case `account.IsMember && account.IsBackOfficeUser` is true. Each account has its own details; AppBlocks does not link them by matching names, emails or numeric IDs:
 
 ```csharp
 var member = account.Member;                 // Null without a valid Member session.
@@ -116,8 +118,6 @@ var canDelete = backOfficeUser?.CanDeletePage == true;
 ```
 
 Both account objects also expose `Name` and `Sid`.
-
-Website requests carry only the Member identity by default. A standalone site that authorizes backoffice groups directly can enable `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` to supply both accounts to its rules.
 
 - The top-level `Key`, `Name`, `Email`, `Sid` and `Groups` describe the Member when both accounts are signed in, and otherwise the one signed-in account. `:USER_` bind variables, ownership and audit fields therefore stay on the Member while both sessions are active.
 - `MemberGroupNames` always describes the Member. `UserGroupNames` and `UserGroupAliases` always describe the backoffice User. The two sets of groups are kept separate, even when names match.

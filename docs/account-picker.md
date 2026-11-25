@@ -1,6 +1,6 @@
 # Umbraco Account Picker
 
-Add an **Umbraco Account Picker** inside a form. A signed-in Member or backoffice User with access to the page can search by display name or username. Each result shows its account type and username, including when two accounts have the same display name.
+Add an **Umbraco Account Picker** inside a form. A signed-in website account with access to the page can search by display name or username. Each result shows its account type and username, including when two accounts have the same display name.
 
 1. Add a writable **Text** block for the account key. You can hide this field. Bind it to a text field large enough for a backoffice key (47 characters) if the picker offers backoffice Users.
 2. Optionally add a second writable **Text** block for the display name. The picker fills this from Umbraco. With only a key binding, it looks up the name again when the form opens.
