@@ -5,6 +5,8 @@ artifacts/
 artifacts-*.log
 **/appsettings-schema*.json
 **/umbraco-package-schema.json
+# Written by hand: the schema of AppBlocks' own settings. Umbraco's build generates the others.
+!src/AppBlocks/appsettings-schema.json
 .vs/
 .idea/
 **/App_Data/
