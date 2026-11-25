@@ -98,7 +98,8 @@ export function mountAccountPicker(box, {
             lock(); status.classList.remove("app-picker-error");
             status.textContent = t("pickerSelected", { name: person.displayName });
             if (selected.cached) status.textContent += " " + t("pickerCached");
-            const missing = mappings.map(([, key]) => field(key)).find(input => !input.readOnly);
+            const missing = selectionMappings.map(([, key]) => field(key)).find(input =>
+                !input.value && !input.readOnly && !input.matches(":disabled") && input.getClientRects().length);
             close(); window.focus(); (missing || find).focus();
         } catch (error) {
             if (current !== generation || error.name === "AbortError") return;
@@ -116,8 +117,8 @@ export function mountAccountPicker(box, {
         if (!settings.allowManualEntry) {
             name.value = "";
             if (boundName) boundName.value = "";
-            for (const [, key] of mappings) field(key).value = "";
-            for (const input of [boundName || name, ...mappings.map(([, key]) => field(key))]) changed(input);
+            for (const [, key] of selectionMappings) field(key).value = "";
+            for (const input of [boundName || name, ...selectionMappings.map(([, key]) => field(key))]) changed(input);
         }
         changed(identity); lock();
         status.textContent = settings.allowManualEntry ? t("pickerUnlinked") : t("pickerCleared");
