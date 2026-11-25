@@ -224,7 +224,17 @@ public sealed class IdentityTests
             false => [Admission(AppPageAccess.Anonymous)],
             true => [Admission(null), Admission(admitted), Stub<IProtectedPageAdmission>(Never)],
         };
-        var access = new AppPageAccess(null!, Stub<IPublicAccessChecker>(Never), new HttpContextAccessor { HttpContext = context },
+        var http = new HttpContextAccessor { HttpContext = context };
+        var defaults = new ApplicationAccessPolicy(users);
+        var memberOnly = new AppPageAccess(null!, Stub<IPublicAccessChecker>(Never), http, defaults, protection, admissions);
+        Assert.Null(await defaults.WebsitePrincipalAsync(context));
+        Assert.Null(await memberOnly.UserAsync(page));
+        var visitor = await memberOnly.VisitorAsync(page);
+        if (protectedPage) Assert.Null(visitor);
+        else Assert.False(visitor!.Identity!.IsAuthenticated);
+        Assert.Equal(0, asked);
+
+        var access = new AppPageAccess(null!, Stub<IPublicAccessChecker>(Never), http,
             new ApplicationAccessPolicy(users, website: Microsoft.Extensions.Options.Options.Create(new WebsiteIdentityOptions { IncludeBackOfficeUsers = true })), protection, admissions);
         var result = await access.UserAsync(page);
         Assert.Equal(allowed, result is not null);

@@ -10,7 +10,7 @@ using Umbraco.Cms.Infrastructure.Migrations.Notifications;
 namespace AppBlocks.Setup;
 
 /// <summary>An element type allowed in a Block Grid data type, as <see cref="AppBlocksBuilder.AllowInBlockGrid"/> registers it.</summary>
-internal sealed record BlockGridAllowance(string DataType, string ElementType, int ColumnSpan, int RowSpan, string? Area);
+internal sealed record BlockGridAllowance(string DataType, string ElementType, int ColumnSpan, int RowSpan, string? Area, string? Group = null);
 
 /// <summary>
 /// Adds each element type registered with <see cref="AppBlocksBuilder.AllowInBlockGrid"/> to its Block Grid data type once the definitions
@@ -85,11 +85,15 @@ public sealed class BlockGridAllowances(AppBlocksBuilder builder, IRuntimeState 
             var key = element.Key.ToString();
             if (!blocks.Any(block => Same(block?["contentElementTypeKey"], key)))
             {
-                blocks.Add(new JsonObject {
+                var block = new JsonObject {
                     ["contentElementTypeKey"] = key, ["allowAtRoot"] = allowance.Area is null, ["allowInAreas"] = true,
                     ["columnSpanOptions"] = new JsonArray(new JsonObject { ["columnSpan"] = allowance.ColumnSpan }),
                     ["rowMinSpan"] = allowance.RowSpan, ["rowMaxSpan"] = allowance.RowSpan, ["areas"] = new JsonArray(),
-                });
+                };
+                if (allowance.Group is { } group && configuration["blockGroups"] is JsonArray groups &&
+                    groups.FirstOrDefault(item => Same(item?["name"], group))?["key"] is { } groupKey)
+                    block["groupKey"] = groupKey.DeepClone();
+                blocks.Add(block);
                 changed = true;
             }
             if (allowance.Area is not { } area) continue;

@@ -61,11 +61,11 @@ With the route `orders/:id/lines` and `item` under Query parameters, `GET /api/d
 An endpoint has no page, so Umbraco Public Access does not apply to it. The read goes through the same path as lists of values and paper reports, and the source decides:
 
 - **Public**: anyone with the URL, including a visitor without an account, unless the SQL or row restriction uses a `:USER_*` value, which needs a signed-in account.
-- **Not public**: a signed-in Member or backoffice User.
+- **Not public** requires a signed-in website account.
 - **Specific groups**: Members of the read or write groups.
 - The row restriction, every registered `IDataSourcePolicy` and the backing class's `QueryAsync` apply. A policy sees `DataSourceAction.Query`, and a context whose page and form keys are `Guid.Empty`, with the bound parameters.
 
-The caller is the signed-in Member and backoffice User, as for the blocks' endpoints. A cookie for a disabled or locked-out account is refused. A refused request is 401 for a caller without an account and 403 for a signed-in one.
+The caller is the signed-in Member. Sites that enable `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` also accept backoffice Users for these endpoints. A cookie for a disabled or locked-out account is refused. A refused request is 401 for a caller without an account and 403 for a signed-in one.
 
 **Public on an endpoint means public to the internet.** Choose it only for data you would put on a public page.
 

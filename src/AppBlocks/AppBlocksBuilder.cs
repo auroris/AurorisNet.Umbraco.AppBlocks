@@ -83,6 +83,16 @@ public sealed class AppBlocksBuilder
         return this;
     }
 
+    /// <summary>Adds a page block to a named group so layout areas allowing that group can offer it.</summary>
+    public AppBlocksBuilder AllowInBlockGrid(string blockGridDataTypeName, string elementTypeAlias, string blockGroupName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(blockGridDataTypeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(elementTypeAlias);
+        ArgumentException.ThrowIfNullOrWhiteSpace(blockGroupName);
+        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, 12, 1, Area: null, Group: blockGroupName));
+        return this;
+    }
+
     public AppBlocksBuilder AddConnection(string name, Func<IServiceProvider, DbConnection> factory, DatabaseDialect? dialect = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

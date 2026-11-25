@@ -12,7 +12,7 @@ namespace AppBlocks.Blocks;
 public sealed class AppPageAccess(AppBlockContent content, IPublicAccessChecker access, IHttpContextAccessor http,
     ApplicationAccessPolicy applicationAccess, IPublicAccessService publicAccess, IEnumerable<IProtectedPageAdmission> admissions)
 {
-    /// <summary>The signed-in Member and/or backoffice User this page admits, Member first when both are present. Null for everyone else, including an anonymous visitor to an open page.</summary>
+    /// <summary>The member admitted by Umbraco Public Access, or null for an unsigned visitor. Sites opting into backoffice website sessions can also admit a User.</summary>
     public async Task<ClaimsPrincipal?> UserAsync(Guid pageKey, bool includeMember = true)
     {
         if (await content.PageAsync(pageKey) is not { } page) return null;
