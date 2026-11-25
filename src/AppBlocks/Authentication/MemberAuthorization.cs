@@ -56,6 +56,7 @@ public static class AppBlocksAuthorization
 
     internal static void Add(IServiceCollection services)
     {
+        services.AddOptions<WebsiteIdentityOptions>().BindConfiguration("AppBlocks:WebsiteIdentity");
         services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, MemberAuthenticationHandler>(MemberScheme, null);
         services.AddAuthorization(options => {
             options.AddPolicy(MemberPolicy, policy => policy

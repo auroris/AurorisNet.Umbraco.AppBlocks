@@ -117,6 +117,8 @@ var canDelete = backOfficeUser?.CanDeletePage == true;
 
 Both account objects also expose `Name` and `Sid`.
 
+Website requests carry only the Member identity by default. A standalone site that authorizes backoffice groups directly can enable `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` to supply both accounts to its rules.
+
 - The top-level `Key`, `Name`, `Email`, `Sid` and `Groups` describe the Member when both accounts are signed in, and otherwise the one signed-in account. `:USER_` bind variables, ownership and audit fields therefore stay on the Member while both sessions are active.
 - `MemberGroupNames` always describes the Member. `UserGroupNames` and `UserGroupAliases` always describe the backoffice User. The two sets of groups are kept separate, even when names match.
 - `Groups` holds display names. `UserGroupAliases` holds the current backoffice User Group aliases.

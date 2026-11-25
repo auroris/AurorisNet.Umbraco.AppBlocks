@@ -227,7 +227,7 @@ The browser runtime formats dates, times and file sizes for the page's language,
 
 | Id | English |
 | --- | --- |
-| `signInToUsePage` | Sign in with an Umbraco Member or backoffice User account permitted to use this page. |
+| `signInToUsePage` | Sign in with an account permitted to use this page. |
 | `signInToUseForm` | Sign in to use this form. |
 | `formInvalid` | This form has an invalid resource or field configuration. |
 | `save` | Save |

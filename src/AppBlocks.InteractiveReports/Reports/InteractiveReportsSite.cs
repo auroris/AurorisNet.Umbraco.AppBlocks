@@ -1,8 +1,8 @@
 using InteractiveReport.AspNetCore;
 using InteractiveReport.Client.FileDownload;
 using InteractiveReport.Client.Json;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Identity;
+using AppBlocks.Authentication;
+using AppBlocks.Blocks;
 using AppBlocks.Connections;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
@@ -113,19 +113,10 @@ public static class InteractiveReportsSite
             branch => branch.Use(async (context, next) =>
             {
                 var backOffice = BackOfficeReportPaths.Any(path => context.Request.Path.StartsWithSegments(path));
-                // Website reports carry both sessions, Member first. Backoffice reports retain their
-                // User-only identity so a Member sign-in never changes their saved-view ownership.
-                var identities = new List<System.Security.Claims.ClaimsIdentity>();
-                if (backOffice) context.User = new System.Security.Claims.ClaimsPrincipal();
-                if (!backOffice)
-                {
-                    var member = await context.AuthenticateAsync(IdentityConstants.ApplicationScheme);
-                    if (member.Succeeded && member.Principal is { Identity.IsAuthenticated: true } principal)
-                        identities.AddRange(principal.Identities);
-                }
-                if (await AppBlocks.Authentication.ApplicationAccessPolicy.BackOfficeTicketAsync(context) is { } ticket)
-                    identities.AddRange(ticket.Identities);
-                if (identities.Count > 0) context.User = new System.Security.Claims.ClaimsPrincipal(identities);
+                var principal = backOffice
+                    ? await ApplicationAccessPolicy.BackOfficeTicketAsync(context)
+                    : await context.RequestServices.GetRequiredService<ApplicationAccessPolicy>().WebsitePrincipalAsync(context);
+                context.User = principal ?? AppPageAccess.Anonymous;
                 await next(context);
             }));
         return app;

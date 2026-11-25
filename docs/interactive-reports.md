@@ -109,7 +109,7 @@ Registered `IDataSourcePolicy` rules and a data source's backing class decide at
 
 A saved view belongs to one identity: the Member when a Member is signed in, otherwise the backoffice User.
 
-- The website routes carry both sessions, Member first. Someone signed in to both saves and owns views as the Member there.
+- Website routes use the Member session. A site that explicitly enables `AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers` also accepts a backoffice session and uses the Member for ownership when both are active.
 - The backoffice routes authenticate the backoffice User only, so views saved there belong to the User.
 - A report block's page access applies on the backoffice routes too. The page resolves its user from every session on the request, the Member cookie included, and admits the backoffice caller when the User is among them.
 - The owner key is read through `InteractiveReport:IdentityClaim` when the site sets it, as the engine stores owners. The default `IReportAccessPolicy` compares owners the same way.

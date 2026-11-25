@@ -31,6 +31,7 @@ public sealed class AppPageAccess(AppBlockContent content, IPublicAccessChecker 
         if (member is { Succeeded: true } && member.Principal?.Identity?.IsAuthenticated == true)
         {
             if (await access.HasMemberAccessToContentAsync(page.Id, member.Principal) != PublicAccessStatus.AccessAccepted) return null;
+            if (!applicationAccess.IncludeBackOfficeOnWebsite) return member.Principal;
             var backOfficeUser = await applicationAccess.BackOfficeUserAsync(context);
             // Keep the Member first for existing ownership, audit and antiforgery identities. The resolver reads
             // each authenticated identity's own identifier, so the accounts and their groups remain separate.
@@ -39,6 +40,7 @@ public sealed class AppPageAccess(AppBlockContent content, IPublicAccessChecker 
         }
         // Umbraco Public Access protects pages for Members. Without a Member session, Umbraco refuses the page, and only a rule
         // the host registers admits anyone else; a backoffice User is never looked up in the Member store using a coincidentally matching identifier.
+        if (includeMember && !applicationAccess.IncludeBackOfficeOnWebsite) return null;
         if (publicAccess.IsProtected(page.Path).Success) return await AdmittedAsync(context, page, includeMember);
         return await applicationAccess.BackOfficeUserAsync(context);
     }
@@ -51,6 +53,7 @@ public sealed class AppPageAccess(AppBlockContent content, IPublicAccessChecker 
     /// </summary>
     public async Task<ClaimsPrincipal?> AdmittedAsync(HttpContext context, IPublishedContent page, bool includeMember = true)
     {
+        if (includeMember && !applicationAccess.IncludeBackOfficeOnWebsite) return null;
         if (includeMember && await context.AuthenticateAsync(IdentityConstants.ApplicationScheme) is { Succeeded: true } member
             && member.Principal?.Identity?.IsAuthenticated == true) return null;
         foreach (var admission in admissions)
@@ -69,7 +72,7 @@ public sealed class AppPageAccess(AppBlockContent content, IPublicAccessChecker 
         if (await UserAsync(page) is { } user) return user;
         if (http.HttpContext is not { } context || !IsOpen(page)) return null;
         if ((await context.AuthenticateAsync(IdentityConstants.ApplicationScheme)).Succeeded) return null;
-        return await applicationAccess.HasBackOfficeTicketAsync(context) ? null : Anonymous;
+        return applicationAccess.IncludeBackOfficeOnWebsite && await applicationAccess.HasBackOfficeTicketAsync(context) ? null : Anonymous;
     }
 
     /// <inheritdoc cref="VisitorAsync(IPublishedContent)"/>

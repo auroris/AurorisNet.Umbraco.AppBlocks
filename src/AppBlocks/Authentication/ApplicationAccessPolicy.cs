@@ -13,8 +13,18 @@ namespace AppBlocks.Authentication;
 /// to a page or grants an application permission, and a page Umbraco's Public Access protects stays protected unless the
 /// host registers an <see cref="IProtectedPageAdmission"/>.
 /// </summary>
-public sealed class ApplicationAccessPolicy(IUserService users, IOptions<AdministratorOptions>? administrators = null)
+public sealed class ApplicationAccessPolicy(IUserService users, IOptions<AdministratorOptions>? administrators = null, IOptions<WebsiteIdentityOptions>? website = null)
 {
+    public bool IncludeBackOfficeOnWebsite => website?.Value.IncludeBackOfficeUsers == true;
+
+    /// <summary>The website member ticket, optionally accompanied by a backoffice ticket on sites that explicitly use both.</summary>
+    public async Task<ClaimsPrincipal?> WebsitePrincipalAsync(HttpContext context)
+    {
+        var member = (await context.AuthenticateAsync(IdentityConstants.ApplicationScheme)).Principal;
+        if (!IncludeBackOfficeOnWebsite || await BackOfficeTicketAsync(context) is not { } user) return member;
+        return member is null ? user : new ClaimsPrincipal(member.Identities.Concat(user.Identities));
+    }
+
     /// <summary>Whether the primary identity is a backoffice User. Combined principals keep their Member first for ownership keys.</summary>
     public static bool IsBackOfficeIdentity(ClaimsPrincipal user) => user.Identity?.AuthenticationType
         is Constants.Security.BackOfficeAuthenticationType or Constants.Security.BackOfficeExposedAuthenticationType;

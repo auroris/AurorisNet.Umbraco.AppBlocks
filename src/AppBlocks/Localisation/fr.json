@@ -123,7 +123,7 @@
   "rowsSaveFailed": "Les rangées n’ont pas pu être enregistrées.",
   "rowsSaveFailedReload": "Les rangées n’ont pas pu être enregistrées. Rechargez la page et réessayez.",
   "nothingToSave": "Rien à enregistrer.",
-  "signInToUsePage": "Ouvrez une session avec un compte de membre Umbraco ou d’utilisateur de l’interface d’administration autorisé à utiliser cette page.",
+  "signInToUsePage": "Ouvrez une session avec un compte autorisé à utiliser cette page.",
   "signInToUseForm": "Ouvrez une session pour utiliser ce formulaire.",
   "formInvalid": "La ressource ou la configuration des champs de ce formulaire est invalide.",
   "save": "Enregistrer",

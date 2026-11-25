@@ -208,7 +208,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             var child = data[key]; var alias = Alias(child);
             var target = depth == 0 ? formLocation : Location(child, alias, parent, position);
             var start = errors.Count;
-            if (depth > 0 && (alias == "appForm" || Plugin(alias)?.RequiresUser == true)) errors.Add("Forms and reports cannot be nested inside a form.");
+            if (depth > 0 && (alias == "appForm" || Plugin(alias)?.CanNestInForm == false)) errors.Add("Forms and reports cannot be nested inside a form.");
             if (alias == "appActions") actionBlocks.Add(target);
             if (alias == AppBlockSchema.AntiSpamAlias) { checkBlocks.Add(target); AntiSpam(child, errors, warnings); }
             else if (alias == AppBlockSchema.AttachmentsAlias) Attachments(child, resource, errors);

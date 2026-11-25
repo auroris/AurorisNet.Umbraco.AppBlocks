@@ -52,8 +52,8 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         var configuration = block.Content.Value<BlockListItem>("formInterface")?.Content;
         if (configuration?.Value<string>("resource") is not { Length: > 0 } alias || await resources.FindAsync(alias) is not { } resource) return null;
         var children = AppBlockContent.Flatten(block.Areas.SelectMany(a => a)).ToArray();
-        var userBlocks = plugins?.Where(p => p.RequiresUser).Select(p => p.Alias).ToHashSet(StringComparer.Ordinal) ?? [];
-        if (children.Any(b => b.Content.ContentType.Alias == "appForm" || userBlocks.Contains(b.Content.ContentType.Alias))) return null;
+        var standaloneBlocks = plugins?.Where(p => !p.CanNestInForm).Select(p => p.Alias).ToHashSet(StringComparer.Ordinal) ?? [];
+        if (children.Any(b => b.Content.ContentType.Alias == "appForm" || standaloneBlocks.Contains(b.Content.ContentType.Alias))) return null;
         var fields = children.Where(b => AppBlockSchema.FieldAliases.Contains(b.Content.ContentType.Alias)).ToArray();
         var bindings = fields.Select(f => f.Content.Value<string>("field") ?? "").ToArray();
         if (bindings.Distinct(StringComparer.Ordinal).Count() != bindings.Length || bindings.Any(binding => !resource.Fields.Any(f => f.Key == binding))) return null;

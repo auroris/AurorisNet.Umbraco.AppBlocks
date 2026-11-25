@@ -4,8 +4,6 @@ using AppBlocks.Authentication;
 using AppBlocks.Blocks;
 using AppBlocks.DataSources;
 using AppBlocks.Forms;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Identity;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
 
@@ -108,25 +106,13 @@ public static class ApiEndpointRoutes
         var path = http.Request.Path.Value ?? "";
         if (catalog.Find(ApiRouteTemplate.SplitPath(path.Length > basePath.Length ? path[(basePath.Length + 1)..] : "")) is not { } found)
             return Json(ApiEndpointRunner.Problem(404));
-        var principal = await PrincipalAsync(http);
+        var principal = await services.GetRequiredService<ApplicationAccessPolicy>().WebsitePrincipalAsync(http) ?? AppPageAccess.Anonymous;
         return Json(await services.GetRequiredService<ApiEndpointRunner>().RunAsync(found.Endpoint, principal, found.Values,
             FormRequestValues.Parameters(http.Request.Query), http.RequestAborted));
     }
 
     private static IResult Json(ApiEndpointResult result) => Results.Json(result.Body, statusCode: result.Status);
 
-    /// <summary>
-    /// The signed-in Member and backoffice User, Member first, as the block endpoints see them, or nobody. The data source's resolver
-    /// then decides each account's standing, so a cookie for a locked-out account stays refused rather than becoming anonymous.
-    /// </summary>
-    private static async Task<ClaimsPrincipal> PrincipalAsync(HttpContext http)
-    {
-        var identities = new List<ClaimsIdentity>();
-        var member = await http.AuthenticateAsync(IdentityConstants.ApplicationScheme);
-        if (member.Succeeded && member.Principal?.Identity?.IsAuthenticated == true) identities.AddRange(member.Principal.Identities);
-        if (await ApplicationAccessPolicy.BackOfficeTicketAsync(http) is { } backOffice) identities.AddRange(backOffice.Identities);
-        return identities.Count == 0 ? AppPageAccess.Anonymous : new ClaimsPrincipal(identities);
-    }
 }
 
 public static class ApiEndpointExtensions

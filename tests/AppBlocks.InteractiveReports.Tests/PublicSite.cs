@@ -110,6 +110,8 @@ internal sealed class PublicSite : IAsyncDisposable
         if (noStorePages is not null) builder.Configuration["AppBlocks:NoStorePages"] = noStorePages;
         builder.Logging.ClearProviders();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
+            // This standalone host exercises applications that grant website access to backoffice groups.
+            ["AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers"] = "true",
             ["ConnectionStrings:umbracoDbDSN"] = $"Data Source={Path.Combine(root, "umbraco.db")};Pooling=False",
             ["ConnectionStrings:umbracoDbDSN_ProviderName"] = "Microsoft.Data.Sqlite",
             ["AppBlocks:DataRoot"] = root,

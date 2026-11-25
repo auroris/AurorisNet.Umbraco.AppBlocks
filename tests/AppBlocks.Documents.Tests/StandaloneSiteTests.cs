@@ -41,6 +41,8 @@ public sealed class StandaloneSiteTests
         builder.Logging.ClearProviders();
         const string password = "Documents!Test5278";
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
+            // This standalone host exercises applications that grant website access to backoffice groups.
+            ["AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers"] = "true",
             ["ConnectionStrings:umbracoDbDSN"] = $"Data Source={Path.Combine(root, "umbraco.db")};Pooling=False",
             ["ConnectionStrings:umbracoDbDSN_ProviderName"] = "Microsoft.Data.Sqlite",
             ["Umbraco:CMS:Global:Id"] = Guid.NewGuid().ToString(), ["Umbraco:CMS:Global:UseHttps"] = "false",

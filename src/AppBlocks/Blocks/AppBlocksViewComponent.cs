@@ -39,7 +39,7 @@ public sealed class AppBlocksViewComponent(AppPageAccess access, AppBindVariable
     {
         if (await access.VisitorAsync(page.Key) is not { } visitor) {
             HttpContext.Response.StatusCode = 403;
-            return Content(text["signInToUsePage", "Sign in with an Umbraco Member or backoffice User account permitted to use this page."]);
+            return Content(text["signInToUsePage", "Sign in with an account permitted to use this page."]);
         }
         HttpContext.KeepAppBlockPageOutOfCaches();
         HttpContext.User = visitor;

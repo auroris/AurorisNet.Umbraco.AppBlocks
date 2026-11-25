@@ -22,5 +22,8 @@ public interface IAppBlockPlugin
     /// </summary>
     bool VariesByData => RequiresUser;
 
+    /// <summary>Whether this block can render inside an application form. Blocks with their own forms must render outside it.</summary>
+    bool CanNestInForm => !RequiresUser;
+
     void Validate(JsonElement block, List<string> errors);
 }

@@ -225,7 +225,7 @@ public sealed class IdentityTests
             true => [Admission(null), Admission(admitted), Stub<IProtectedPageAdmission>(Never)],
         };
         var access = new AppPageAccess(null!, Stub<IPublicAccessChecker>(Never), new HttpContextAccessor { HttpContext = context },
-            new ApplicationAccessPolicy(users), protection, admissions);
+            new ApplicationAccessPolicy(users, website: Microsoft.Extensions.Options.Options.Create(new WebsiteIdentityOptions { IncludeBackOfficeUsers = true })), protection, admissions);
         var result = await access.UserAsync(page);
         Assert.Equal(allowed, result is not null);
         if (!protectedPage) { Assert.Equal(0, asked); Assert.Same(principal, result); }
@@ -345,6 +345,7 @@ public sealed class IdentityTests
         var accepted = memberAccess == PublicAccessStatus.AccessAccepted;
         // A backoffice-only route strips the Member on purpose, so the Member cookie is not the caller there: the page answers for the User alone, whatever Public Access would say about the Member,
         // and on a protected page the Member cookie does not stop the host's rule from admitting the User.
+        Assert.Same(accepted ? member : null, await access.UserAsync(page));
         Assert.True(await Admits(backOffice));
         Assert.Equal(accepted, await Admits(new ClaimsPrincipal(member.Identities.Concat(backOffice.Identities))));
         Assert.Equal(accepted, await Admits(member));
