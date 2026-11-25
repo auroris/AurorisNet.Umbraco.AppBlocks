@@ -9,6 +9,7 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../Migrations/Testing/*.cs" />
     <!-- FormsClient builds query strings with Microsoft.AspNetCore.WebUtilities. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <!-- The clients drive AppBlocks' endpoints, so the package carries the AppBlocks version they were written against. -->

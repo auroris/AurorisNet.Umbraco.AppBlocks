@@ -23,6 +23,8 @@ Blocks follow the Public Access of their page. Data source groups, row restricti
 
 ![A form on the same site: order fields in a responsive layout, file attachments and editable order lines](https://raw.githubusercontent.com/auroris/AurorisNet.Umbraco.AppBlocks/main/docs/images/form.png)
 
+Installation snapshots, upgrade steps and release checks are described in [Release migrations](Migrations/README.md).
+
 ## Install
 
 | Package | Adds |

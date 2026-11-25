@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Xml.Linq;
 using AppBlocks.InteractiveReports.Connections;
+using AppBlocks.InteractiveReports.Blocks;
 using AppBlocks.Connections;
 using AppBlocks.Setup;
 using InteractiveReport.AspNetCore;
@@ -144,7 +145,7 @@ public sealed class CompanionTests
         var builder = new UmbracoBuilder(services, configuration, loader);
         builder.AddAppBlocks(connections => connections.AddConnection("Before", _ => new SqliteConnection("Data Source=:memory:")));
         Assert.DoesNotContain(services, d => d.ServiceType.Namespace?.StartsWith("InteractiveReport") == true);
-        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IAppBlockPlugin));
+        Assert.DoesNotContain(services, d => d.ServiceType == typeof(IAppBlockPlugin) && d.ImplementationType == typeof(InteractiveReportBlock));
         builder.AddAppBlocksInteractiveReports(reports => reports.AddConnection("Legacy", _ => new SqliteConnection("Data Source=:memory:")));
         var count = services.Count;
         builder.AddAppBlocksInteractiveReports();
@@ -152,7 +153,7 @@ public sealed class CompanionTests
             .AddConnection("Declared", _ => new SqliteConnection("Data Source=:memory:"), DatabaseDialect.Oracle11g));
         Assert.Equal(count, services.Count);
         Assert.Equal(2, services.Count(d => d.ServiceType == typeof(AppBlocksSchema)));
-        Assert.Single(services, d => d.ServiceType == typeof(IAppBlockPlugin));
+        Assert.Single(services, d => d.ServiceType == typeof(IAppBlockPlugin) && d.ImplementationType == typeof(InteractiveReportBlock));
         // This storage fixture has no running Umbraco host or virtual-path URL rewriting.
         services.Remove(services.Single(d => d.ImplementationType == typeof(AppBlocks.InteractiveReports.Reports.ReportLinksUnderVirtualPath)));
         // The backoffice reports follow the options, so code can turn them on as configuration can.

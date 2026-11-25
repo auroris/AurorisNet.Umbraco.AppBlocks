@@ -1,0 +1,35 @@
+AppBlocks attachment tables
+The scripts in the selected installation snapshot under AppBlocks/Attachments/Schema, which the upload store ensures on its connection.
+A new SQL Server database after its scripts have run, as AppBlocks.Testing's SchemaCheck lists it. The tests compare
+this file with the scripts. To change the schema, change the scripts, then write this file again by running the tests
+with APPBLOCKS_SCHEMA_LISTING=write.
+
+TABLE dbo.APP_ATTACHMENT
+    ATTACHMENT_ID bigint IDENTITY(1,1) NOT NULL
+    FILE_NAME nvarchar(260) NOT NULL
+    CONTENT_TYPE nvarchar(200) NOT NULL
+    SIZE bigint NOT NULL
+    SHA256 char(64) NOT NULL
+    CONTENT varbinary(max) NOT NULL
+    UPLOADED_BY nvarchar(200) NOT NULL
+    UPLOADED_AT datetime2(7) NOT NULL
+    PRIMARY KEY PK_APP_ATTACHMENT CLUSTERED (ATTACHMENT_ID)
+
+TABLE dbo.APP_ATTACHMENT_LINK
+    LINK_ID bigint IDENTITY(1,1) NOT NULL
+    OWNER_ALIAS nvarchar(200) NOT NULL
+    OWNER_KEY nvarchar(200) NOT NULL
+    ATTACHMENT_ID bigint NOT NULL
+    PURPOSE nvarchar(200) NULL
+    LABEL nvarchar(200) NULL
+    NOTES nvarchar(1000) NULL
+    CREATED_BY nvarchar(200) NOT NULL
+    CREATED_AT datetime2(7) NOT NULL
+    UPDATED_BY nvarchar(200) NOT NULL
+    UPDATED_AT datetime2(7) NOT NULL
+    REMOVED_BY nvarchar(200) NULL
+    REMOVED_AT datetime2(7) NULL
+    PRIMARY KEY PK_APP_ATTACHMENT_LINK CLUSTERED (LINK_ID)
+    FOREIGN KEY FK_APP_ATTACHMENT_LINK_FILE (ATTACHMENT_ID) REFERENCES dbo.APP_ATTACHMENT (ATTACHMENT_ID)
+    INDEX IX_APP_ATTACHMENT_LINK_OWNER NONCLUSTERED (OWNER_ALIAS, OWNER_KEY, REMOVED_AT)
+

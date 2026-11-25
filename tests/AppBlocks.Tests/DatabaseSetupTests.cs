@@ -326,8 +326,10 @@ public sealed class DatabaseSetupTests
     public void The_script_is_the_installed_schema_file_itself(string dialect)
     {
         var script = ApplicationDatabase.Script(AttachmentStore.Schema, dialect);
-        Assert.Equal(new StreamReader(typeof(AttachmentStore).Assembly.GetManifestResourceStream(
-            typeof(AttachmentStore).Assembly.GetManifestResourceNames().Single(name => name.EndsWith($"{dialect}.001-attachments.sql", StringComparison.OrdinalIgnoreCase)))!).ReadToEnd(), script);
+        var provider = new Microsoft.Extensions.FileProviders.ManifestEmbeddedFileProvider(typeof(AttachmentStore).Assembly);
+        var snapshot = AttachmentStore.Schema.Releases!.Install.Folder;
+        using var reader = new StreamReader(provider.GetFileInfo($"Migrations/{snapshot}/AppBlocks/Attachments/Schema/{dialect}/001-attachments.sql").CreateReadStream());
+        Assert.Equal(reader.ReadToEnd(), script);
         foreach (var table in AttachmentStore.Tables) Assert.Contains(table, script);
     }
 

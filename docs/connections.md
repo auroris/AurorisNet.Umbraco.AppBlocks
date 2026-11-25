@@ -125,6 +125,10 @@ Each run-once script records its row before its statements run. A second process
 
 ### A schema that changes between releases
 
+For a versioned installer, use `ApplicationSchema.FromReleaseAssembly` or `FromReleaseDirectory`. The folder convention, release checks and database behavior are in [Release migrations](../Migrations/README.md).
+
+#### Existing script-directory registrations
+
 Run-once scripts carry a schema from one release to the next. A new database and an updated one run the same scripts in the same order, so both reach the same tables:
 
 | Script | Holds |

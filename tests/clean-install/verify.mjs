@@ -8,6 +8,8 @@ import { randomBytes, createHash } from 'node:crypto';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const site = resolve(process.env.APPBLOCKS_CLEAN_SITE || resolve(root, 'artifacts/clean-install/site'));
+const snapshots = (await readdir(resolve(root, 'Migrations'))).filter(name => name.endsWith('-Current'));
+assert.equal(snapshots.length, 1);
 const url = process.env.APPBLOCKS_CLEAN_URL || 'http://localhost:5187';
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(url).hostname), 'Use a disposable local site.');
 const require = createRequire(resolve(process.env.INTERACTIVE_REPORTS_ROOT || resolve(root, '../AurorisNet.InteractiveReports'), 'package.json'));
@@ -61,9 +63,9 @@ const packages = ['AppBlocks', ...(companions ? ['AppBlocks.InteractiveReports']
 for (const name of packages) {
   let count = 0;
   for (const [folder, endpoint] of [['ContentTypes', 'document-type'], ['DataTypes', 'data-type']]) {
-    for (const file of await readdir(resolve(root, 'src', name, 'Schema', folder)).catch(() => [])) {
+    for (const file of await readdir(resolve(root, 'Migrations', snapshots[0], name, 'Schema', folder)).catch(() => [])) {
       if (!file.endsWith('.config')) continue;
-      const xml = await readFile(resolve(root, 'src', name, 'Schema', folder, file), 'utf8');
+      const xml = await readFile(resolve(root, 'Migrations', snapshots[0], name, 'Schema', folder, file), 'utf8');
       const match = xml.match(/<(?:ContentType|DataType)\b[^>]*\bKey=["']([^"']+)["']/);
       assert.ok(match, 'Schema key: ' + file);
       const key = match[1];

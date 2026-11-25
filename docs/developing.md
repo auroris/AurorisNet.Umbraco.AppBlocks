@@ -123,7 +123,7 @@ Saved block values are read through Umbraco's Block Grid, Block List and Single 
 
 ## Who owns the definitions
 
-Each package’s `Schema/` folder defines its current element types, data types and document types. Startup installs missing definitions through Umbraco’s package importer. A definition that a new version of the package changes reaches an existing site through Reinstall, or at startup on a site that asks for it.
+Each package’s `Schema/` folder in the Current migration snapshot defines its current element types, data types and document types. Startup installs missing definitions through Umbraco’s package importer. A definition that a new version of the package changes reaches an existing site through Reinstall, or at startup on a site that asks for it.
 
 ### Definitions a new version changes
 

@@ -1,0 +1,32 @@
+AppBlocks attachment tables
+The scripts in the selected installation snapshot under AppBlocks/Attachments/Schema, which the upload store ensures on its connection.
+A new SQLite database after its scripts have run, as AppBlocks.Testing's SchemaCheck lists it. The tests compare
+this file with the scripts. To change the schema, change the scripts, then write this file again by running the tests
+with APPBLOCKS_SCHEMA_LISTING=write.
+
+TABLE APP_ATTACHMENT
+    ATTACHMENT_ID INTEGER PRIMARY KEY
+    FILE_NAME TEXT NOT NULL
+    CONTENT_TYPE TEXT NOT NULL
+    SIZE INTEGER NOT NULL
+    SHA256 TEXT NOT NULL
+    CONTENT BLOB NOT NULL
+    UPLOADED_BY TEXT NOT NULL
+    UPLOADED_AT TEXT NOT NULL
+
+TABLE APP_ATTACHMENT_LINK
+    LINK_ID INTEGER PRIMARY KEY
+    OWNER_ALIAS TEXT NOT NULL
+    OWNER_KEY TEXT NOT NULL
+    ATTACHMENT_ID INTEGER NOT NULL REFERENCES APP_ATTACHMENT(ATTACHMENT_ID)
+    PURPOSE TEXT NULL
+    LABEL TEXT NULL
+    NOTES TEXT NULL
+    CREATED_BY TEXT NOT NULL
+    CREATED_AT TEXT NOT NULL
+    UPDATED_BY TEXT NOT NULL
+    UPDATED_AT TEXT NOT NULL
+    REMOVED_BY TEXT NULL
+    REMOVED_AT TEXT NULL
+    INDEX IX_APP_ATTACHMENT_LINK_OWNER (OWNER_ALIAS, OWNER_KEY, REMOVED_AT)
+

@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
+  <Import Project="../../Migrations/Install.props" />
   <PropertyGroup>
     <PackageId>AurorisNet.Umbraco.AppBlocks.InteractiveReports</PackageId>
     <Title>Interactive Reports for AppBlocks</Title>
@@ -42,10 +43,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />
-    <EmbeddedResource Include="Views/**/*.cshtml;Schema/**/*.config" />
+    <EmbeddedResource Include="Views/**/*.cshtml" />
     <EmbeddedResource Include="Reports/umbraco-reports.json" LogicalName="AppBlocks.InteractiveReports.Reports.umbraco-reports.json" />
     <Content Update="**/*.cshtml;appsettings-schema*.json;umbraco-package-schema.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="Never" />
     <!-- Embedded above, so a site's project must not receive them as well. -->
     <Content Update="Schema/**/*.config;Reports/umbraco-reports.json;appsettings-schema*.json;umbraco-package-schema.json" Pack="false" />
+    <EmbeddedResource Include="$(InstallRoot)AppBlocks.InteractiveReports/Schema/**/*.config" Link="Schema\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

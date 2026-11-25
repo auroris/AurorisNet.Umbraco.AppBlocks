@@ -56,7 +56,7 @@ public sealed record AttachmentPurge(int Links, int Files, long Bytes);
 /// </summary>
 public sealed partial class AttachmentStore(IApplicationConnectionFactory connections, IOptions<AttachmentSettings> settings, ILogger<AttachmentStore> logger)
 {
-    public static readonly ApplicationSchema Schema = ApplicationSchema.FromEmbedded(typeof(AttachmentStore).Assembly, "Attachments/Schema");
+    public static readonly ApplicationSchema Schema = ApplicationSchema.FromReleaseAssembly(typeof(AttachmentStore).Assembly, "AppBlocks/Attachments/Schema", "AppBlocks:Attachments/Schema");
 
     /// <summary>The tables the store reads and writes, which an administrator can also create from the schema's script.</summary>
     public static readonly IReadOnlyList<string> Tables = ["APP_ATTACHMENT", "APP_ATTACHMENT_LINK"];

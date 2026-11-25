@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
+  <Import Project="../../Migrations/Install.props" />
   <PropertyGroup>
     <PackageId>AurorisNet.Umbraco.AppBlocks</PackageId>
     <Title>AppBlocks for Umbraco</Title>
@@ -39,7 +40,7 @@
     <!-- NuGet imports a build file only when it is named after the package id. -->
     <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
     <EmbeddedResource Include="../../docs/business-rules.md" LogicalName="AppBlocks.BusinessRules.md" />
-    <EmbeddedResource Include="Views/**/*.cshtml;Schema/**/*.config;Attachments/Schema/**/*.sql" />
+    <EmbeddedResource Include="Views/**/*.cshtml" />
     <!-- The shipped languages, one file per culture, read by AppBlocksTranslations; WithCulture keeps fr.json out of a satellite assembly. -->
     <Content Remove="Localisation/**" />
     <None Remove="Localisation/**" />
@@ -47,5 +48,8 @@
     <Content Update="**/*.cshtml;appsettings-schema*.json;umbraco-package-schema.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="Never" />
     <!-- Embedded above, so a site's project must not receive them as well. -->
     <Content Update="Schema/**/*.config;appsettings-schema*.json;umbraco-package-schema.json" Pack="false" />
+    <EmbeddedResource Include="$(InstallRoot)AppBlocks/Schema/**/*.config" Link="Schema\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../../Migrations/Runtime/**/*.cs" />
+    <EmbeddedResource Include="../../Migrations/**/*.sql" Link="Migrations\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
