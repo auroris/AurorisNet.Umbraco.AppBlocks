@@ -85,11 +85,17 @@ public sealed class AppBlocksBuilder
 
     /// <summary>Adds a page block to a named group so layout areas allowing that group can offer it.</summary>
     public AppBlocksBuilder AllowInBlockGrid(string blockGridDataTypeName, string elementTypeAlias, string blockGroupName)
+        => AllowInBlockGrid(blockGridDataTypeName, elementTypeAlias, blockGroupName, 12);
+
+    /// <summary>Registers a grouped block with its initial grid width. A restricted block is offered only in areas that explicitly allow its group.</summary>
+    public AppBlocksBuilder AllowInBlockGrid(string blockGridDataTypeName, string elementTypeAlias, string blockGroupName,
+        int columnSpan, bool restrictToGroupAreas = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(blockGridDataTypeName);
         ArgumentException.ThrowIfNullOrWhiteSpace(elementTypeAlias);
         ArgumentException.ThrowIfNullOrWhiteSpace(blockGroupName);
-        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, 12, 1, Area: null, Group: blockGroupName));
+        ArgumentOutOfRangeException.ThrowIfLessThan(columnSpan, 1);
+        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, columnSpan, 1, Area: null, Group: blockGroupName, RestrictToGroupAreas: restrictToGroupAreas));
         return this;
     }
 
