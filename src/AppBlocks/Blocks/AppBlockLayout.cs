@@ -48,11 +48,12 @@ public static class AppBlockLayout
     public static int ItemSpan(int columnSpan, int? width, int columns) => width is { } set ? Math.Clamp(set, 1, Math.Max(columns, 1)) : columnSpan;
 
     /// <summary>
-    /// Whether a block takes a cell of its grid. CSS and JavaScript blocks render in the head and at the end of
-    /// the body, and a hidden field is a hidden input, so a grid item for them would leave an empty cell and a gap. So would an Anti-spam block that shows nothing.
+    /// Whether the grid wraps this block in a layout item. Raw HTML supplies its own elements.
+    /// Assets, hidden fields and invisible anti-spam blocks need no layout item either.
     /// </summary>
     public static bool OccupiesCell(BlockGridItem item)
-        => item.Content.ContentType.Alias is not (AppBlockSchema.CssAlias or AppBlockSchema.ScriptAlias) && !AppBlockField.IsHidden(item.Content) && !AntiSpam.AntiSpamBlock.ShowsNothing(item.Content);
+        => item.Content.ContentType.Alias is not (AppBlockSchema.HtmlAlias or AppBlockSchema.CssAlias or AppBlockSchema.ScriptAlias)
+            && !AppBlockField.IsHidden(item.Content) && !AntiSpam.AntiSpamBlock.ShowsNothing(item.Content);
 
     /// <summary>The modifier of the <c>ah-layout</c> hook, named for what an editor picked rather than the alias.</summary>
     public static string Modifier(string alias) => alias switch {

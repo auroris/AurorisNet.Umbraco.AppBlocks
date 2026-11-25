@@ -238,7 +238,7 @@ internal sealed class PublicSite : IAsyncDisposable
             Key = Key("list"), Name = "Public page blocks", EditorUiAlias = "Umb.PropertyEditorUi.BlockList",
         };
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var configuration = new BlockListConfiguration { Blocks = new[] { AppBlockSchema.Key(AppBlockSchema.FormsContainerAlias), AppBlockSchema.Key("appReport") }
+        var configuration = new BlockListConfiguration { Blocks = new[] { AppBlockSchema.Key(AppBlockSchema.FormsContainerAlias), AppBlockSchema.Key("appReport"), AppBlockSchema.Key(AppBlockSchema.HtmlAlias) }
             .Select(key => new BlockListConfiguration.BlockConfiguration { ContentElementTypeKey = key }).ToArray() };
         list.SetConfigurationData(JsonSerializer.Deserialize<Dictionary<string, object>>(JsonSerializer.Serialize(configuration, options), options)!);
         var created = await dataTypes.CreateAsync(list, Constants.Security.SuperUserKey);
@@ -274,6 +274,9 @@ internal sealed class PublicSite : IAsyncDisposable
         }
         var home = Page("Home", Key("home"), -1);
         var signIn = Page("Sign in", Key("sign-in"), home.Id);
+        var markup = Set("Umbraco.BlockList");
+        Add(markup, "Umbraco.BlockList", Key("html-block"), AppBlockSchema.Key(AppBlockSchema.HtmlAlias), ("html", "<p>First</p><p>Second</p>"));
+        Page("Markup", Key("markup"), home.Id, markup);
         Page("Contact", ContactPage, home.Id, Container(FormBlock(ContactForm, "public.contact", Field("name", "Your name", ("defaultValue", ":USER_NAME")), Field("message", "Message", ("defaultValue", ":PARAM.topic")))));
         Page("Refusing", RefusingPage, home.Id, Container(FormBlock(RefusingForm, "public.refuses", Field("name", "Your name"))));
         Page("Engine", EnginePage, home.Id, Container(FormBlock(EngineForm, "public.engine", Field("title", "Title"))));

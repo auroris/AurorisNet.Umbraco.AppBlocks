@@ -23,6 +23,17 @@ public sealed class AnonymousAccessSiteTests
     private const string Notice = "Sign in to use this form.";
 
     [Fact]
+    public async Task Raw_html_renders_verbatim_in_a_native_block_and_directly_in_the_page_grid()
+    {
+        await using var site = await PublicSite.StartAsync();
+        using var visitor = site.Anonymous();
+        const string markup = "<p>First</p><p>Second</p>";
+        Assert.Equal(markup, (await visitor.GetStringAsync("/markup/?component=Native")).Trim());
+        var page = await visitor.GetStringAsync("/markup/");
+        Assert.Matches("class=\"ah-grid umb-block-grid__layout-container\"[^>]*>\\s*" + markup + "\\s*</div>", page);
+    }
+
+    [Fact]
     public async Task An_unprotected_page_is_open_to_anonymous_visitors_and_each_blocks_class_or_engine_decides()
     {
         await using var site = await PublicSite.StartAsync();
