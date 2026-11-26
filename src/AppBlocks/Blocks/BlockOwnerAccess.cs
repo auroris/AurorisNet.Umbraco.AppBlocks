@@ -21,6 +21,7 @@ namespace AppBlocks.Blocks;
 public sealed record BlockOwnerScope(int Status, string? Problem = null, ClaimsPrincipal? User = null, BlockGridItem? Item = null, FormDefinition? Form = null,
     IFormResource? Resource = null, FormRecord? Record = null, string? Key = null, IReadOnlyDictionary<string, string>? Parameters = null)
 {
+    public bool ReadOnly { get; init; }
     public static BlockOwnerScope Refused(int status, string problem) => new(status, problem);
 
     /// <summary>The owner's key: the loaded record's, or the one the request named when the resource returns none.</summary>
@@ -71,7 +72,8 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
         var form = formBlock is null ? null : await FormDefinition.ResolveAsync(page, formBlock.ContentKey, resources, catalog, culture, request.RequestServices.GetServices<IAppBlockPlugin>());
 
         var conditions = request.RequestServices.GetRequiredService<BlockConditions>();
-        if (formBlock is not null && form is null || !await conditions.AllowsPathAsync(page, formBlock?.ContentKey ?? blockKey, user, culture, ct))
+        var path = AppBlockContent.PathTo(blocks, formBlock?.ContentKey ?? blockKey, culture);
+        if (formBlock is not null && form is null || path is null || !await conditions.AllowsPathAsync(page, path, user, culture, ct))
             return BlockOwnerScope.Refused(403, $"You do not have access to {words.These}.");
         var formContext = new FormExecutionContext(user, pageKey, form?.Block.ContentKey ?? blockKey, form?.Revision ?? definition, Parameters: parameters);
         if (form?.Relationship is { } relation) {
@@ -87,13 +89,14 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
             form = await conditions.ForFormAsync(form, user, Record, false, ct);
             if (!form.Includes(item)) return BlockOwnerScope.Refused(403, $"You do not have access to {words.These}.");
         }
+        var readOnly = form?.IsReadOnly(item) ?? await conditions.ReadOnlyOnPathAsync(page, path, user, culture, ct);
         IFormResource resource; string? key;
         if (string.IsNullOrWhiteSpace(ownerResource))
         {
             if (form is null) return BlockOwnerScope.Refused(422, $"This {words.BlockName} block is not inside a form and names no owner.");
             resource = form.Resource;
             if (FormResourceAccess.Refusal(resource, user) is { } refused) return BlockOwnerScope.Refused(refused, $"Sign in as a member to use {words.These}.");
-            if (newRecord) return new(200, null, user, item, form, resource, null, null, parameters);
+            if (newRecord) return new(200, null, user, item, form, resource, null, null, parameters) { ReadOnly = readOnly };
             key = savedOwnerKey ?? Single(request.Request.Query[form.KeyParameter]);
             if (savedOwnerKey is not null)
                 parameters = FormRequestValues.Parameters(new QueryCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>(
@@ -115,7 +118,7 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
         var loaded = context.ParentScope is null ? await resource.LoadAsync(key, context, ct) : await form!.LoadAsync(key, context, ct);
         if (loaded.Record is null) return BlockOwnerScope.Refused(loaded.Status is 403 or 404 ? loaded.Status : 403,
             loaded.Status == 404 ? $"The record {words.These} belong to was not found." : $"You do not have access to {words.These}.");
-        return new(200, null, user, item, form, resource, loaded.Record, key, parameters);
+        return new(200, null, user, item, form, resource, loaded.Record, key, parameters) { ReadOnly = readOnly };
     }
 
     /// <summary>

@@ -14,7 +14,12 @@ public sealed record FormCapabilities(bool Create = false, bool Update = false, 
 /// Null for last-save-wins. A value is the checksum of the row's values as the caller read them, and opts into conflict
 /// detection: the resource compares it with the current row atomically with each update or delete and refuses a stale change.
 /// </param>
-public sealed record FormRecord(string? Key, string? Checksum, IReadOnlyDictionary<string, object?> Values, FormCapabilities Capabilities);
+public sealed record FormRecord(string? Key, string? Checksum, IReadOnlyDictionary<string, object?> Values, FormCapabilities Capabilities)
+{
+    /// <summary>Visible field keys locked by the published form's Read Only conditions for this record.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? ReadOnlyFields { get; init; }
+}
 /// <param name="Member">
 /// Who is calling, never null: authenticated Umbraco Member and/or backoffice User identities, or on a page with no Public Access an
 /// unauthenticated principal for an anonymous visitor. Resources decide which of them, and which groups, may perform each operation;

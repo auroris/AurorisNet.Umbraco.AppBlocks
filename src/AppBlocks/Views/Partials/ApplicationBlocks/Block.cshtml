@@ -83,7 +83,7 @@ else if (alias == "appForm")
                     }
                     @if (!AppBlockContent.Flatten(item.Areas.SelectMany(a => a)).Any(b => b.Content.ContentType.Alias == "appActions"))
                     {
-                        <div class="app-form-actions"><button type="submit" data-save>@Text["save", "Save"]</button><a href="@destination" data-app-cancel>@Text["cancel", "Cancel"]</a><button type="button" data-delete hidden>@Text["delete", "Delete"]</button></div>
+                        <div class="app-form-actions"><button type="submit" data-save hidden="@definition.ViewOnly">@Text["save", "Save"]</button><a href="@destination" data-app-cancel>@Text["cancel", "Cancel"]</a><button type="button" data-delete hidden>@Text["delete", "Delete"]</button></div>
                     }
                 </fieldset>
             </form>
@@ -164,7 +164,7 @@ else if (alias == "appActions" && Model.Form is not null)
 {
     var destination = Model.Form.ReturnUrl(Context.Request.PathBase);
     <div class="app-form-actions">
-        <button type="submit" data-save>@(Property("saveLabel") ?? Text["save", "Save"])</button>
+        <button type="submit" data-save hidden="@Model.Form.ViewOnly">@(Property("saveLabel") ?? Text["save", "Save"])</button>
         <a href="@destination" data-app-cancel>@(Property("cancelLabel") ?? Text["cancel", "Cancel"])</a>
         <button type="button" data-delete hidden>@(Property("deleteLabel") ?? Text["delete", "Delete"])</button>
     </div>
@@ -177,6 +177,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
     {
         var id = "field-" + item.ContentKey.ToString("N");
         var readOnly = Model.Form.Relationship?.LinkField == key || field.ReadOnly || block.Value<bool>("readOnly") || alias == "appDisplay";
+        var locked = Model.Form.ReadOnlyFields.Contains(field.Key);
         var required = field.Required || block.Value<bool>("required");
         var label = Property("label") ?? field.Label;
         var placeholder = Property(AppBlockField.PlaceholderAlias);
@@ -199,19 +200,19 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                 @if (alias == "appTextArea")
                 {
                     <textarea id="@id" name="@key" data-field="@key" data-kind="@field.Kind" data-readonly="@readOnly.ToString().ToLowerInvariant()"
-                        rows="4" required="@required" readonly="@readOnly" maxlength="@field.MaxLength" placeholder="@placeholder" @defaultAttribute
+                        rows="4" required="@required" readonly="@readOnly" disabled="@locked" maxlength="@field.MaxLength" placeholder="@placeholder" @defaultAttribute
                         aria-describedby="@id-help @id-error"></textarea>
                 }
                 else if (alias == AppBlockSchema.ColorAlias)
                 {
                     <div class="app-color" data-app-color>
                         @* {label} stands for the field's label, so a translation can put it where its language does. *@
-                        <input type="color" data-color-picker disabled="@readOnly" aria-label="@Text["chooseColorFor", "Choose a color for {label}"].Replace("{label}", label)" aria-describedby="@id-help @id-error" />
+                        <input type="color" data-color-picker disabled="@(readOnly || locked)" aria-label="@Text["chooseColorFor", "Choose a color for {label}"].Replace("{label}", label)" aria-describedby="@id-help @id-error" />
                         <input type="text" id="@id" name="@key" data-field="@key" data-kind="text" data-readonly="@readOnly.ToString().ToLowerInvariant()"
-                            required="@required" readonly="@readOnly" maxlength="@field.MaxLength" pattern="#[0-9a-fA-F]{6}"
+                            required="@required" readonly="@readOnly" disabled="@locked" maxlength="@field.MaxLength" pattern="#[0-9a-fA-F]{6}"
                             title="@Text["colorFormat", "Enter a color in #RRGGBB format, such as #2a5d8f."]" placeholder="@(placeholder ?? "#RRGGBB")" spellcheck="false" autocomplete="off"
                             @defaultAttribute aria-describedby="@id-help @id-error" />
-                        <button type="button" data-color-clear disabled="@readOnly" aria-label="@Text["clearColorFor", "Clear color for {label}"].Replace("{label}", label)">@Text["clear", "Clear"]</button>
+                        <button type="button" data-color-clear disabled="@(readOnly || locked)" aria-label="@Text["clearColorFor", "Clear color for {label}"].Replace("{label}", label)">@Text["clear", "Clear"]</button>
                     </div>
                 }
                 else if (alias is "appSelect" or AppBlockSchema.ShuttleAlias)
@@ -233,26 +234,26 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                             <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="shuttle" data-readonly="@readOnly.ToString().ToLowerInvariant()" data-label="@label" @defaultAttribute />
                             <div class="app-shuttle-list">
                                 <label for="@id-available">@Text["shuttleAvailable", "Available"]</label>
-                                <select id="@id-available" data-shuttle-available multiple size="8" disabled="@readOnly" aria-describedby="@id-help @id-error">
+                                <select id="@id-available" data-shuttle-available multiple size="8" disabled="@(readOnly || locked)" aria-describedby="@id-help @id-error">
                                     @foreach (var choice in choices.Where(choice => ShuttleValue.IsItemValue(choice.Value)).DistinctBy(choice => choice.Value, StringComparer.Ordinal))
                                     { <option value="@choice.Value">@choice.Label</option> }
                                 </select>
                             </div>
                             <div class="app-shuttle-actions" aria-label="@Text["shuttleMoveItems", "Move items"]">
-                                <button type="button" data-shuttle-action="add" disabled="@readOnly">@Text["shuttleAdd", "Add →"]</button>
-                                <button type="button" data-shuttle-action="add-all" disabled="@readOnly">@Text["shuttleAddAll", "Add all →"]</button>
-                                <button type="button" data-shuttle-action="remove" disabled="@readOnly">@Text["shuttleRemove", "← Remove"]</button>
-                                <button type="button" data-shuttle-action="remove-all" disabled="@readOnly">@Text["shuttleRemoveAll", "← Remove all"]</button>
+                                <button type="button" data-shuttle-action="add" disabled="@(readOnly || locked)">@Text["shuttleAdd", "Add →"]</button>
+                                <button type="button" data-shuttle-action="add-all" disabled="@(readOnly || locked)">@Text["shuttleAddAll", "Add all →"]</button>
+                                <button type="button" data-shuttle-action="remove" disabled="@(readOnly || locked)">@Text["shuttleRemove", "← Remove"]</button>
+                                <button type="button" data-shuttle-action="remove-all" disabled="@(readOnly || locked)">@Text["shuttleRemoveAll", "← Remove all"]</button>
                             </div>
                             <div class="app-shuttle-list">
                                 <label for="@id-selected">@Text["shuttleSelectedHeading", "Selected (in order)"]</label>
-                                <select id="@id-selected" data-shuttle-selected multiple size="8" disabled="@readOnly" aria-required="@required.ToString().ToLowerInvariant()" aria-describedby="@id-help @id-error"></select>
+                                <select id="@id-selected" data-shuttle-selected multiple size="8" disabled="@(readOnly || locked)" aria-required="@required.ToString().ToLowerInvariant()" aria-describedby="@id-help @id-error"></select>
                             </div>
                             <div class="app-shuttle-actions" aria-label="@Text["shuttleReorder", "Reorder selected items"]">
-                                <button type="button" data-shuttle-action="top" disabled="@readOnly">@Text["shuttleTop", "Top"]</button>
-                                <button type="button" data-shuttle-action="up" disabled="@readOnly">@Text["shuttleUp", "Up"]</button>
-                                <button type="button" data-shuttle-action="down" disabled="@readOnly">@Text["shuttleDown", "Down"]</button>
-                                <button type="button" data-shuttle-action="bottom" disabled="@readOnly">@Text["shuttleBottom", "Bottom"]</button>
+                                <button type="button" data-shuttle-action="top" disabled="@(readOnly || locked)">@Text["shuttleTop", "Top"]</button>
+                                <button type="button" data-shuttle-action="up" disabled="@(readOnly || locked)">@Text["shuttleUp", "Up"]</button>
+                                <button type="button" data-shuttle-action="down" disabled="@(readOnly || locked)">@Text["shuttleDown", "Down"]</button>
+                                <button type="button" data-shuttle-action="bottom" disabled="@(readOnly || locked)">@Text["shuttleBottom", "Bottom"]</button>
                             </div>
                             <span class="app-shuttle-status" role="status" aria-live="polite"></span>
                         </div>
@@ -260,7 +261,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                     else
                     {
                     @* A select has no placeholder attribute; its empty choice carries the text instead. *@
-                    <select id="@id" name="@key" data-field="@key" data-kind="@field.Kind" data-readonly="@readOnly.ToString().ToLowerInvariant()" required="@required" disabled="@readOnly"
+                    <select id="@id" name="@key" data-field="@key" data-kind="@field.Kind" data-readonly="@readOnly.ToString().ToLowerInvariant()" required="@required" disabled="@(readOnly || locked)"
                         @defaultAttribute aria-describedby="@id-help @id-error">
                         <option value="">@(placeholder ?? Text["selectValue", "Select a value"])</option>
                         @foreach (var choice in choices) { <option value="@choice.Value">@choice.Label</option> }
@@ -280,7 +281,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                     var inputType = alias switch { "appNumber" => "number", "appDate" => "date", "appTime" => "time", "appDateTime" => "datetime-local", "appCheckbox" => "checkbox", _ => "text" };
                     <input id="@id" name="@key" data-field="@key" data-kind="@field.Kind" data-readonly="@readOnly.ToString().ToLowerInvariant()"
                         type="@inputType" step="@(inputType == "number" ? "any" : null)" min="@field.Minimum" max="@field.Maximum"
-                        required="@(required && inputType != "checkbox")" readonly="@readOnly" disabled="@(readOnly && inputType == "checkbox")" maxlength="@field.MaxLength"
+                        required="@(required && inputType != "checkbox")" readonly="@readOnly" disabled="@(locked || readOnly && inputType == "checkbox")" maxlength="@field.MaxLength"
                         placeholder="@placeholder" @defaultAttribute aria-describedby="@id-help @id-error" />
                 }
                 <small id="@id-help">@block.Value("helpText")</small>

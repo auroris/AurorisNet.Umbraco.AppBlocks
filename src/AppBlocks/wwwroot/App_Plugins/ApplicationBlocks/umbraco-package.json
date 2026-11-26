@@ -4,7 +4,7 @@
     {
       "type": "propertyValuePreset",
       "alias": "AppBlocks.PropertyValuePreset.BlockCondition",
-      "name": "Visibility and Security condition defaults",
+      "name": "Visibility, Security and Read Only condition defaults",
       "forPropertyEditorSchemaAlias": "Umbraco.RadioButtonList",
       "api": "/App_Plugins/ApplicationBlocks/condition-preset.js"
     },

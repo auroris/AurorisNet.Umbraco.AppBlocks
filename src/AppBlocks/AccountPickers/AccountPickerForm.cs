@@ -13,13 +13,16 @@ public sealed class AccountPickerForm(IEnumerable<AccountPickerBlock> blocks, ID
             services.GetRequiredKeyedService<IAccountPickerProvider>);
 
     public static IReadOnlyList<AccountPickerDefinition> Definitions(FormDefinition form, IEnumerable<AccountPickerBlock> blocks)
+        => Definitions(form, blocks, includeReadOnly: false);
+
+    internal static IReadOnlyList<AccountPickerDefinition> Definitions(FormDefinition form, IEnumerable<AccountPickerBlock> blocks, bool includeReadOnly)
     {
         var types = blocks.ToDictionary(b => b.Alias);
         var owned = new HashSet<string>(StringComparer.Ordinal);
         var result = new List<AccountPickerDefinition>();
         foreach (var block in AppBlockContent.Flatten(form.Block.Areas.SelectMany(a => a), form.Culture))
         {
-            if (!form.Includes(block) || !types.TryGetValue(block.Content.ContentType.Alias, out var type)) continue;
+            if (!form.Includes(block) || !includeReadOnly && form.IsReadOnly(block) || !types.TryGetValue(block.Content.ContentType.Alias, out var type)) continue;
             var settings = type.ReadSettings(block.Content);
             settings.CheckBindings(owned,
                 field => form.Fields.Any(f => f.Content.Value<string>("field") == field && f.Content.ContentType.Alias == "appText" && !f.Content.Value<bool>("readOnly"))

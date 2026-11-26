@@ -47,7 +47,7 @@ else if (block.OwnedByForm && Model.Form is null)
 else
 {
     var newUploads = false;
-    if (ownedByForm && string.IsNullOrWhiteSpace(Context.Request.Query[Model.Form!.KeyParameter].ToString()))
+    if (ownedByForm && !Model.Form!.IsReadOnly(item) && string.IsNullOrWhiteSpace(Context.Request.Query[Model.Form.KeyParameter].ToString()))
     {
         try
         {

@@ -67,7 +67,8 @@ export function mountFieldRules(form, fields, shuttles, colors, readValue) {
                 for (const c of rule.conditions) { update(c.field); update(c.otherField); }
             const active = action => rules.some(r => r.action === action && matches(r));
             const hidden = rules.some(r => r.action === "Show" && !matches(r)) || active("Hide");
-            const disabled = hidden || active("Make read only") || field.dataset.readonly === "true" || !(record.key ? record.capabilities.update : record.capabilities.create);
+            const disabled = hidden || active("Make read only") || field.dataset.readonly === "true" || !!record.readOnlyFields?.includes(name)
+                || !(record.key ? record.capabilities.update : record.capabilities.create);
             const cell = field.closest(".app-form-field")?.closest(".ah-grid__item") ?? field.closest(".app-form-field");
             if (cell) cell.hidden = hidden;
             field.disabled = disabled;

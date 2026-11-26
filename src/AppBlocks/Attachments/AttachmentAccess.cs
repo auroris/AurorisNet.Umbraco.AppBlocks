@@ -51,7 +51,7 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         if (scope.Status != 200) return AttachmentScope.Refused(scope.Status, scope.Problem!);
         var block = AttachmentBlock.Read(scope.Item!.Content, settings.Value);
         var context = new FormExecutionContext(scope.User!, pageKey, blockKey, Definition, Parameters: scope.Parameters);
-        var viewOnly = block.OwnedByForm && scope.Form?.ViewOnly == true;
+        var viewOnly = scope.ReadOnly || block.OwnedByForm && scope.Form?.ViewOnly == true;
         var write = !block.ReadOnly && !viewOnly && (scope.Resource is IAttachmentOwner rule
             ? await rule.MayWriteAttachmentsAsync(scope.Record!, context, ct)
             : scope.User!.Identity?.IsAuthenticated == true && (scope.Record!.Capabilities.Update || scope.Record.Capabilities.Delete));
@@ -72,7 +72,7 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         var scope = await owners.ResolveAsync(pageKey, blockKey, AppBlockSchema.AttachmentsAlias, Words, Owner, Definition, ct, allowAnonymous: true, newRecord: true);
         if (scope.Status != 200) return AttachmentScope.Refused(scope.Status, scope.Problem!);
         var block = AttachmentBlock.Read(scope.Item!.Content, settings.Value);
-        if (!await AllowsNewUploadsAsync(block, scope.Form!, scope.User!, pageKey, blockKey, scope.Parameters, ct, settings.Value))
+        if (scope.ReadOnly || !await AllowsNewUploadsAsync(block, scope.Form!, scope.User!, pageKey, blockKey, scope.Parameters, ct, settings.Value))
             return AttachmentScope.Refused(404, "Save the record before adding files.");
         return new(200, null, block, scope.User, AttachmentOwner.Pending(scope.Resource!.Alias, submissionKey, scope.User!), true, submissionKey, CanAdd: true,
             Resource: scope.Resource, Parameters: scope.Parameters);

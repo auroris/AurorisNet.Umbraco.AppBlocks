@@ -58,6 +58,7 @@ internal sealed class PublicSite : IAsyncDisposable
 {
     public static readonly Guid ContactPage = Key("contact"), ContactForm = Key("contact-form");
     public static readonly Guid ReviewPage = Key("review"), ReviewForm = Key("review-form"), PrivatePage = Key("staff-only");
+    public static readonly Guid ReadOnlyPage = Key("read-only-review"), ReadOnlyForm = Key("read-only-form"), ArchivePage = Key("archive"), ArchiveLinks = Key("links:archive");
     public static readonly Guid RefusingPage = Key("refusing"), RefusingForm = Key("refusing-form");
     public static readonly Guid EnginePage = Key("engine"), EngineForm = Key("engine-form");
     public static readonly Guid ReportPage = Key("reports"), PublicReport = Key("public-report"), PersonalReport = Key("personal-report");
@@ -324,6 +325,24 @@ internal sealed class PublicSite : IAsyncDisposable
         Assert.True((await memberGroups.CreateAsync(new MemberGroup { Name = WritersGroup })).Success);
         var reviewers = await memberGroups.CreateAsync(new MemberGroup { Name = ReviewersGroup });
         Assert.True(reviewers.Success);
+        JsonObject ReadOnlyRule(string comparison, params (string Alias, JsonNode? Value)[] values)
+        {
+            var rule = Set("Umbraco.BlockList");
+            Add(rule, "Umbraco.BlockList", Key("read-only:" + comparison), AppBlockSchema.Key("appReadOnlyCondition"), [("comparison", comparison), ..values]);
+            return rule;
+        }
+        var reviewFields = Block(Key("review-fields"), "appFieldset", ("heading", "Review"),
+            (BlockConditions.ReadOnly, ReadOnlyRule("User is outside member groups", ("memberGroups", reviewers.Result!.Key.ToString()))));
+        var reviewed = FormBlock(ReadOnlyForm, "public.engine",
+            Field("title", "Submission", (BlockConditions.ReadOnly, ReadOnlyRule("Never read only"))),
+            reviewFields with { Children = [Field("owner", "Review notes")] });
+        Page("Read only review", ReadOnlyPage, home.Id, Container(reviewed with { Values = [.. reviewed.Values,
+            (BlockConditions.ReadOnly, ReadOnlyRule("Is", ("item", "title"), ("literal", "Closed")))] }));
+        var archive = Container(FormBlock(ReadOnlyForm, "public.engine", Field("title", "Submission")),
+            Attachments(OpenFiles, "public.open"),
+            Block(Rows, AppBlockSchema.TabularAlias, ("dataSource", "public.engine"), ("linkField", "owner"), ("ownerResource", "public.open"), ("ownerKey", "1")));
+        archive["contentData"]![0]!["values"]!.AsArray().Add(new JsonObject { ["alias"] = BlockConditions.ReadOnly, ["value"] = ReadOnlyRule("Always read only") });
+        Page("Archive", ArchivePage, home.Id, archive);
         var staffOnly = Set("Umbraco.BlockList");
         Add(staffOnly, "Umbraco.BlockList", Key("staff-rule"), AppBlockSchema.Key("appSecurityCondition"),
             ("comparison", "Member is in group"), ("memberGroups", reviewers.Result!.Key.ToString()));
@@ -351,7 +370,7 @@ internal sealed class PublicSite : IAsyncDisposable
         Page("Links", LinksPage, home.Id, LinkedReports(reviewers.Result!.Key, [
             .. from link in new[] { "create", "open" } from choice in LinkChoices
                select (LinkReport(link, choice), WritersPage, link == "create" ? choice : "Hidden", link == "open" ? choice : "Hidden"),
-            (RefusingLinks, RefusingPage, "", "")]));
+            (RefusingLinks, RefusingPage, "", ""), (ArchiveLinks, ArchivePage, "Form page decides", "Form page decides")]));
         var line = FormBlock(LinePanel, "public.engine", Field("title", "Line title"));
         var binding = (JsonObject)line.Values.Single(v => v.Alias == "formInterface").Value;
         binding["contentData"]![0]!["values"]!.AsArray().Add(new JsonObject { ["alias"] = "keyParameter", ["value"] = "lineId" });
@@ -392,23 +411,26 @@ internal sealed class PublicSite : IAsyncDisposable
     {
         using var stream = new ManifestEmbeddedFileProvider(typeof(AppBlocksExtensions).Assembly).GetFileInfo("Schema/DataTypes/ApplicationApplicationBlocks.config").CreateReadStream();
         var grid = JsonNode.Parse(XElement.Load(stream).Element("Config")!.Value)!;
-        var formBlock = grid["blocks"]!.AsArray().Single(b => b!["contentElementTypeKey"]!.GetValue<string>() == AppBlockSchema.Key("appForm").ToString())!;
-        var area = formBlock["areas"]![0]!["key"]!.GetValue<string>();
         var fields = Set("Umbraco.BlockGrid");
         var top = fields["layout"]!["Umbraco.BlockGrid"]!.AsArray();
-        foreach (var item in items)
+        JsonObject AddItem(Item item)
         {
-            var layout = Add(fields, "Umbraco.BlockGrid", item.Key, AppBlockSchema.Key(item.Alias), Values(item));
-            if (item.Children.Length == 0) continue;
+            var type = AppBlockSchema.Key(item.Alias);
+            var layout = Add(fields, "Umbraco.BlockGrid", item.Key, type, Values(item));
+            if (item.Children.Length == 0) return layout;
+            var block = grid["blocks"]!.AsArray().Single(b => b!["contentElementTypeKey"]!.GetValue<string>() == type.ToString())!;
+            var area = block["areas"]![0]!["key"]!.GetValue<string>();
             var children = new JsonArray();
             foreach (var child in item.Children)
             {
-                var childLayout = Add(fields, "Umbraco.BlockGrid", child.Key, AppBlockSchema.Key(child.Alias), Values(child));
+                var childLayout = AddItem(child);
                 top.Remove(childLayout);
                 children.Add(childLayout);
             }
             layout["areas"]!.AsArray().Add(new JsonObject { ["key"] = area, ["items"] = children });
+            return layout;
         }
+        foreach (var item in items) AddItem(item);
         var body = Set("Umbraco.BlockList");
         Add(body, "Umbraco.BlockList", AppBlockSchema.Key("public-site:container:" + items[0].Key), AppBlockSchema.Key(AppBlockSchema.FormsContainerAlias), ("forms", JsonValue.Create(fields.ToJsonString())));
         return body;

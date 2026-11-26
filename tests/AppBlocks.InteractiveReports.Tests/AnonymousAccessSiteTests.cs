@@ -182,6 +182,60 @@ public sealed class AnonymousAccessSiteTests
         Assert.DoesNotContain("\"owner\"", await created.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Read_only_conditions_preserve_visible_values_and_guard_writes_against_the_stored_record()
+    {
+        await using var site = await PublicSite.StartAsync();
+        site.Switch.PublicEngine = site.Switch.AnonymousEngineWrites = true;
+        using var visitor = site.Anonymous();
+        var member = await CreateMemberAsync(site, "read-only-reviewer");
+        await site.WithServices(services => {
+            services.GetRequiredService<IMemberService>().AssignRole(member.Id, PublicSite.ReviewersGroup);
+            return Task.CompletedTask;
+        });
+        using var staff = await site.SignedIn("member", member.Id.ToString(), member.Username);
+        var api = PublicSite.FormUrl(PublicSite.ReadOnlyPage, PublicSite.ReadOnlyForm);
+        Assert.True((await Load(visitor, api)).GetProperty("record").GetProperty("capabilities").GetProperty("create").GetBoolean());
+        var initial = await Load(visitor, api + "?id=1");
+        Assert.Equal("someone", initial.GetProperty("record").GetProperty("values").GetProperty("owner").GetString());
+        Assert.Equal("owner", Assert.Single(initial.GetProperty("record").GetProperty("readOnlyFields").EnumerateArray()).GetString());
+        Assert.False((await Load(staff, api + "?id=1")).GetProperty("record").TryGetProperty("readOnlyFields", out _));
+        Assert.Matches("(?s)<input [^>]*name=\"owner\"[^>]* disabled", await visitor.GetStringAsync("/read-only-review/?id=1"));
+        async Task<HttpResponseMessage> Change(HttpClient client, string url, HttpMethod method, object values)
+        {
+            var state = await Load(client, url + "?id=1");
+            return await Send(client, method, url + "/1", state.GetProperty("antiforgeryToken").GetString(), new {
+                values, definitionVersion = state.GetProperty("definitionVersion"), checksum = state.GetProperty("record").GetProperty("checksum"), submissionKey = Guid.NewGuid(),
+            });
+        }
+        using (var refused = await Change(visitor, api, HttpMethod.Put, new { owner = "Replacement" })) Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        using (var saved = await Change(visitor, api, HttpMethod.Put, new { title = "Public edit" })) saved.EnsureSuccessStatusCode();
+        Assert.Equal("someone", (await Load(visitor, api + "?id=1")).GetProperty("record").GetProperty("values").GetProperty("owner").GetString());
+        using (var saved = await Change(staff, api, HttpMethod.Put, new { owner = "Approved", title = "Closed" })) {
+            saved.EnsureSuccessStatusCode();
+            Assert.False((await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("record").GetProperty("capabilities").GetProperty("update").GetBoolean());
+        }
+        using (var refused = await Change(staff, api, HttpMethod.Put, new { title = "Reopened" })) Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        using (var refused = await Change(staff, api, HttpMethod.Delete, new { })) Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        var archive = PublicSite.FormUrl(PublicSite.ArchivePage, PublicSite.ReadOnlyForm);
+        var create = await Load(visitor, archive);
+        Assert.False(create.GetProperty("record").GetProperty("capabilities").GetProperty("create").GetBoolean());
+        using var blocked = await Post(visitor, archive, create.GetProperty("antiforgeryToken").GetString(), create, new { title = "New" }, []);
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+        var files = PublicSite.FilesUrl(PublicSite.ArchivePage, PublicSite.OpenFiles);
+        var fileList = await Load(visitor, files);
+        Assert.False(fileList.GetProperty("canAdd").GetBoolean());
+        using var upload = await visitor.PostAsync(files, null);
+        Assert.Equal(HttpStatusCode.Forbidden, upload.StatusCode);
+        var rows = $"/api/tabular/{PublicSite.ArchivePage}/{PublicSite.Rows}";
+        Assert.False((await Load(visitor, rows)).GetProperty("canUpdate").GetBoolean());
+        using var batch = await visitor.PostAsJsonAsync(rows, new { changes = Array.Empty<object>() });
+        Assert.Equal(HttpStatusCode.Forbidden, batch.StatusCode);
+        var links = await Load(visitor, "/api/reports/" + PublicSite.ReportName(PublicSite.LinksPage, PublicSite.ArchiveLinks) + "/schema");
+        Assert.False(links.TryGetProperty("createLink", out var link) && link.ValueKind != JsonValueKind.Null);
+        Assert.Contains("/archive/", links.GetProperty("editLink").GetProperty("urlTemplate").GetString());
+    }
+
     [Theory]
     [InlineData("AllPages", true)]
     [InlineData("appblockspages", false)]

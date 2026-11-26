@@ -37,7 +37,7 @@ export function mountAccountPicker(box, {
         input.dispatchEvent(new Event("change", { bubbles: true }));
     };
     function lock() {
-        name.readOnly = !!identity.value || !settings.allowManualEntry;
+        name.readOnly = !editable() || !!identity.value || !settings.allowManualEntry;
         for (const [, key] of mappings) {
             const mirror = fallbacks[key];
             field(key).readOnly = !!identity.value ? !mirror || !!field(mirror)?.value : !settings.allowManualEntry;
@@ -46,7 +46,13 @@ export function mountAccountPicker(box, {
         find.disabled = manual.disabled = !editable();
     }
     function close() { ++generation; pending?.abort(); pending = null; if (popup && !popup.closed) popup.close(); popup = null; }
-    async function loaded() {
+    async function loaded(event) {
+        const recordKey = event?.detail?.record?.key;
+        if (recordKey) {
+            const query = new URLSearchParams(endpoint.searchParams.get("appPageQuery") ?? form.dataset.panelQuery ?? location.search);
+            query.set(form.dataset.keyParameter || "id", recordKey);
+            endpoint.searchParams.set("appPageQuery", "?" + query);
+        }
         close(); lock(); status.textContent = "";
         if (boundName) { name.value = boundName.value; return; }
         const key = identity.value;

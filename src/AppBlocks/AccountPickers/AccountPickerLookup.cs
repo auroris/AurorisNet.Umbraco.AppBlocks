@@ -29,16 +29,23 @@ public sealed class AccountPickerLookup(AppBlockContent content, AppPageAccess a
         if (FormResourceAccess.Refusal(form.Resource, visitor) is { } refusal) return Results.StatusCode(refusal);
         if (form.Resource is SqlDataSource sql && !await sql.MayWriteAsync(visitor, ct)) return Results.StatusCode(403);
         var pageQuery = new QueryCollection(Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(http.Request.Query["appPageQuery"]));
-        form = await conditions.ForFormAsync(form, visitor, async () => (await FormAccess.LoadForPageAsync(form, visitor, http, pageQuery))?.Record, false, ct);
+        Task<FormResult?>? loaded = null;
+        async Task<FormRecord?> Record() => (await (loaded ??= FormAccess.LoadForPageAsync(form, visitor, http, pageQuery)))?.Record;
+        form = await conditions.ForFormAsync(form, visitor, Record, false, ct);
         try
         {
-            var picker = AccountPickerForm.Definitions(form, types).SingleOrDefault(p => p.BlockKey == blockKey);
+            var picker = AccountPickerForm.Definitions(form, types, includeReadOnly: true).SingleOrDefault(p => p.BlockKey == blockKey);
             if (picker is null) return Results.NotFound();
             var context = new FormExecutionContext(visitor, pageKey, form.Block.ContentKey, form.Revision);
             if (!picker.Settings.Permits(await users.ResolveAsync(context, ct))) return Results.StatusCode(403);
             var query = http.Request.Query;
             if (query["s"].Count > 1 || query[keyParameter].Count > 1 || query.ContainsKey("s") && query.ContainsKey(keyParameter))
                 return Results.BadRequest();
+            // A locked key-only picker still displays the selected account's name.
+            if (form.ReadOnlyBlocks.Contains(blockKey) && (query[keyParameter].Count != 1 || await Record() is not { } current
+                || !current.Values.TryGetValue(picker.Settings.IdentityField, out var selectedKey)
+                || string.IsNullOrWhiteSpace(selectedKey?.ToString()) || query[keyParameter][0] != selectedKey.ToString()))
+                return Results.StatusCode(403);
             var provider = http.RequestServices.GetRequiredKeyedService<IAccountPickerProvider>(picker.Alias);
             project ??= item => item;
             if (query.TryGetValue(keyParameter, out var key))

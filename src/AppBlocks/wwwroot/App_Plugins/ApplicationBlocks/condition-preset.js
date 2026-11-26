@@ -8,6 +8,7 @@ export class BlockConditionPreset extends UmbControllerBase {
         switch (type?.alias) {
             case "appVisibilityCondition": return "Always visible";
             case "appSecurityCondition": return "Always rendered";
+            case "appReadOnlyCondition": return "Never read only";
             default: return value;
         }
     }

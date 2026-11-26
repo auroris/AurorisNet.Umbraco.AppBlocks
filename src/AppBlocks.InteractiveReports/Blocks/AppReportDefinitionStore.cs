@@ -25,7 +25,7 @@ public sealed class AppReportDefinitionStore(
     ReportSourcePreviews? previews = null, IHttpContextAccessor? http = null, SavedViewStore? savedViews = null, AppPageAccess? pages = null,
     FormResourceRegistry? formResources = null, PublishedDataCatalog? dataCatalog = null, ILogger<AppReportDefinitionStore>? logger = null,
     IDataSourceUserResolver? users = null, Umbraco.Cms.Core.Services.IMemberGroupService? memberGroups = null,
-    IEnumerable<IAppBlockPlugin>? plugins = null)
+    IEnumerable<IAppBlockPlugin>? plugins = null, BlockConditions? conditions = null)
     : IReportDefinitionStore, IReportDefinitionAuthorizationStore
 {
     /// <summary>Blocks already reported for an Open link without a key column, so the log says it once per block, not per request.</summary>
@@ -208,23 +208,31 @@ public sealed class AppReportDefinitionStore(
     private async Task<bool> AllowsAsync(FormDefinition form, System.Security.Claims.ClaimsPrincipal caller, IReadOnlyDictionary<string, string> parameters, bool update, CancellationToken ct)
     {
         if (form.ViewOnly || FormResourceAccess.Refusal(form.Resource, caller) is not null) return false;
-        // A data source answers from its own settings: the allow flag, the write groups, anonymous writes and :USER_ bindings in its writes.
-        if (form.Resource is SqlDataSource source) return (update ? source.Definition.AllowUpdate : source.Definition.AllowInsert) && await source.MayWriteAsync(caller, ct);
+        if (form.Resource is SqlDataSource source && (!(update ? source.Definition.AllowUpdate : source.Definition.AllowInsert) || !await source.MayWriteAsync(caller, ct))) return false;
         // A form class is asked through its Initialize, which the form page asks too and which must be safe to repeat, with the parameters
         // the new record would receive. For the create button, the new record it returns must allow
         // Create. That record says nothing about changing an existing one, which the class decides for each record as it loads, so the
         // open link shows to anyone Initialize answers at all: they reach the form, and loading the record then allows or refuses the
         // edit. A class that fails keeps the link, as the page then reports what happened.
-        try
+        async Task<FormResult> Initialize()
         {
             var context = new FormExecutionContext(caller, form.Page.Key, form.Block.ContentKey, form.Revision, Parameters: parameters);
             if (form.Relationship is { } relationship) {
-                if (http?.HttpContext is not { } request) return false;
+                if (http?.HttpContext is not { } request) return FormResult.Denied();
                 var resolved = await relationship.ResolveAsync(form, context, request.RequestServices, ct);
-                if (resolved.Refusal is not null) return false;
+                if (resolved.Refusal is not null) return resolved.Refusal;
                 context = context with { ParentScope = resolved.Scope };
             }
-            var initialized = await form.LoadAsync(null, context, ct);
+            return await form.LoadAsync(null, context, ct);
+        }
+        try
+        {
+            Task<FormResult>? initial = null;
+            Task<FormResult> Load() => initial ??= Initialize();
+            // An Open link can lead to a readable record. Create needs permission on the form's initial record.
+            if (!update && conditions is not null && await conditions.IsFormReadOnlyAsync(form, caller, async () => (await Load()).Record, ct)) return false;
+            if (form.Resource is SqlDataSource) return true;
+            var initialized = await Load();
             return update ? initialized.Status == 200 : initialized.Record?.Capabilities.Create == true;
         }
         catch (Exception error) when (error is not OperationCanceledException)

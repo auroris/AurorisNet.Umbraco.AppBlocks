@@ -16,19 +16,20 @@ namespace AppBlocks.Blocks;
 /// <summary>Server-side conditions on a published block. Both renderers and block endpoints use the same published values.</summary>
 public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupService memberGroups, IEnumerable<IAppBlockPlugin> plugins, IHttpContextAccessor http)
 {
-    public const string Visibility = "blockVisibility", Security = "blockSecurity";
+    public const string Visibility = "blockVisibility", Security = "blockSecurity", ReadOnly = "blockReadOnly";
     private MemberGroupNames? groups;
 
     private static BlockListModel Conditions(IPublishedElement block, string alias)
         => block.GetProperty(alias)?.GetValue() as BlockListModel ?? BlockListModel.Empty;
 
     internal static string ConditionAlias(string property) => property switch {
-        Visibility => "appVisibilityCondition", Security => "appSecurityCondition", _ => throw new ArgumentOutOfRangeException(nameof(property)),
+        Visibility => "appVisibilityCondition", Security => "appSecurityCondition", ReadOnly => "appReadOnlyCondition",
+        _ => throw new ArgumentOutOfRangeException(nameof(property)),
     };
 
     internal static bool? ConstantResult(string property, string? comparison) => (property, comparison) switch {
-        (Visibility, "Always visible") or (Security, "Always rendered") => true,
-        (Visibility, "Never visible") or (Security, "Never rendered") => false,
+        (Visibility, "Always visible") or (Security, "Always rendered") or (ReadOnly, "Always read only") => true,
+        (Visibility, "Never visible") or (Security, "Never rendered") or (ReadOnly, "Never read only") => false,
         _ => null,
     };
 
@@ -37,7 +38,8 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
 
     internal static bool VariesByRequest(BlockGridItem item) =>
         Conditions(item.Content, Security).Any(entry => ConstantResult(Security, entry.Content) is null)
-        || Conditions(item.Content, Visibility).Any(entry => ConstantResult(Visibility, entry.Content) is null);
+        || Conditions(item.Content, Visibility).Any(entry => ConstantResult(Visibility, entry.Content) is null)
+        || Conditions(item.Content, ReadOnly).Any(entry => ConstantResult(ReadOnly, entry.Content) is null);
 
     internal static bool HasSecurity(BlockGridItem item) =>
         Conditions(item.Content, Security).Any(entry => ConstantResult(Security, entry.Content) != true);
@@ -45,44 +47,50 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
     public async Task<bool> MatchesAsync(BlockGridItem item, string alias, IPublishedContent page, ClaimsPrincipal? visitor,
         string? culture = null, FormDefinition? form = null, Func<Task<FormRecord?>>? load = null, CancellationToken ct = default)
     {
-        foreach (var entry in Conditions(item.Content, alias))
+        var conditions = Conditions(item.Content, alias);
+        var readOnly = alias == ReadOnly;
+        if (conditions.Count == 0) return !readOnly;
+        foreach (var entry in conditions)
         {
-            var condition = entry.Content;
-            if (condition.ContentType.Alias != ConditionAlias(alias)) return false;
-            var comparison = condition.Value<string>("comparison");
-            if (ConstantResult(alias, comparison) is { } passes)
-            {
-                if (!passes) return false;
-                continue;
-            }
-            if (alias == Security) http.HttpContext?.KeepOutOfCaches();
-            if (visitor is null) return false;
-            if (FieldCondition.IsComparison(comparison))
-            {
-                var name = condition.Value<string>("item")?.Trim();
-                if (string.IsNullOrEmpty(name)) return false;
-                var itemValue = form is null ? PageValue(page, name, culture) : await FieldValueAsync(form, name, load);
-                if (itemValue is not { } left || !FieldCondition.Compare(left.Kind, comparison!, left.Text, condition.Value<string>("literal") ?? "")) return false;
-            }
-            else if (!await VisitorMatchesAsync(condition, comparison, visitor, ct)) return false;
+            var passes = await EvaluateAsync(entry.Content, alias, page, visitor, culture, form, load, ct);
+            // An unavailable item or identity cannot grant rendering or editing.
+            if (!(passes ?? readOnly)) return false;
         }
         return true;
     }
 
-    private async Task<bool> VisitorMatchesAsync(IPublishedElement condition, string? comparison, ClaimsPrincipal visitor, CancellationToken ct)
+    private async Task<bool?> EvaluateAsync(IPublishedElement condition, string alias, IPublishedContent page, ClaimsPrincipal? visitor,
+        string? culture, FormDefinition? form, Func<Task<FormRecord?>>? load, CancellationToken ct)
+    {
+        if (condition.ContentType.Alias != ConditionAlias(alias)) return null;
+        var comparison = condition.Value<string>("comparison");
+        if (ConstantResult(alias, comparison) is { } passes) return passes;
+        if (alias is Security or ReadOnly) http.HttpContext?.KeepOutOfCaches();
+        if (visitor is null) return null;
+        if (!FieldCondition.IsComparison(comparison)) return await VisitorMatchesAsync(condition, comparison, visitor, ct);
+        var name = condition.Value<string>("item")?.Trim();
+        if (string.IsNullOrEmpty(name)) return null;
+        var value = form is null ? PageValue(page, name, culture) : await FieldValueAsync(form, name, load, emptyOnNewRecord: alias == ReadOnly);
+        return value is { } left ? FieldCondition.Compare(left.Kind, comparison!, left.Text, condition.Value<string>("literal") ?? "") : null;
+    }
+
+    private async Task<bool?> VisitorMatchesAsync(IPublishedElement condition, string? comparison, ClaimsPrincipal visitor, CancellationToken ct)
     {
         var user = await DataSourceQueries.ResolveReaderAsync(users, visitor, ct);
-        if (user is null) return false;
+        if (user is null) return null;
         switch (comparison)
         {
             case "User is anonymous": return user.IsAnonymous;
             case "User is signed in": return !user.IsAnonymous;
             case "Backoffice user is in group": return user.IsInUserGroup(condition.Value<string>("literal")?.Trim() ?? "");
-            case "Member is in group" when user.IsMember:
+            case "Member is in group":
+            case "User is outside member groups":
+                if (!user.IsMember) return comparison == "User is outside member groups";
                 groups ??= new((await memberGroups.GetAllAsync()).ToArray());
                 var picked = condition.GetProperty("memberGroups")?.GetValue()?.ToString() ?? "";
-                return groups.Resolve(picked)?.Any(user.IsInMemberGroup) == true;
-            default: return false;
+                if (groups.Resolve(picked) is not { Count: > 0 } names) return null;
+                return names.Any(user.IsInMemberGroup) == (comparison == "Member is in group");
+            default: return null;
         }
     }
 
@@ -97,11 +105,12 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         return (kind, ItemText(value));
     }
 
-    private static async Task<(string Kind, string Text)?> FieldValueAsync(FormDefinition form, string name, Func<Task<FormRecord?>>? load)
+    private static async Task<(string Kind, string Text)?> FieldValueAsync(FormDefinition form, string name, Func<Task<FormRecord?>>? load, bool emptyOnNewRecord)
     {
         if (form.Resource.Fields.FirstOrDefault(f => f.Key == name) is not { } field || load is null
-            || await load() is not { } record || !record.Values.TryGetValue(name, out var value)) return null;
-        return (field.Kind, ItemText(value));
+            || await load() is not { } record) return null;
+        if (record.Values.TryGetValue(name, out var value)) return (field.Kind, ItemText(value));
+        return emptyOnNewRecord && record.Key is null ? (field.Kind, "") : null;
     }
 
     private static string ItemText(object? value) => value switch {
@@ -126,6 +135,18 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         return true;
     }
 
+    internal async Task<bool> ReadOnlyOnPathAsync(IPublishedContent page, IEnumerable<BlockGridItem> path, ClaimsPrincipal? visitor, string? culture, CancellationToken ct)
+    {
+        foreach (var item in path)
+            if (await MatchesAsync(item, ReadOnly, page, visitor, culture, ct: ct)) return true;
+        return false;
+    }
+
+    /// <summary>Evaluates a form's Read Only list against its record and enclosing layouts against the published page.</summary>
+    public async Task<bool> IsFormReadOnlyAsync(FormDefinition form, ClaimsPrincipal visitor, Func<Task<FormRecord?>> load, CancellationToken ct)
+        => await ReadOnlyOnPathAsync(form.Page, form.Ancestors, visitor, form.Culture, ct)
+            || await MatchesAsync(form.Block, ReadOnly, form.Page, visitor, form.Culture, form, load, ct);
+
     /// <summary>Scopes field binding, projection, validation and child blocks to this caller and record.
     /// Only item comparisons need the record, which is loaded at most once.</summary>
     public async Task<FormDefinition> ForFormAsync(FormDefinition form, ClaimsPrincipal visitor, Func<Task<FormRecord?>> load,
@@ -135,7 +156,10 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         var hidden = new HashSet<Guid>();
         Task<FormRecord?>? record = null;
         Task<FormRecord?> Record() => record ??= load();
-        async Task Visit(BlockGridItem item)
+        var locked = new HashSet<Guid>();
+        var wholeForm = await IsFormReadOnlyAsync(form, visitor, Record, ct);
+        if (wholeForm) locked.Add(form.Block.ContentKey);
+        async Task Visit(BlockGridItem item, bool parentLocked)
         {
             if (denied.Contains(item.ContentKey)) return;
             if (!await MatchesAsync(item, Security, form.Page, visitor, form.Culture, form, Record, ct))
@@ -144,13 +168,16 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
                 return;
             }
             if (rendering && !await MatchesAsync(item, Visibility, form.Page, visitor, form.Culture, form, Record, ct)) hidden.Add(item.ContentKey);
-            foreach (var child in AppBlockContent.Children(item, form.Culture)) await Visit(child);
+            var itemLocked = parentLocked || await MatchesAsync(item, ReadOnly, form.Page, visitor, form.Culture, form, Record, ct);
+            if (itemLocked) locked.Add(item.ContentKey);
+            foreach (var child in AppBlockContent.Children(item, form.Culture)) await Visit(child, itemLocked);
         }
-        foreach (var child in form.Block.Areas.SelectMany(a => a)) await Visit(child);
-        if (denied.Count == 0 && hidden.Count == 0) return form;
+        foreach (var child in form.Block.Areas.SelectMany(a => a)) await Visit(child, wholeForm);
+        if (denied.Count == 0 && hidden.Count == 0 && locked.Count == 0 && form.ReadOnlyBlocks.Count == 0) return form;
+        var lockedFields = form.Fields.Where(f => locked.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
         var excludedFields = form.Fields.Where(f => denied.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
         excludedFields.UnionWith(form.ExcludedFields);
-        if (excludedFields.Count > 0)
+        if (excludedFields.Count > 0 || locked.Count > 0)
         {
             // A picker writes several fields. Omit the companion as a whole when one of its bindings is secured.
             var pickers = plugins.OfType<AccountPickerBlock>().ToDictionary(p => p.Alias);
@@ -159,10 +186,16 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
                 if (denied.Contains(block.ContentKey) || !pickers.TryGetValue(block.Content.ContentType.Alias, out var picker)) continue;
                 var settings = picker.ReadSettings(block.Content);
                 if (settings.WritableFields().Concat(settings.FallbackFields.Values).Any(excludedFields.Contains)) denied.Add(block.ContentKey);
+                if (locked.Contains(block.ContentKey) || settings.WritableFields().Any(lockedFields.Contains))
+                {
+                    locked.Add(block.ContentKey);
+                    lockedFields.UnionWith(settings.WritableFields());
+                }
             }
         }
         return form with {
             DeniedBlocks = denied, InvisibleBlocks = hidden, ExcludedFields = excludedFields,
+            ReadOnlyBlocks = locked, ReadOnlyFields = lockedFields,
             Fields = form.Fields.Where(f => !denied.Contains(f.ContentKey)).ToArray(),
             Rules = form.Rules.Where(r => !excludedFields.Contains(r.Field)).ToArray(),
             AntiSpam = form.AntiSpam.Where(b => !denied.Contains(b.ContentKey)).ToArray(),

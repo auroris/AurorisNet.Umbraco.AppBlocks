@@ -16,11 +16,11 @@ test("a form updates visibility, required and read-only state and compares two d
         const page = await browser.newPage();
         const errors = [], submissions = [];
         page.on("pageerror", error => errors.push(error.message));
-        const record = { key: "1", values: { status: "Draft", reason: "", start: "2026-05-03", end: "2026-05-04" }, capabilities: { update: true } };
+        const record = { key: "1", values: { status: "Draft", reason: "", start: "2026-05-03", end: "2026-05-04", review: "Staff note" }, capabilities: { update: true }, readOnlyFields: ["review"] };
         const condition = (field, comparison, literal = "", otherField = "", kind = "text") => ({ field, comparison, literal, otherField, kind });
         const rule = (field, action, conditions, message = "") => ({ field, action, conditions, message, match: "All" });
         const cancelled = condition("status", "Is", "Cancelled");
-        const rules = [rule("reason", "Show", [cancelled]), rule("reason", "Require", [cancelled]),
+        const rules = [rule("reason", "Show", [cancelled]), rule("reason", "Require", [cancelled]), rule("review", "Require", [cancelled]),
             rule("start", "Make read only", [cancelled]), rule("end", "Validate", [condition("end", "Is at least", "", "start", "date")], "Check the end date.")];
         const input = (name, type = "text") => '<div class="ah-grid__item"><div class="app-form-field"><label for="' + name + '">' + name
             + '<span data-required-mark hidden>*</span></label><input data-field="' + name + '" id="' + name + '" type="' + type + '"></div></div>';
@@ -29,12 +29,15 @@ test("a form updates visibility, required and read-only state and compares two d
             const asset = await runtimeAsset(path);
             if (asset) return route.fulfill(asset);
             if (path.startsWith("/api/forms/")) {
-                if (route.request().method() !== "GET") submissions.push(route.request().postDataJSON().values);
+                if (route.request().method() !== "GET") {
+                    submissions.push(route.request().postDataJSON().values);
+                    record.readOnlyFields = ["end"];
+                }
                 return route.fulfill({ json: { record, antiforgeryToken: "token", definitionVersion: "1" } });
             }
             return route.fulfill({ contentType: "text/html", body: '<form data-app-form data-api="/api/forms/test" data-key-parameter="id" data-field-rules=\''
                 + JSON.stringify(rules) + '\' novalidate><div class="app-form-message"></div><div class="app-form-errors"></div><fieldset class="app-form-body" disabled>'
-                + input("status") + input("reason") + input("start", "date") + input("end", "date")
+                + input("status") + input("reason") + input("start", "date") + input("end", "date") + input("review")
                 + '<button data-save>Save</button></fieldset></form><script type="module" src="/App_Plugins/ApplicationBlocks/runtime.js"></script>' });
         });
         await page.goto("http://site.test/form?id=1");
@@ -43,6 +46,8 @@ test("a form updates visibility, required and read-only state and compares two d
         await page.locator("#status").fill("Cancelled");
         assert.equal(await page.locator("#start").isDisabled(), true);
         assert.equal(await page.locator("#reason").isVisible(), true);
+        assert.equal(await page.locator("#review").inputValue(), "Staff note");
+        assert.equal(await page.locator("#review").isDisabled(), true);
         await page.locator("[data-save]").click();
         assert.equal(await page.locator("#reason").evaluate(el => el.validity.valueMissing), true);
         await page.locator("#reason").fill("Weather");
@@ -54,6 +59,7 @@ test("a form updates visibility, required and read-only state and compares two d
         const saved = page.waitForResponse(r => r.request().method() === "PUT");
         await page.locator("[data-save]").click();
         await saved;
+        await page.waitForFunction(() => document.querySelector("#end").disabled && !document.querySelector("#review").disabled);
         assert.deepEqual(submissions, [{ status: "Cancelled", reason: "Weather", end: "2026-05-05" }]);
         assert.deepEqual(errors, []);
     } finally { await browser.close(); }

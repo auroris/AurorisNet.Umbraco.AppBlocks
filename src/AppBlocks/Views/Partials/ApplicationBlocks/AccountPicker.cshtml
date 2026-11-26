@@ -27,7 +27,7 @@
 }
 <div class="app-people" data-app-account-picker data-block-alias="@alias" data-endpoint="@endpoint" data-settings="@options">
     @if (showCurrentName) { <input type="text" data-current-name readonly aria-label="@Text["pickerSelectedAccount", "Selected account"]" /> }
-    <button type="button" data-find>@(string.IsNullOrWhiteSpace(settings.Label) ? Text["pickerFind", "Find account"] : settings.Label)</button>
+    <button type="button" data-find disabled="@Model.Form.IsReadOnly(Model.Block)">@(string.IsNullOrWhiteSpace(settings.Label) ? Text["pickerFind", "Find account"] : settings.Label)</button>
     <button type="button" data-manual hidden>@(settings.AllowManualEntry ? Text["pickerManual", "Enter manually"] : Text["pickerClear", "Clear selection"])</button>
     <span data-status role="status" aria-live="polite"></span>
 </div>

@@ -164,13 +164,13 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         if (node.ContentType.Alias != PaperReportLinks.ContentTypeAlias) errors.Add($"Select a Paper report node for Paper report; {node.Name} is not one.");
     }
 
-    private static void ValidateConditions(BlockItemData block, IFormResource? enclosingForm, List<string> errors)
+    private static void ValidateConditions(BlockItemData block, IFormResource? enclosingForm, List<string> errors, bool formBlock = false)
     {
-        foreach (var property in new[] { BlockConditions.Visibility, BlockConditions.Security })
+        foreach (var property in new[] { BlockConditions.Visibility, BlockConditions.Security, BlockConditions.ReadOnly })
         {
             var raw = Text(block, property);
             if (string.IsNullOrWhiteSpace(raw)) continue;
-            var label = property == BlockConditions.Security ? "Security" : "Visibility";
+            var label = property switch { BlockConditions.Security => "Security", BlockConditions.ReadOnly => "Read Only", _ => "Visibility" };
             var list = BlockValueSets.Parse(raw);
             var entries = list.ContentData.ToDictionary(e => e.Key);
             foreach (var entry in BlockValueSets.Layout(list))
@@ -182,14 +182,15 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 else if (FieldCondition.IsComparison(comparison))
                 {
                     if (item.Length == 0) errors.Add($"Enter an item for the {label} comparison.");
-                    else if (enclosingForm is not null && !enclosingForm.Fields.Any(f => f.Key == item))
+                    else if (enclosingForm is not null && (!formBlock || property == BlockConditions.ReadOnly) && !enclosingForm.Fields.Any(f => f.Key == item))
                         errors.Add($"The {label} item '{item}' is not a field of {enclosingForm.Alias}.");
                 }
-                else if (comparison == "Member is in group" && string.IsNullOrWhiteSpace(Text(condition, "memberGroups")))
+                else if (comparison is "Member is in group" or "User is outside member groups" && string.IsNullOrWhiteSpace(Text(condition, "memberGroups")))
                     errors.Add($"Pick a Member Group for {label}.");
                 else if (comparison == "Backoffice user is in group" && string.IsNullOrWhiteSpace(Text(condition, "literal")))
                     errors.Add($"Enter a User Group alias for {label}.");
                 else if (BlockConditions.ConstantResult(property, comparison) is null
+                    && !(property == BlockConditions.ReadOnly && comparison == "User is outside member groups")
                     && comparison is not ("User is anonymous" or "User is signed in" or "Member is in group" or "Backoffice user is in group"))
                     errors.Add($"Choose a condition type for {label}.");
             }
@@ -241,7 +242,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             var child = data[key]; var alias = Alias(child);
             var target = depth == 0 ? formLocation : Location(child, alias, parent, position);
             var start = errors.Count;
-            ValidateConditions(child, depth > 0 ? resource : null, errors);
+            ValidateConditions(child, resource, errors, formBlock: depth == 0);
             if (depth > 0 && (alias == "appForm" || Plugin(alias)?.CanNestInForm == false)) errors.Add("Forms and reports cannot be nested inside a form.");
             if (alias == "appActions") actionBlocks.Add(target);
             if (alias == AppBlockSchema.AntiSpamAlias) { checkBlocks.Add(target); AntiSpam(child, errors, warnings); }

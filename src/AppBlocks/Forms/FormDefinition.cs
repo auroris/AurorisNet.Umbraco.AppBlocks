@@ -22,11 +22,16 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
     internal IReadOnlySet<Guid> DeniedBlocks { get; init; } = FrozenSet<Guid>.Empty;
     internal IReadOnlySet<Guid> InvisibleBlocks { get; init; } = FrozenSet<Guid>.Empty;
     internal IReadOnlySet<string> ExcludedFields { get; init; } = FrozenSet<string>.Empty;
+    internal IReadOnlyList<BlockGridItem> Ancestors { get; init; } = [];
+    internal IReadOnlySet<Guid> ReadOnlyBlocks { get; init; } = FrozenSet<Guid>.Empty;
+    internal IReadOnlySet<string> ReadOnlyFields { get; init; } = FrozenSet<string>.Empty;
+    /// <summary>Whether a Read Only condition on this block or an enclosing block matched for this caller and record.</summary>
+    public bool IsReadOnly(BlockGridItem item) => ReadOnlyBlocks.Contains(item.ContentKey);
     public IEnumerable<FieldRule> ClientRules => Rules.Where(rule => rule.Conditions.All(c => !ExcludedFields.Contains(c.Field) && !ExcludedFields.Contains(c.OtherField)));
     public bool Includes(BlockGridItem item) => !DeniedBlocks.Contains(item.ContentKey);
     public bool IsVisible(BlockGridItem item) => !InvisibleBlocks.Contains(item.ContentKey);
     public FormRelationship? Relationship { get; init; }
-    public bool ViewOnly => Interface.Value<bool>("viewOnly");
+    public bool ViewOnly => IsReadOnly(Block) || Interface.Value<bool>("viewOnly");
     /// <summary>When true and a return page is configured, creating a new record redirects to the return page with the created record's key parameter.</summary>
     public bool ReturnWithKey => Interface.Value<bool>("returnWithKey") && Interface.Value<IPublishedContent>("returnPage") is not null;
     public string KeyParameter => ReadKeyParameter(Interface, Relationship is not null);
@@ -39,6 +44,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
     public bool RendersQueryValues => Fields.Any(item =>
         !string.IsNullOrWhiteSpace(item.Content.Value<string>("listOfValues"))
         || item.Content.Value<string>(AppBlockField.DefaultValueAlias)?.TrimStart().StartsWith(':') == true)
+        || BlockConditions.VariesByRequest(Block) || Ancestors.Any(BlockConditions.VariesByRequest)
         || AppBlockContent.Flatten(Block.Areas.SelectMany(area => area)).Any(item =>
             item.Content.ContentType.Alias is AppBlockSchema.AttachmentsAlias or AppBlockSchema.ScheduleAlias || BlockConditions.VariesByRequest(item));
 
@@ -73,7 +79,8 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         if (lists.Any(list => list is null)) return null;
         var rules = FieldRule.Published(block.Content, resource.Fields);
         if (FieldRule.Problems(rules, bindings).Any()) return null;
-        return new(page, block, configuration, resource, fields) { Rules = rules, Relationship = FormRelationship.Read(block.Content, page, culture), Culture = culture, AntiSpam = children.Where(b => b.Content.ContentType.Alias == AppBlockSchema.AntiSpamAlias).ToArray(), ListsRevision = string.Concat(lists.Select(list => ":" + list!.Key + ":" + list.DataSource.ComputeFingerprint() + ":" + list.DisplayColumn + ":" + list.ValueColumn + ":" + list.MaximumRows)) };
+        return new(page, block, configuration, resource, fields) { Ancestors = AppBlockContent.PathTo(blocks, key, culture)!.SkipLast(1).ToArray(),
+            Rules = rules, Relationship = FormRelationship.Read(block.Content, page, culture), Culture = culture, AntiSpam = children.Where(b => b.Content.ContentType.Alias == AppBlockSchema.AntiSpamAlias).ToArray(), ListsRevision = string.Concat(lists.Select(list => ":" + list!.Key + ":" + list.DataSource.ComputeFingerprint() + ":" + list.DisplayColumn + ":" + list.ValueColumn + ":" + list.MaximumRows)) };
     }
 
     public async Task<FormResult> LoadAsync(string? key, FormExecutionContext context, CancellationToken ct)
@@ -99,7 +106,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         foreach (var property in input.EnumerateObject()) {
             if (!seen.Add(property.Name)) { errors[property.Name] = ["Duplicate field."]; continue; }
             var field = Resource.Fields.FirstOrDefault(f => f.Key == property.Name);
-            if (field is null || !bindings.TryGetValue(property.Name, out var block) || field.ReadOnly || block.Content.Value<bool>("readOnly") || block.Content.ContentType.Alias == "appDisplay") {
+            if (field is null || !bindings.TryGetValue(property.Name, out var block) || ReadOnlyFields.Contains(property.Name) || field.ReadOnly || block.Content.Value<bool>("readOnly") || block.Content.ContentType.Alias == "appDisplay") {
                 errors[property.Name] = ["This field cannot be changed through this form."]; continue;
             }
             var value = property.Value;
@@ -136,7 +143,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
             else if (field.Choices is not null && (value.ValueKind != JsonValueKind.String || !field.Choices.Any(choice => choice.Value == value.GetString()))) errors[field.Key] = ["Select an available choice."];
         }
         if (creating) {
-            foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly && !ExcludedFields.Contains(f.Key)))
+            foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly && !ExcludedFields.Contains(f.Key) && !ReadOnlyFields.Contains(f.Key)))
                 if ((field.Required || bindings.TryGetValue(field.Key, out var block) && block.Content.Value<bool>("required") && !HasAccessRule(field.Key))
                     && field.Key != Relationship?.LinkField && !input.TryGetProperty(field.Key, out _)) errors[field.Key] = ["A value is required."];
         }
@@ -156,6 +163,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         return record with {
             Values = record.Values.Where(p => fields.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value),
             Capabilities = ViewOnly ? new() : record.Capabilities,
+            ReadOnlyFields = ReadOnlyFields.Count > 0 ? ReadOnlyFields.Where(fields.Contains).ToArray() : null,
         };
     }
 

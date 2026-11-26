@@ -48,7 +48,7 @@ public sealed class AppBlockContent(IUmbracoContextFactory contexts, IHttpContex
     {
         foreach (var property in element.ContentType.PropertyTypes)
         {
-            if (property.Alias is BlockConditions.Security or BlockConditions.Visibility) continue;
+            if (property.Alias is BlockConditions.Security or BlockConditions.Visibility or BlockConditions.ReadOnly) continue;
             if (property.EditorAlias == "Umbraco.BlockGrid" && element.Value<BlockGridModel>(property.Alias, culture: culture) is { } grid)
                 foreach (var item in grid) yield return item;
             else if (property.EditorAlias == "Umbraco.BlockList" && element.Value<BlockListModel>(property.Alias, culture: culture) is { } list)

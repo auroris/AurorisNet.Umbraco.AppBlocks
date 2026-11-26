@@ -7,7 +7,7 @@ public enum NoStorePages
     AppBlocksPages,
     /// <summary>Every page Umbraco routes.</summary>
     AllPages,
-    /// <summary>Umbraco and the host decide, except when evaluating visitor or item-based block Security conditions.</summary>
+    /// <summary>Umbraco and the host decide, except when evaluating visitor or item-based block Security or Read Only conditions.</summary>
     Off,
 }
 

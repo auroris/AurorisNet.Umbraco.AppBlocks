@@ -121,6 +121,11 @@ export const appBlockTypes = [
     "name": "Number"
   },
   {
+    "alias": "appReadOnlyCondition",
+    "key": "a17e0688-0ad2-3b6d-c2ce-7ebed04d2a27",
+    "name": "Read only condition"
+  },
+  {
     "alias": "appRegion",
     "key": "5977326b-3a82-d6c3-6303-8063a722a7cb",
     "name": "Region"

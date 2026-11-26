@@ -13,6 +13,7 @@ Forms, schedules, API endpoints, and database-backed application blocks for Umbr
 Add application blocks to your site's existing Block Grid or Block List without changing your templates, layout, or authentication:
 
 - **Forms** bound to a registered `IFormResource` C# class or a published SQL data source (with field blocks, attachments, editable child tables, and field rules).
+- **Read Only** conditions on fields, fieldsets and whole forms. Review notes can be visible to everyone and editable only by staff. [Configure Read Only](docs/business-rules.md#read-only).
 - **Schedules** plotting one data source against time with bars from another.
 - **Anti-spam** (Turnstile, reCAPTCHA, hCaptcha, or honeypot) verified server-side.
 - **JSON API endpoints** over SQL data sources at editor-defined routes.

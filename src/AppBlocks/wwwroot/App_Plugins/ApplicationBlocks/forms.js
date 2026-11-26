@@ -67,7 +67,8 @@ export function mountForm(form, panel) {
             else field.value = value ?? "";
             // The minute-level control cannot represent every second, fraction or offset of the stored value.
             if (field.type === "datetime-local") dateTimes.set(field, { shown: field.value, value: blank(value) ? null : value });
-            field.disabled = field.dataset.readonly === "true" || !(record.key ? record.capabilities.update : record.capabilities.create);
+            field.disabled = field.dataset.readonly === "true" || !!record.readOnlyFields?.includes(field.dataset.field)
+                || !(record.key ? record.capabilities.update : record.capabilities.create);
             shuttles.get(field)?.display();
             colors.get(field)?.display();
         }
