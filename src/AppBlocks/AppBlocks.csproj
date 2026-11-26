@@ -2,8 +2,8 @@
   <Import Project="../../Migrations/Install.props" />
   <PropertyGroup>
     <PackageId>AurorisNet.Umbraco.AppBlocks</PackageId>
-    <Title>AppBlocks for Umbraco</Title>
-    <Description>Forms and database-backed application blocks for Umbraco.</Description>
+    <Title>AppBlocks</Title>
+    <Description>Forms, schedules, API endpoints, and database-backed application blocks for Umbraco 18.</Description>
     <PackageTags>umbraco;forms;blocks;database</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>

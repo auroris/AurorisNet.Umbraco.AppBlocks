@@ -2,8 +2,8 @@
   <Import Project="../../Migrations/Install.props" />
   <PropertyGroup>
     <PackageId>AurorisNet.Umbraco.AppBlocks.Documents</PackageId>
-    <Title>AppBlocks Documents for Umbraco</Title>
-    <Description>Generate templated HTML and PDF documents from AppBlocks data sources. PDF conversion optionally uses Pressroom.</Description>
+    <Title>AppBlocks Documents</Title>
+    <Description>Generates HTML and PDF documents from AppBlocks SQL data sources and Razor templates. Depends on AurorisNet.Umbraco.AppBlocks; PDF output uses Pressroom.</Description>
     <PackageTags>umbraco;appblocks;documents;pdf</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
