@@ -177,20 +177,21 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         var lockedFields = form.Fields.Where(f => locked.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
         var excludedFields = form.Fields.Where(f => denied.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
         excludedFields.UnionWith(form.ExcludedFields);
-        if (excludedFields.Count > 0 || locked.Count > 0)
+        if (denied.Count > 0 || locked.Count > 0)
         {
-            // A picker writes several fields. Omit the companion as a whole when one of its bindings is secured.
             var pickers = plugins.OfType<AccountPickerBlock>().ToDictionary(p => p.Alias);
             foreach (var block in AppBlockContent.Flatten(form.Block.Areas.SelectMany(a => a), form.Culture))
             {
-                if (denied.Contains(block.ContentKey) || !pickers.TryGetValue(block.Content.ContentType.Alias, out var picker)) continue;
+                if (!pickers.TryGetValue(block.Content.ContentType.Alias, out var picker)) continue;
                 var settings = picker.ReadSettings(block.Content);
-                if (settings.WritableFields().Concat(settings.FallbackFields.Values).Any(excludedFields.Contains)) denied.Add(block.ContentKey);
-                if (locked.Contains(block.ContentKey) || settings.WritableFields().Any(lockedFields.Contains))
-                {
-                    locked.Add(block.ContentKey);
-                    lockedFields.UnionWith(settings.WritableFields());
-                }
+                var writable = settings.WritableFields().ToArray();
+                // A picker writes several fields. Omit the companion as a whole when one of its bindings is secured.
+                if (writable.Concat(settings.FallbackFields.Values).Any(excludedFields.Contains)) denied.Add(block.ContentKey);
+                var omitted = denied.Contains(block.ContentKey);
+                if (!omitted && !locked.Contains(block.ContentKey) && !writable.Any(lockedFields.Contains)) continue;
+                // Only the picker checks an account against its provider. Its fields are locked with it, and when Security omits it.
+                if (!omitted) locked.Add(block.ContentKey);
+                lockedFields.UnionWith(writable.Where(field => !excludedFields.Contains(field)));
             }
         }
         return form with {

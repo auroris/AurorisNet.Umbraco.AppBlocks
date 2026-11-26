@@ -10,6 +10,8 @@ Member keys use the decimal Member ID. Backoffice keys use `backoffice:` followe
 
 AppBlocks checks each new or changed selection against the published picker and the current account when the form is saved. Locked or unapproved accounts are ineligible. An unchanged link keeps its stored key and name on unrelated edits. Clearing an optional selection clears both fields. Each picker owns its bindings within the form.
 
+The picker follows the [Visibility, Security and Read Only](business-rules.md#block-visibility-and-security) conditions of its form. A locked picker locks every field it writes. When Security omits the picker or one of those fields for a visitor, the other fields it writes are read only for that visitor.
+
 On an existing site, add the picker to the **Form fields** block group if the site's grid does not already offer it. The package supplies the updated grid on a fresh install or when the package definitions are reinstalled.
 
 ## Adding another account source

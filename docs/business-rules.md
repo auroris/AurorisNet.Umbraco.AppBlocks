@@ -54,6 +54,8 @@ Every block starts **Always visible** and **Always rendered**. Editable blocks a
 
 For a public submission form with staff-only notes, put the notes and review controls in a **Fieldset**. On the fieldset, add a **Security** condition, choose **Member is in group**, and select **Staff** in the Umbraco Member Group picker. Staff can use the review fields under the form resource’s usual permissions. Other visitors can submit the public fields, and editing those fields preserves existing staff notes. For staff fields required only during review, use **Required on this form** and allow the resource to create a record before review.
 
+An account picker checks each selection against its accounts. When Security omits the picker or one of the fields it writes, the other fields it writes become read only for that visitor and keep their stored values.
+
 AppBlocks keeps responses that evaluate visitor or item-based Security or Read Only conditions out of shared caches. Site-owned plugin blocks can use the native condition lists by assigning **Application: Visibility conditions** to `blockVisibility`, **Application: Security conditions** to `blockSecurity`, and **Application: Read only conditions** to `blockReadOnly`. Custom editing controls and write endpoints must enforce Read Only when processing changes.
 
 All three lists offer sign-in, anonymous, Member Group, backoffice User Group, and item comparisons. A Member Group condition passes for any of its selected groups. A backoffice User Group condition takes the group's alias and uses the site's website identity setting described below.
