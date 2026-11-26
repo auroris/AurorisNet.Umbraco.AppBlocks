@@ -5,6 +5,7 @@
 @using AppBlocks.Forms
 @using AppBlocks.DataSources
 @model AppBlockView
+@inject BlockConditions Conditions
 @inject FormResourceRegistry Resources
 @inject AppPageAssets Assets
 @inject PublishedDataCatalog Definitions
@@ -44,17 +45,20 @@ else if (Plugins.FirstOrDefault(plugin => plugin.Alias == alias) is { } plugin)
 else if (alias == "appForm")
 {
     var definition = await FormDefinition.ResolveAsync(Model.Page, item.ContentKey, Resources, Definitions, apiQuery.Length > 0 ? culture : null, Plugins);
+    Task<FormResult?>? initial = null;
+    Task<FormResult?> Load() => initial ??= FormAccess.LoadForPageAsync(definition!, Context.User, Context);
     if (definition is null)
     {
         <p role="alert">@Text["formInvalid", "This form has an invalid resource or field configuration."]</p>
     }
-    else if (Model.Anonymous && await FormAccess.RefusesAnonymousAsync(definition, Model.Page.Key, Context))
+    else if (Model.Anonymous && (await Load())?.Status is 401 or 403)
     {
         @* The class said no before the runtime asked, so there is no form to show and nothing to flash. *@
         <p id="@FormDefinition.Anchor(item.ContentKey)" class="app-block-signin" role="status">@Text["signInToUseForm", "Sign in to use this form."]</p>
     }
     else
     {
+        definition = await Conditions.ForFormAsync(definition, Context.User, async () => (await Load())?.Record, rendering: true, Context.RequestAborted);
         var panel = block.Value<bool>("sidePanel");
         var anchor = FormDefinition.Anchor(item.ContentKey);
         async Task RenderForm()
@@ -62,7 +66,7 @@ else if (alias == "appForm")
             var destination = definition.ReturnUrl(Context.Request.PathBase);
             var api = Context.Request.PathBase + AppBlocks.AppBlocksRoutes.Under(Configuration, $"forms/{Model.Page.Key}/{item.ContentKey}") + apiQuery;
             <form id="@(panel ? null : anchor)" class="app-form" data-label-position="@(string.Equals(block.Value<string>("labelPosition")?.Trim(), "left", StringComparison.OrdinalIgnoreCase) ? "left" : "top")" data-app-form data-api="@api"
-                data-field-rules="@(definition.Rules.Count == 0 ? null : System.Text.Json.JsonSerializer.Serialize(definition.Rules, System.Text.Json.JsonSerializerOptions.Web))"
+                data-field-rules="@(!definition.ClientRules.Any() ? null : System.Text.Json.JsonSerializer.Serialize(definition.ClientRules, System.Text.Json.JsonSerializerOptions.Web))"
                 data-key-parameter="@definition.KeyParameter" data-return="@destination" data-anonymous="@(Model.Anonymous ? "true" : null)" novalidate>
                 @if (!panel && !string.IsNullOrWhiteSpace(heading)) { <h2>@heading</h2> }
                 <div class="app-form-message" role="status" aria-live="polite"></div>

@@ -97,6 +97,7 @@ public static class AppBlocksExtensions
         services.AddScoped<AppPageAssets>();
         services.AddTransient<Microsoft.AspNetCore.Razor.TagHelpers.ITagHelperComponent, AppPageAssetsTagHelperComponent>();
         services.AddScoped<AppBindVariableResolver>();
+        services.AddScoped<BlockConditions>();
         builder.AddNotificationAsyncHandler<RoutingRequestNotification, AppBlocks.Publishing.PageCacheHeaders>();
         // A layout's ApplyCacheHeaders answers 304 after Razor has buffered output, which this filter discards; once, whoever else adds it.
         services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options => { if (!options.Filters.OfType<Publishing.PageCacheResponseFilter>().Any()) options.Filters.Add(new Publishing.PageCacheResponseFilter()); });

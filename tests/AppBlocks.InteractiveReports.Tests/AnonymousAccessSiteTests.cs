@@ -34,6 +34,34 @@ public sealed class AnonymousAccessSiteTests
     }
 
     [Fact]
+    public async Task Visibility_and_security_default_to_visible_and_rendered_until_configured()
+    {
+        await using var site = await PublicSite.StartAsync(noStorePages: "Off");
+        using var visitor = site.Anonymous();
+        const string markup = "<p>Conditional markup</p>";
+        foreach (var component in new[] { "Native", "WebsiteBlocks" })
+        {
+            async Task<string> Render(string page)
+            {
+                using var response = await visitor.GetAsync($"/{page}/?component={component}");
+                response.EnsureSuccessStatusCode();
+                Assert.False(response.Headers.Contains("Set-Cookie"));
+                return (await response.Content.ReadAsStringAsync()).Trim();
+            }
+            var unconfigured = await Render("markup");
+            Assert.Contains("<p>First</p><p>Second</p>", unconfigured);
+            Assert.DoesNotContain("display: none;", unconfigured);
+            var visible = await Render("visible");
+            Assert.Contains(markup, visible);
+            Assert.DoesNotContain("display: none;", visible);
+            Assert.Contains("<div style=\"display: none;\">" + markup + "</div>", await Render("hidden"));
+            var omitted = await Render("omitted");
+            Assert.DoesNotContain(markup, omitted);
+            if (component == "Native") Assert.Empty(omitted);
+        }
+    }
+
+    [Fact]
     public async Task An_unprotected_page_is_open_to_anonymous_visitors_and_each_blocks_class_or_engine_decides()
     {
         await using var site = await PublicSite.StartAsync();
@@ -75,6 +103,83 @@ public sealed class AnonymousAccessSiteTests
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         }
         finally { site.Switch.PublicEngine = site.Switch.AnonymousEngineWrites = site.Switch.DataPolicyRefuses = false; }
+    }
+
+    [Fact]
+    public async Task Staff_fields_follow_current_membership_and_the_stored_record_on_render_load_and_save()
+    {
+        await using var site = await PublicSite.StartAsync(outputCache: true, noStorePages: "Off");
+        site.Switch.PublicEngine = site.Switch.AnonymousEngineWrites = true;
+        var member = await CreateMemberAsync(site, "reviewer");
+        using var staff = await site.SignedIn("member", member.Id.ToString(), member.Username);
+        using var visitor = site.Anonymous();
+        using var editor = await site.SignedIn("backoffice", (await CreateUserAsync(site, "editorial")).ToString(), "editorial");
+        const string editorial = "/editorial/?component=Native";
+        using (var response = await editor.GetAsync(editorial))
+        {
+            Assert.True(response.Headers.CacheControl?.NoStore);
+            Assert.Equal("<p>Editorial instructions</p>", (await response.Content.ReadAsStringAsync()).Trim());
+        }
+        Assert.Empty((await visitor.GetStringAsync(editorial)).Trim());
+        Assert.Empty((await staff.GetStringAsync(editorial)).Trim());
+
+        var api = PublicSite.FormUrl(PublicSite.ReviewPage, PublicSite.ReviewForm);
+        foreach (var client in new[] { visitor, staff })
+        {
+            Assert.DoesNotContain("Staff notes", await client.GetStringAsync("/review/?id=1"));
+            Assert.False((await Load(client, api + "?id=1")).GetProperty("record").GetProperty("values").TryGetProperty("owner", out _));
+            Assert.DoesNotContain("data-app-form", await client.GetStringAsync("/staff-only/"));
+            using var denied = await client.GetAsync(PublicSite.FormUrl(PublicSite.PrivatePage, PublicSite.ReviewForm));
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        }
+        await site.WithServices(services => {
+            services.GetRequiredService<IMemberService>().AssignRole(member.Id, PublicSite.ReviewersGroup);
+            return Task.CompletedTask;
+        });
+        foreach (var component in new[] { "Native", "AppBlocks", "WebsiteBlocks" })
+        {
+            Assert.Contains("Staff notes", await staff.GetStringAsync("/review/?id=1&component=" + component));
+            Assert.DoesNotContain("Staff notes", await visitor.GetStringAsync("/review/?id=1&component=" + component));
+        }
+        var fresh = await visitor.GetStringAsync("/review/");
+        Assert.Contains("display: none;", fresh);
+        Assert.Contains("Submission title", fresh);
+        Assert.DoesNotContain("display: none;", await visitor.GetStringAsync("/review/?id=1"));
+
+        async Task<HttpResponseMessage> Update(HttpClient client, object values)
+        {
+            var load = await Load(client, api + "?id=1");
+            return await Send(client, HttpMethod.Put, api + "/1", load.GetProperty("antiforgeryToken").GetString(), new {
+                definitionVersion = load.GetProperty("definitionVersion"), checksum = load.GetProperty("record").GetProperty("checksum"),
+                values, submissionKey = Guid.NewGuid(),
+            });
+        }
+        using (var sent = await Update(visitor, new { title = "Edited", owner = "Private" }))
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, sent.StatusCode);
+        using (var sent = await Update(visitor, new { title = "Edited" }))
+        {
+            sent.EnsureSuccessStatusCode();
+            Assert.DoesNotContain("\"owner\"", await sent.Content.ReadAsStringAsync());
+        }
+        var privateValues = (await Load(staff, api + "?id=1")).GetProperty("record").GetProperty("values");
+        Assert.Equal("someone", privateValues.GetProperty("owner").GetString());
+        using (var sent = await Update(staff, new { owner = "Reviewed" }))
+        {
+            sent.EnsureSuccessStatusCode();
+            Assert.Contains("Reviewed", await sent.Content.ReadAsStringAsync());
+        }
+        using (var sent = await Update(staff, new { title = "Closed" }))
+        {
+            sent.EnsureSuccessStatusCode();
+            Assert.DoesNotContain("Reviewed", await sent.Content.ReadAsStringAsync());
+        }
+        using (var sent = await Update(staff, new { title = "Reopened", owner = "Changed" }))
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, sent.StatusCode);
+
+        var initial = await Load(visitor, api);
+        using var created = await Post(visitor, api, initial.GetProperty("antiforgeryToken").GetString(), initial, new { title = "New submission" }, []);
+        created.EnsureSuccessStatusCode();
+        Assert.DoesNotContain("\"owner\"", await created.Content.ReadAsStringAsync());
     }
 
     [Theory]

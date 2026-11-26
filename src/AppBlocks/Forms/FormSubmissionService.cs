@@ -13,7 +13,7 @@ internal sealed record FormSubmissionResult(int Status, object? Body = null);
 
 /// <summary>Validates and saves an admitted form submission, including its detail rows. HTTP admission and antiforgery belong to the caller.</summary>
 internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesService lists, FormResourceRegistry resources,
-    IOptions<TabularOptions> limits, ILoggerFactory logs, IEnumerable<IFormSubmissionProcessor>? processors = null)
+    IOptions<TabularOptions> limits, ILoggerFactory logs, BlockConditions conditions, IEnumerable<IFormSubmissionProcessor>? processors = null)
 {
     private readonly ILogger logger = logs.CreateLogger("ApplicationForms");
     private readonly ILogger tabularLogger = logs.CreateLogger("ApplicationTabular");
@@ -24,16 +24,26 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
     {
         var member = context.Member;
         var pageKey = context.PageKey;
+        Task<FormResult>? baseline = null;
+        async Task<FormRecord?> ReadBaseline() => (await (baseline ??= form.LoadAsync(key, context with { FormData = FormRequestValues.NoFormData }, ct))).Record;
+        form = await conditions.ForFormAsync(form, member, ReadBaseline, false, ct);
+        if (baseline is not null && await baseline is { Record: null } unavailable) return Result(unavailable);
+        if (form.ExcludedFields.Count > 0 && context.FormData.Count > 0)
+        {
+            var controls = new Dictionary<string, string>(context.FormData, StringComparer.OrdinalIgnoreCase);
+            foreach (var field in form.ExcludedFields) controls.Remove(field);
+            context = context with { FormData = controls };
+        }
         if (operation == FormOperation.Delete) {
             // Nothing to check on a delete, which only ever acts on a record the class allows; its token still stops here.
             context = context with { FormData = antiSpam.WithoutChecks(form, context.FormData) };
-            var current = await form.LoadAsync(key!, context, ct);
+            var current = await (baseline ?? form.LoadAsync(key!, context, ct));
             if (current.Record is null) return Result(current);
             if (current.Record.Checksum is { } expected && expected != submission.Checksum) return Result(FormResult.Conflict());
             var deletion = await form.Resource.DeleteAsync(key!, submission.Checksum, context, ct);
             Audit(operation, form.Resource.Alias, key, member, deletion.Status);
             // The runtime reads only an empty answer as "the record is gone", so a class that reports success with no record means just that.
-            return deletion is { Status: >= 200 and < 300, Record: null } ? new(204) : Result(deletion);
+            return deletion is { Status: >= 200 and < 300, Record: null } ? new(204) : Result(await ProjectAsync(form, deletion, member, ct));
         }
         var errors = form.Validate(submission.Values, key is null);
         if (errors.Count > 0) return Result(new(422, Errors: errors));
@@ -45,7 +55,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
             if (unresolved is not null) return unresolved;
             details = resolved;
         }
-        // After the fields, so a typo does not spend a token that works once, and before anything can reach the class, the load of an update included.
+        // Validate the fields before spending a one-use token. An item-based security condition may already have read the record.
         var check = await antiSpam.CheckAsync(form, context.FormData, ct);
         if (check.Refusal is { } refusal) {
             Audit(operation, form.Resource.Alias, key, member, refusal.Status);
@@ -55,7 +65,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
         var values = submission.Values;
         FormRecord? stored = null;
         if (key is not null) {
-            var current = await form.LoadAsync(key, context, ct);
+            var current = await (baseline ?? form.LoadAsync(key, context, ct));
             if (current.Record is null) return Result(current);
             stored = current.Record;
             if (stored.Checksum is { } expected && expected != submission.Checksum) return Result(FormResult.Conflict());
@@ -83,25 +93,37 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
         if (context.ParentScope is { } verified && (!values.TryGetProperty(verified.Field, out var parent) || parent.ToString() != verified.Value))
             return Result(FormResult.Invalid(verified.Field, "The parent record cannot be changed through this form."));
         if (form.Rules.Count > 0) {
-            var baseline = stored;
-            if (baseline is null) {
-                var initial = await form.LoadAsync(null, context, ct);
+            var ruleRecord = stored;
+            if (ruleRecord is null) {
+                var initial = await (baseline ?? form.LoadAsync(null, context, ct));
                 if (initial.Record is null) return Result(initial);
-                baseline = initial.Record;
+                ruleRecord = initial.Record;
             }
-            var effective = new Dictionary<string, object?>(baseline.Values);
+            var effective = new Dictionary<string, object?>(ruleRecord.Values);
             foreach (var property in values.EnumerateObject()) effective[property.Name] = property.Value;
             var required = form.Fields.Where(b => b.Content.Value<bool>("required")).Select(b => b.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
-            var ruleErrors = FieldRule.Validate(form.Rules, JsonSerializer.SerializeToElement(effective), submission.Values, baseline, required);
+            var ruleErrors = FieldRule.Validate(form.Rules, JsonSerializer.SerializeToElement(effective), submission.Values, ruleRecord, required);
             if (ruleErrors.Count > 0) return Result(new(422, Errors: ruleErrors));
         }
         var choiceErrors = await lists.ValidateAsync(form, values, context, ct, stored?.Values);
         if (choiceErrors.Count > 0) return Result(new(422, Errors: choiceErrors));
+        // SQL merges partial updates with the row under its write lock. Leave excluded columns out so a concurrent
+        // staff edit survives even on a source configured for last-write-wins.
+        if (key is not null && form.Resource is SqlDataSource && form.ExcludedFields.Count > 0)
+            values = JsonSerializer.SerializeToElement(values.EnumerateObject().Where(p => !form.ExcludedFields.Contains(p.Name))
+                .ToDictionary(p => p.Name, p => p.Value));
         if (details is not null) return await SaveWithDetailsAsync(form, key, values, submission.Checksum, details, context, operation, member, antiforgeryToken, ct);
         var result = key is null ? await form.Resource.CreateAsync(values, context, ct)
             : await form.Resource.UpdateAsync(key, values, submission.Checksum, context, ct);
         Audit(operation, form.Resource.Alias, key ?? result.Record?.Key, member, result.Status);
-        return Result(result.Record is null ? result : result with { Record = form.Project(result.Record) });
+        return Result(await ProjectAsync(form, result, member, ct));
+    }
+
+    private async Task<FormResult> ProjectAsync(FormDefinition form, FormResult result, ClaimsPrincipal member, CancellationToken ct)
+    {
+        if (result.Record is null) return result;
+        var after = await conditions.ForFormAsync(form, member, () => Task.FromResult<FormRecord?>(result.Record), false, ct);
+        return result with { Record = after.Project(result.Record) };
     }
 
     /// <summary>One tabular block of a submission, resolved: the block, its data source, its changes as the engine takes them and its own context.</summary>
@@ -125,7 +147,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
     private async Task<(IReadOnlyList<FormDetail>? Details, FormSubmissionResult? Refusal)> DetailsAsync(FormDefinition form, IReadOnlyList<FormDetailSubmission> sent,
         ClaimsPrincipal member, Guid pageKey, FormExecutionContext context, CancellationToken ct)
     {
-        var blocks = AppBlockContent.Flatten(form.Block.Areas.SelectMany(a => a)).Where(b => b.Content.ContentType.Alias == AppBlockSchema.TabularAlias).ToArray();
+        var blocks = AppBlockContent.Flatten(form.Block.Areas.SelectMany(a => a)).Where(b => form.Includes(b) && b.Content.ContentType.Alias == AppBlockSchema.TabularAlias).ToArray();
         var details = new List<FormDetail>(sent.Count);
         foreach (var detail in sent)
         {
@@ -170,10 +192,13 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
                 TabularOperations.Audit(tabularLogger, "save", failed.Source.Alias, form.Resource.Alias, key, member, refusal.Status);
                 return DetailRefusal(failed.Key, refusal.Status, refusal.Index, refusal.Errors);
             }
-            if (result.Status != 200 || result.Record is null) return Result(result);
+            if (result.Record is null) return Result(result);
+            form = await conditions.ForFormAsync(form, member, () => Task.FromResult<FormRecord?>(result.Record), false, ct);
+            if (result.Status != 200) return Result(result with { Record = form.Project(result.Record) });
             for (var i = 0; i < details.Count; i++)
             {
                 TabularOperations.Audit(tabularLogger, "save", details[i].Source.Alias, form.Resource.Alias, result.Record.Key, member, 200);
+                if (form.DeniedBlocks.Contains(details[i].Key)) continue;
                 answers.Add(await DetailAnswerAsync(details[i], form, result.Record.Key, saved.Details![i], member, antiforgeryToken, ct));
             }
             return new(200, new { record = form.Project(result.Record), details = answers });
@@ -181,12 +206,15 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
 
         result = key is null ? await form.Resource.CreateAsync(values, context, ct) : await form.Resource.UpdateAsync(key, values, checksum, context, ct);
         Audit(operation, form.Resource.Alias, key ?? result.Record?.Key, member, result.Status);
-        if (result.Status != 200 || result.Record is null) return Result(result);
+        if (result.Record is null) return Result(result);
+        form = await conditions.ForFormAsync(form, member, () => Task.FromResult<FormRecord?>(result.Record), false, ct);
+        if (result.Status != 200) return Result(result with { Record = form.Project(result.Record) });
         var record = form.Project(result.Record);
         if (result.Record.Key is not { } owner)
             return DetailRefusal(details[0].Key, 422, null, new Dictionary<string, string[]> { [""] = ["This record keeps no key, so its rows cannot be saved with it."] }, record);
         foreach (var detail in details)
         {
+            if (form.DeniedBlocks.Contains(detail.Key)) return DetailRefusal(detail.Key, 403, null, null, record, answers);
             var rows = await detail.Source.SaveRowsAsync(new DataSourceScope(detail.Block.LinkField, owner), detail.Changes, detail.Context, detail.Block.MaxRows, ct);
             TabularOperations.Audit(tabularLogger, "save", detail.Source.Alias, form.Resource.Alias, owner, member, rows.Status);
             if (rows.Status != 200) return DetailRefusal(detail.Key, rows.Status, rows.Index, rows.Errors, record, answers);

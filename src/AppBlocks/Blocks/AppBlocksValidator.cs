@@ -135,6 +135,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                     Locate(start, errors.Count, locations, target);
                     return;
                 }
+                ValidateConditions(block, null, errors);
                 if (!visited.Add(key)) throw new InvalidOperationException("Blocks cannot be repeated or cyclic.");
                 if (Plugin(alias) is AccountPickerBlock) errors.Add("Place the account picker inside its form.");
                 else if (Plugin(alias) is { } plugin) plugin.Validate(BlockValueSets.Element(block), errors);
@@ -161,6 +162,38 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
     {
         if (contents is null || PaperReportLinks.PickedKey(picked) is not { } key || contents.GetById(key) is not { } node) return;
         if (node.ContentType.Alias != PaperReportLinks.ContentTypeAlias) errors.Add($"Select a Paper report node for Paper report; {node.Name} is not one.");
+    }
+
+    private static void ValidateConditions(BlockItemData block, IFormResource? enclosingForm, List<string> errors)
+    {
+        foreach (var property in new[] { BlockConditions.Visibility, BlockConditions.Security })
+        {
+            var raw = Text(block, property);
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var label = property == BlockConditions.Security ? "Security" : "Visibility";
+            var list = BlockValueSets.Parse(raw);
+            var entries = list.ContentData.ToDictionary(e => e.Key);
+            foreach (var entry in BlockValueSets.Layout(list))
+            {
+                var condition = entries[entry.ContentKey];
+                var comparison = Text(condition, "comparison");
+                var item = Text(condition, "item").Trim();
+                if (condition.ContentTypeKey != AppBlockSchema.Key(BlockConditions.ConditionAlias(property))) errors.Add($"Choose a {label} condition.");
+                else if (FieldCondition.IsComparison(comparison))
+                {
+                    if (item.Length == 0) errors.Add($"Enter an item for the {label} comparison.");
+                    else if (enclosingForm is not null && !enclosingForm.Fields.Any(f => f.Key == item))
+                        errors.Add($"The {label} item '{item}' is not a field of {enclosingForm.Alias}.");
+                }
+                else if (comparison == "Member is in group" && string.IsNullOrWhiteSpace(Text(condition, "memberGroups")))
+                    errors.Add($"Pick a Member Group for {label}.");
+                else if (comparison == "Backoffice user is in group" && string.IsNullOrWhiteSpace(Text(condition, "literal")))
+                    errors.Add($"Enter a User Group alias for {label}.");
+                else if (BlockConditions.ConstantResult(property, comparison) is null
+                    && comparison is not ("User is anonymous" or "User is signed in" or "Member is in group" or "Backoffice user is in group"))
+                    errors.Add($"Choose a condition type for {label}.");
+            }
+        }
     }
 
     private static void Locate(int start, int end, Dictionary<int, List<BlockLocation>>? locations, BlockLocation target)
@@ -208,6 +241,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             var child = data[key]; var alias = Alias(child);
             var target = depth == 0 ? formLocation : Location(child, alias, parent, position);
             var start = errors.Count;
+            ValidateConditions(child, depth > 0 ? resource : null, errors);
             if (depth > 0 && (alias == "appForm" || Plugin(alias)?.CanNestInForm == false)) errors.Add("Forms and reports cannot be nested inside a form.");
             if (alias == "appActions") actionBlocks.Add(target);
             if (alias == AppBlockSchema.AntiSpamAlias) { checkBlocks.Add(target); AntiSpam(child, errors, warnings); }

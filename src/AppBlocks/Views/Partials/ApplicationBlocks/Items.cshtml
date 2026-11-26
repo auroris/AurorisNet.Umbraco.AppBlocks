@@ -1,5 +1,6 @@
 @using AppBlocks.Blocks
 @model AppBlockItems
+@inject BlockConditions Conditions
 @*
     One grid of blocks: the page, or one area of a block. The Umbraco classes and custom properties
     are the ones umbraco-blockgridlayout.css computes columns from; ah-grid and ah-grid__item are the
@@ -16,16 +17,20 @@
     @foreach (var item in Model.Items)
     {
         var view = new AppBlockView(Model.Page, item, Model.Form, Model.MemberId, Model.HeadingLevel, Model.Variables);
+        var caller = view.Admitted ? Context.User : null;
+        if (!(Model.Form?.Includes(item) ?? await Conditions.MatchesAsync(item, BlockConditions.Security, Model.Page, caller, ct: Context.RequestAborted))) { continue; }
+        var visible = Model.Form?.IsVisible(item) ?? await Conditions.MatchesAsync(item, BlockConditions.Visibility, Model.Page, caller, ct: Context.RequestAborted);
         if (!AppBlockLayout.OccupiesCell(item))
         {
-            @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view)
+            if (visible) { @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view) }
+            else { <div style="display: none;">@await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view)</div> }
             continue;
         }
         var span = AppBlockLayout.ItemSpan(item, Model.Columns);
         var width = AppBlockField.Width(item.Content) is { } chosen ? " ah-grid__item--width-" + chosen : "";
-        <div class="ah-grid__item@(width) umb-block-grid__layout-item" data-content-element-type-alias="@item.Content.ContentType.Alias"
+        <div class="ah-grid__item@(width)@(visible ? null : " app-block-invisible") umb-block-grid__layout-item" data-content-element-type-alias="@item.Content.ContentType.Alias"
             data-col-span="@span" data-row-span="@item.RowSpan"
-            style="--umb-block-grid--item-column-span: @span; --umb-block-grid--item-row-span: @item.RowSpan;">
+            style="--umb-block-grid--item-column-span: @span; --umb-block-grid--item-row-span: @item.RowSpan;@(visible ? null : " display: none;")">
             @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view)
         </div>
     }

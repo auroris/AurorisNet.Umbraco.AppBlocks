@@ -57,6 +57,7 @@ namespace AppBlocks.InteractiveReports.Tests;
 internal sealed class PublicSite : IAsyncDisposable
 {
     public static readonly Guid ContactPage = Key("contact"), ContactForm = Key("contact-form");
+    public static readonly Guid ReviewPage = Key("review"), ReviewForm = Key("review-form"), PrivatePage = Key("staff-only");
     public static readonly Guid RefusingPage = Key("refusing"), RefusingForm = Key("refusing-form");
     public static readonly Guid EnginePage = Key("engine"), EngineForm = Key("engine-form");
     public static readonly Guid ReportPage = Key("reports"), PublicReport = Key("public-report"), PersonalReport = Key("personal-report");
@@ -279,6 +280,22 @@ internal sealed class PublicSite : IAsyncDisposable
         var markup = Set("Umbraco.BlockList");
         Add(markup, "Umbraco.BlockList", Key("html-block"), AppBlockSchema.Key(AppBlockSchema.HtmlAlias), ("html", "<p>First</p><p>Second</p>"));
         Page("Markup", Key("markup"), home.Id, markup);
+        foreach (var (name, visibility, security) in new[] {
+            ("Visible", "Always visible", "Always rendered"), ("Hidden", "Never visible", "Always rendered"), ("Omitted", "Always visible", "Never rendered"),
+        })
+        {
+            JsonObject Condition(string alias, string choice)
+            {
+                var list = Set("Umbraco.BlockList");
+                Add(list, "Umbraco.BlockList", Key(name + alias), AppBlockSchema.Key(alias), ("comparison", choice));
+                return list;
+            }
+            var blocks = Set("Umbraco.BlockList");
+            Add(blocks, "Umbraco.BlockList", Key(name + "-block"), AppBlockSchema.Key(AppBlockSchema.HtmlAlias),
+                ("html", "<p>Conditional markup</p>"), (BlockConditions.Visibility, Condition("appVisibilityCondition", visibility)),
+                (BlockConditions.Security, Condition("appSecurityCondition", security)));
+            Page(name, Key(name + "-page"), home.Id, blocks);
+        }
         Page("Contact", ContactPage, home.Id, Container(FormBlock(ContactForm, "public.contact", Field("name", "Your name", ("defaultValue", ":USER_NAME")), Field("message", "Message", ("defaultValue", ":PARAM.topic")))));
         Page("Refusing", RefusingPage, home.Id, Container(FormBlock(RefusingForm, "public.refuses", Field("name", "Your name"))));
         Page("Engine", EnginePage, home.Id, Container(FormBlock(EngineForm, "public.engine", Field("title", "Title"))));
@@ -307,6 +324,29 @@ internal sealed class PublicSite : IAsyncDisposable
         Assert.True((await memberGroups.CreateAsync(new MemberGroup { Name = WritersGroup })).Success);
         var reviewers = await memberGroups.CreateAsync(new MemberGroup { Name = ReviewersGroup });
         Assert.True(reviewers.Success);
+        var staffOnly = Set("Umbraco.BlockList");
+        Add(staffOnly, "Umbraco.BlockList", Key("staff-rule"), AppBlockSchema.Key("appSecurityCondition"),
+            ("comparison", "Member is in group"), ("memberGroups", reviewers.Result!.Key.ToString()));
+        var openForReview = (JsonObject)staffOnly.DeepClone();
+        Add(openForReview, "Umbraco.BlockList", Key("open-rule"), AppBlockSchema.Key("appSecurityCondition"),
+            ("item", "title"), ("comparison", "Is not"), ("literal", "Closed"));
+        var existing = Set("Umbraco.BlockList");
+        Add(existing, "Umbraco.BlockList", Key("existing-rule"), AppBlockSchema.Key("appVisibilityCondition"),
+            ("item", "id"), ("comparison", "Is greater than"), ("literal", "0"));
+        var review = Container(FormBlock(ReviewForm, "public.engine",
+            Field("title", "Submission title", (BlockConditions.Visibility, existing)),
+            Field("owner", "Staff notes", (BlockConditions.Security, openForReview))));
+        Page("Review", ReviewPage, home.Id, review);
+        var privateForm = (JsonObject)review.DeepClone();
+        privateForm["contentData"]![0]!["values"]!.AsArray().Add(new JsonObject { ["alias"] = BlockConditions.Security, ["value"] = staffOnly });
+        Page("Staff only", PrivatePage, home.Id, privateForm);
+        var editorsOnly = Set("Umbraco.BlockList");
+        Add(editorsOnly, "Umbraco.BlockList", Key("editor-rule"), AppBlockSchema.Key("appSecurityCondition"),
+            ("comparison", "Backoffice user is in group"), ("literal", ReviewingUserGroup));
+        var office = Set("Umbraco.BlockList");
+        Add(office, "Umbraco.BlockList", Key("office-note"), AppBlockSchema.Key(AppBlockSchema.HtmlAlias),
+            ("html", "<p>Editorial instructions</p>"), (BlockConditions.Security, editorsOnly));
+        Page("Editorial", Key("editorial"), home.Id, office);
         Page("Writers", WritersPage, home.Id, Container(FormBlock(WritersForm, "public.writers", Field("title", "Entry title"))));
         Page("Links", LinksPage, home.Id, LinkedReports(reviewers.Result!.Key, [
             .. from link in new[] { "create", "open" } from choice in LinkChoices

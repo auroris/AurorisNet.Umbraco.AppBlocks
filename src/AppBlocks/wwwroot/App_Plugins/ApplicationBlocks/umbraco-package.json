@@ -2,6 +2,13 @@
   "name": "Application blocks",
   "extensions": [
     {
+      "type": "propertyValuePreset",
+      "alias": "AppBlocks.PropertyValuePreset.BlockCondition",
+      "name": "Visibility and Security condition defaults",
+      "forPropertyEditorSchemaAlias": "Umbraco.RadioButtonList",
+      "api": "/App_Plugins/ApplicationBlocks/condition-preset.js"
+    },
+    {
       "type": "propertyEditorUi",
       "alias": "AppBlocks.RuleFieldPicker",
       "name": "RuleFieldPicker",

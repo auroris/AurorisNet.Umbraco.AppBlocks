@@ -45,7 +45,9 @@ public sealed class NativeBlocksTests
             var type = TestStubs.Stub<IPublishedContentType>((method, _) => method.Name switch {
                 "get_Alias" => alias, "get_PropertyTypes" => Array.Empty<IPublishedPropertyType>(), _ => throw new NotImplementedException(method.Name),
             });
-            var element = TestStubs.Stub<IPublishedElement>((method, _) => method.Name == "get_ContentType" ? type : throw new NotImplementedException(method.Name));
+            var element = TestStubs.Stub<IPublishedElement>((method, _) => method.Name switch {
+                "get_ContentType" => type, "GetProperty" => null, _ => throw new NotImplementedException(method.Name),
+            });
             return new(Guid.NewGuid(), element, null, null) { Areas = children.Length == 0 ? [] : [new BlockGridArea(children, "content", 1, 12)] };
         }
         IAppBlockPlugin[] plugins = [new Plugin("publicList", variesByData: true), new Plugin("banner", variesByData: false)];

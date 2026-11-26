@@ -1,8 +1,17 @@
 @using AppBlocks.Blocks
 @model AppBlocksPage
-@if (Model.Blocks?.FirstOrDefault() is { Content.ContentType.Alias: AppBlockSchema.HtmlAlias } html)
+@inject BlockConditions Conditions
+@{
+    var native = Model.Blocks?.FirstOrDefault();
+    var visitor = Model.Variables is not null || Model.MemberId is not null ? Context.User : null;
+    if (native is null || !await Conditions.MatchesAsync(native, BlockConditions.Security, Model.Page, visitor, ct: Context.RequestAborted)) { return; }
+}
+@if (native.Content.ContentType.Alias == AppBlockSchema.HtmlAlias)
 {
-    @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", new AppBlockView(Model.Page, html, MemberId: Model.MemberId, Variables: Model.Variables))
+    var view = new AppBlockView(Model.Page, native, MemberId: Model.MemberId, Variables: Model.Variables);
+    if (await Conditions.MatchesAsync(native, BlockConditions.Visibility, Model.Page, visitor, ct: Context.RequestAborted))
+    { @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view) }
+    else { <div style="display: none;">@await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view)</div> }
     return;
 }
 @* Assets are self-contained: the host layout does not need AppBlocks tag helpers or imports. *@

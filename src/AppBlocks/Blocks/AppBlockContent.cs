@@ -35,6 +35,7 @@ public sealed class AppBlockContent(IUmbracoContextFactory contexts, IHttpContex
     public static bool IsInteractive(IEnumerable<BlockGridItem> blocks, IEnumerable<IAppBlockPlugin> plugins, string? culture = null)
         => Flatten(blocks, culture).Any(block =>
             block.Content.ContentType.Alias is "appForm" or AppBlockSchema.AttachmentsAlias or AppBlockSchema.ScheduleAlias or AppBlockSchema.TabularAlias
+            || BlockConditions.VariesByRequest(block)
             || plugins.Any(plugin => Varies(plugin) && plugin.Alias == block.Content.ContentType.Alias));
 
     /// <summary>Whether a plugin's block keeps its page out of caches: it requires the user, or its output varies by data.</summary>
@@ -47,6 +48,7 @@ public sealed class AppBlockContent(IUmbracoContextFactory contexts, IHttpContex
     {
         foreach (var property in element.ContentType.PropertyTypes)
         {
+            if (property.Alias is BlockConditions.Security or BlockConditions.Visibility) continue;
             if (property.EditorAlias == "Umbraco.BlockGrid" && element.Value<BlockGridModel>(property.Alias, culture: culture) is { } grid)
                 foreach (var item in grid) yield return item;
             else if (property.EditorAlias == "Umbraco.BlockList" && element.Value<BlockListModel>(property.Alias, culture: culture) is { } list)
@@ -56,13 +58,27 @@ public sealed class AppBlockContent(IUmbracoContextFactory contexts, IHttpContex
         }
     }
 
+    internal static IEnumerable<BlockGridItem> Children(BlockGridItem item, string? culture)
+        => item.Areas.SelectMany(area => area).Concat(NestedBlocks(item.Content, culture));
+
     public static IEnumerable<BlockGridItem> Flatten(IEnumerable<BlockGridItem> items, string? culture = null)
     {
         foreach (var item in items) {
             yield return item;
-            foreach (var child in Flatten(item.Areas.SelectMany(area => area).Concat(NestedBlocks(item.Content, culture)), culture)) yield return child;
+            foreach (var child in Flatten(Children(item, culture), culture)) yield return child;
         }
     }
+    internal static IReadOnlyList<BlockGridItem>? PathTo(IEnumerable<BlockGridItem> items, Guid key, string? culture)
+    {
+        foreach (var item in items)
+        {
+            if (item.ContentKey == key) return [item];
+            if (PathTo(Children(item, culture), key, culture) is { } path)
+                return [item, ..path];
+        }
+        return null;
+    }
+
     public static string BlockName(Guid page, Guid block) => $"page-{page:N}-{block:N}";
     public static bool ParseBlockName(string name, out Guid page, out Guid block)
     {
@@ -74,7 +90,17 @@ public sealed class AppBlockContent(IUmbracoContextFactory contexts, IHttpContex
     {
         if (!ParseBlockName(name, out var pageKey, out var blockKey) || await PageAsync(pageKey) is not { } page) return null;
         var culture = RequestCulture(http.HttpContext);
-        var block = Flatten(Blocks(page, culture), culture).FirstOrDefault(b => b.ContentKey == blockKey && b.Content.ContentType.Alias == alias);
-        return block is null ? null : (page, block, culture);
+        var path = PathTo(Blocks(page, culture), blockKey, culture);
+        if (path is null || path[^1].Content.ContentType.Alias != alias) return null;
+        if (path.Any(BlockConditions.HasSecurity))
+        {
+            if (http.HttpContext is not { } request) return null;
+            var services = request.RequestServices;
+            var caller = await services.GetRequiredService<AppPageAccess>().VisitorAsync(page);
+            if (caller is null) return null;
+            var conditions = services.GetRequiredService<BlockConditions>();
+            if (!await conditions.AllowsPathAsync(page, path, caller, culture, request.RequestAborted)) return null;
+        }
+        return (page, path[^1], culture);
     }
 }

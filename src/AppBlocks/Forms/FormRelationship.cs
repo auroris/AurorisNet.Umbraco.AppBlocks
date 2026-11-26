@@ -36,7 +36,8 @@ public sealed record FormRelationship(BlockGridItem? Parent, string LinkField, I
             || ParentParameter.Equals(detail.KeyParameter, StringComparison.OrdinalIgnoreCase))
             return (null, FormResult.Invalid("", "Check the parent form, its key parameter and the detail link field."));
         var caller = await services.GetRequiredService<AppPageAccess>().VisitorAsync(ParentPage);
-        if (caller is null) return (null, FormResult.Denied());
+        if (caller is null || !await services.GetRequiredService<BlockConditions>().AllowsPathAsync(ParentPage, Parent.ContentKey, caller, detail.Culture, ct))
+            return (null, FormResult.Denied());
         if (!visited.Add(Parent.ContentKey)) return (null, FormResult.Invalid("", "A form cannot be its own ancestor."));
         if (context.Parameters?.TryGetValue(ParentParameter, out var key) != true || string.IsNullOrWhiteSpace(key)) return (null, FormResult.Missing());
         var parent = await FormDefinition.ResolveAsync(ParentPage, Parent.ContentKey, services.GetRequiredService<FormResourceRegistry>(),

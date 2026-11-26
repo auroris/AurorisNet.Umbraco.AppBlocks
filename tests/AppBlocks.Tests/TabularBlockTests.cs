@@ -152,12 +152,13 @@ public sealed class TabularBlockTests
         var type = new AppBlocks.Setup.AppBlocksSchema(typeof(AppBlocks.AppBlocksExtensions).Assembly).Definitions("ContentTypes").Single(definition => definition.Attribute("Alias")!.Value == AppBlockSchema.TabularAlias);
         Assert.Equal(key, type.Attribute("Key")!.Value);
         Assert.Equal(AppBlockSchema.TabularAlias, type.Attribute("Alias")!.Value);
-        var aliases = type.Element("GenericProperties")!.Elements("GenericProperty").Select(p => p.Element("Alias")!.Value).ToArray();
+        var properties = type.Element("GenericProperties")!.Elements("GenericProperty").Where(p => (string?)p.Element("Tab")!.Attribute("Alias") != "blockConditions").ToArray();
+        var aliases = properties.Select(p => p.Element("Alias")!.Value).ToArray();
         Assert.Equal(new[] { TabularBlock.HeadingAlias, TabularBlock.HelpAlias, TabularBlock.DataSourceAlias, TabularBlock.LinkFieldAlias, TabularBlock.FieldsAlias,
             TabularBlock.OwnerResourceAlias, TabularBlock.OwnerKeyAlias, TabularBlock.HideAddAlias, TabularBlock.HideEditAlias, TabularBlock.HideDeleteAlias,
             TabularBlock.ReadOnlyAlias, TabularBlock.MaxRowsAlias, TabularBlock.EmptyMessageAlias, TabularBlock.AddLabelAlias, TabularBlock.SaveLabelAlias }, aliases);
         // The backoffice lists them in this order too.
-        Assert.Equal(Enumerable.Range(0, aliases.Length), type.Element("GenericProperties")!.Elements("GenericProperty").Select(p => (int)p.Element("SortOrder")!));
+        Assert.Equal(Enumerable.Range(0, aliases.Length), properties.Select(p => (int)p.Element("SortOrder")!));
     }
 
     [Fact]

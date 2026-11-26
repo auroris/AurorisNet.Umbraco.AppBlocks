@@ -141,6 +141,11 @@ export const appBlockTypes = [
     "name": "JavaScript"
   },
   {
+    "alias": "appSecurityCondition",
+    "key": "46f8f34c-d11c-8781-1b90-97244308f074",
+    "name": "Security condition"
+  },
+  {
     "alias": "appSelect",
     "key": "efd4bb91-7c06-4d1d-0dca-0fa25fe67ef4",
     "name": "Select"
@@ -174,5 +179,10 @@ export const appBlockTypes = [
     "alias": "appTime",
     "key": "528ca2a4-fab9-02eb-526c-ce80e09d9b59",
     "name": "Time"
+  },
+  {
+    "alias": "appVisibilityCondition",
+    "key": "74781936-b852-e65b-0b2f-d8c5e456026a",
+    "name": "Visibility condition"
   }
 ];

@@ -23,7 +23,7 @@ export function mountAccountPicker(box, {
     box.dataset.mounted = "true";
     const find = box.querySelector("[data-find]"), manual = box.querySelector("[data-manual]"), status = box.querySelector("[data-status]");
     const normalize = (key, value) => (settings.compactUpperFields || []).includes(key) ? (value || "").replace(/\s/g, "").toUpperCase() : value || "";
-    if (name === boundName) {
+    if (name === boundName && !box.closest(".app-block-invisible")) {
         const slot = blockAlias && box.closest('[data-content-element-type-alias="' + CSS.escape(blockAlias) + '"]');
         const row = document.createElement("div"); row.className = "app-person-control";
         name.before(row); row.append(name, box);

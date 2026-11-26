@@ -37,8 +37,11 @@ public static class FormEndpoints
         // Bind antiforgery tokens to the actual Umbraco Member or backoffice User, or to nobody.
         http.User = member;
         var services = http.RequestServices;
-        return (await FormDefinition.ResolveAsync(page, formKey, services.GetRequiredService<FormResourceRegistry>(), services.GetRequiredService<PublishedDataCatalog>(),
-            AppBlockContent.RequestCulture(http), services.GetServices<IAppBlockPlugin>()), member);
+        var culture = AppBlockContent.RequestCulture(http);
+        var form = await FormDefinition.ResolveAsync(page, formKey, services.GetRequiredService<FormResourceRegistry>(), services.GetRequiredService<PublishedDataCatalog>(),
+            culture, services.GetServices<IAppBlockPlugin>());
+        if (form is not null && !await services.GetRequiredService<BlockConditions>().AllowsPathAsync(page, formKey, member, culture, http.RequestAborted)) return (null, null);
+        return (form, member);
     }
 
     private static IResult Result(FormResult result) => result.Status == 204 ? Results.NoContent() : Results.Json(result, statusCode: result.Status);
@@ -59,6 +62,7 @@ public static class FormEndpoints
         }
         var result = await form.LoadAsync(query.Count == 0 ? null : query[0], context, ct);
         if (result.Record is null) return Result(result);
+        form = await http.RequestServices.GetRequiredService<BlockConditions>().ForFormAsync(form, member, () => Task.FromResult<FormRecord?>(result.Record), false, ct);
         var record = form.Project(result.Record);
         http.Response.Headers.CacheControl = "no-store";
         return Results.Json(new {

@@ -364,7 +364,7 @@ public sealed class AntiSpamTests
         Assert.Equal(AppBlockSchema.Key(AppBlockSchema.AntiSpamAlias).ToString(), definition.Attribute("Key")!.Value);
         Assert.Equal("bb529b16-87cc-a2f5-2806-165bb5edcd8c", definition.Attribute("Key")!.Value);
         var aliases = definition.Element("GenericProperties")!.Elements("GenericProperty").Select(property => property.Element("Alias")!.Value).ToArray();
-        Assert.Equal(new[] { "service", "siteKey", "scoreThreshold", "theme", "size" }, aliases);
+        Assert.Equal(new[] { "service", "siteKey", "scoreThreshold", "theme", "size", BlockConditions.Visibility, BlockConditions.Security }, aliases);
         // The schema offers no property a secret could be typed into.
         Assert.DoesNotContain(aliases, alias => alias.Contains("secret", StringComparison.OrdinalIgnoreCase));
         // Editors are told about the third-party scripts.

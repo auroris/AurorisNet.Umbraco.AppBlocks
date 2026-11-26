@@ -70,11 +70,22 @@ public sealed class BlockOwnerAccess(AppBlockContent content, AppPageAccess acce
         var formBlock = flat.FirstOrDefault(b => b.Content.ContentType.Alias == "appForm" && AppBlockContent.Flatten(b.Areas.SelectMany(a => a)).Any(c => c.ContentKey == blockKey));
         var form = formBlock is null ? null : await FormDefinition.ResolveAsync(page, formBlock.ContentKey, resources, catalog, culture, request.RequestServices.GetServices<IAppBlockPlugin>());
 
+        var conditions = request.RequestServices.GetRequiredService<BlockConditions>();
+        if (formBlock is not null && form is null || !await conditions.AllowsPathAsync(page, formBlock?.ContentKey ?? blockKey, user, culture, ct))
+            return BlockOwnerScope.Refused(403, $"You do not have access to {words.These}.");
         var formContext = new FormExecutionContext(user, pageKey, form?.Block.ContentKey ?? blockKey, form?.Revision ?? definition, Parameters: parameters);
         if (form?.Relationship is { } relation) {
             var resolved = await relation.ResolveAsync(form, formContext, request.RequestServices, ct);
             if (resolved.Refusal is { } refusal) return BlockOwnerScope.Refused(refusal.Status, "The parent record is unavailable.");
             formContext = formContext with { ParentScope = resolved.Scope };
+        }
+        if (form is not null)
+        {
+            var recordKey = newRecord ? null : savedOwnerKey ?? Single(request.Request.Query[form.KeyParameter]);
+            async Task<FormRecord?> Record() => FormResourceAccess.Refusal(form.Resource, user) is null
+                ? (await form.LoadAsync(recordKey, formContext, ct)).Record : null;
+            form = await conditions.ForFormAsync(form, user, Record, false, ct);
+            if (!form.Includes(item)) return BlockOwnerScope.Refused(403, $"You do not have access to {words.These}.");
         }
         IFormResource resource; string? key;
         if (string.IsNullOrWhiteSpace(ownerResource))

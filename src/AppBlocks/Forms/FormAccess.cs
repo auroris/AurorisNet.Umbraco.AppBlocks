@@ -1,3 +1,5 @@
+using System.Security.Claims;
+
 namespace AppBlocks.Forms;
 
 /// <summary>The form admission check used while rendering a page.</summary>
@@ -11,21 +13,28 @@ public static class FormAccess
     public static async Task<bool> RefusesAnonymousAsync(FormDefinition form, Guid pageKey, HttpContext http)
     {
         if (FormResourceAccess.Refusal(form.Resource, http.User) is not null) return true;
-        var query = http.Request.Query[form.KeyParameter];
-        if (query.Count > 1 || query.Count == 1 && string.IsNullOrWhiteSpace(query[0])) return false;
-        var context = new FormExecutionContext(http.User, pageKey, form.Block.ContentKey, form.Revision, Parameters: FormRequestValues.Parameters(http.Request.Query));
+        return (await LoadForPageAsync(form, http.User, http, pageKey: pageKey))?.Status is 401 or 403;
+    }
+
+    internal static async Task<FormResult?> LoadForPageAsync(FormDefinition form, ClaimsPrincipal visitor, HttpContext http, IQueryCollection? pageQuery = null, Guid? pageKey = null)
+    {
+        if (FormResourceAccess.Refusal(form.Resource, visitor) is { } refused) return new(refused);
+        pageQuery ??= http.Request.Query;
+        var query = pageQuery[form.KeyParameter];
+        if (query.Count > 1 || query.Count == 1 && string.IsNullOrWhiteSpace(query[0])) return null;
+        var context = new FormExecutionContext(visitor, pageKey ?? form.Page.Key, form.Block.ContentKey, form.Revision, Parameters: FormRequestValues.Parameters(pageQuery));
         try {
             if (form.Relationship is { } relation) {
                 var resolved = await relation.ResolveAsync(form, context, http.RequestServices, http.RequestAborted);
-                if (resolved.Refusal is { } refusal) return refusal.Status is 401 or 403;
+                if (resolved.Refusal is { } refusal) return refusal;
                 context = context with { ParentScope = resolved.Scope };
             }
-            return (await form.LoadAsync(query.Count == 0 ? null : query[0], context, http.RequestAborted)).Status == 403;
+            return await form.LoadAsync(query.Count == 0 ? null : query[0], context, http.RequestAborted);
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
-            http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("ApplicationForms").LogWarning(error, "Form resource {Resource} failed while the page rendered for an anonymous visitor.", form.Resource.Alias);
-            return false;
+            http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("ApplicationForms").LogWarning(error, "Form resource {Resource} failed while the page rendered for a visitor.", form.Resource.Alias);
+            return null;
         }
     }
 }

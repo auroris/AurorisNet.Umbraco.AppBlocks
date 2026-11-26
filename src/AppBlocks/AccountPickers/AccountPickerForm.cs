@@ -19,7 +19,7 @@ public sealed class AccountPickerForm(IEnumerable<AccountPickerBlock> blocks, ID
         var result = new List<AccountPickerDefinition>();
         foreach (var block in AppBlockContent.Flatten(form.Block.Areas.SelectMany(a => a), form.Culture))
         {
-            if (!types.TryGetValue(block.Content.ContentType.Alias, out var type)) continue;
+            if (!form.Includes(block) || !types.TryGetValue(block.Content.ContentType.Alias, out var type)) continue;
             var settings = type.ReadSettings(block.Content);
             settings.CheckBindings(owned,
                 field => form.Fields.Any(f => f.Content.Value<string>("field") == field && f.Content.ContentType.Alias == "appText" && !f.Content.Value<bool>("readOnly"))

@@ -196,9 +196,9 @@ Blocks also work for a signed-in Umbraco Member or backoffice User. Backoffice a
 
 | Value | Behavior |
 | --- | --- |
-| `AppBlocksPages` (default) | Sends `no-store` and prevents output-cache storage for a page with a block whose output depends on who asks: a form, attachments, a schedule, a tabular form, or a companion's block that requires a user or varies by data. The page's Public Access login and denied responses get the same headers. A page of content blocks alone is cached as Umbraco and the site decide. |
+| `AppBlocksPages` (default) | Sends `no-store` and prevents output-cache storage for a page with a block whose output depends on who asks: a block with Visibility or Security conditions, a form, attachments, a schedule, a tabular form, or a companion's block that requires a user or varies by data. The page's Public Access login and denied responses get the same headers. A page of content blocks alone is cached as Umbraco and the site decide. |
 | `AllPages` | Applies that behavior to every page Umbraco routes. |
-| `Off` | Adds no page cache restrictions. The site and Umbraco control caching. |
+| `Off` | The site and Umbraco control caching. Evaluating visitor or item-based block Security conditions still sets `no-store` and prevents output-cache storage. |
 
 ```json
 { "AppBlocks": { "NoStorePages": "AppBlocksPages" } }

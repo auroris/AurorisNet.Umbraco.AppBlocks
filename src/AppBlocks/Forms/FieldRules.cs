@@ -18,33 +18,41 @@ public sealed record FieldCondition(string Field, string Kind, string Comparison
     {
         var left = Text(values, Field);
         var right = OtherField.Length == 0 ? Literal : Text(values, OtherField);
-        if (Comparison == "Is empty") return string.IsNullOrWhiteSpace(left);
-        if (Comparison == "Has a value") return !string.IsNullOrWhiteSpace(left);
+        return Compare(Kind, Comparison, left, right);
+    }
+
+    internal static bool IsComparison(string? comparison) => comparison is "Is" or "Is not" or "Is empty" or "Has a value"
+        or "Is greater than" or "Is at least" or "Is less than" or "Is at most";
+
+    internal static bool Compare(string kind, string comparison, string left, string right)
+    {
+        if (comparison == "Is empty") return string.IsNullOrWhiteSpace(left);
+        if (comparison == "Has a value") return !string.IsNullOrWhiteSpace(left);
         int order;
         if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
         {
-            if (Comparison is not ("Is" or "Is not")) return false;
+            if (comparison is not ("Is" or "Is not")) return false;
             order = string.CompareOrdinal(left.Trim(), right.Trim());
         }
-        else if (Kind == "number")
+        else if (kind == "number")
         {
             if (!decimal.TryParse(left, NumberStyles.Float, CultureInfo.InvariantCulture, out var a)
                 || !decimal.TryParse(right, NumberStyles.Float, CultureInfo.InvariantCulture, out var b)) return false;
             order = a.CompareTo(b);
         }
-        else if (Kind == "datetime")
+        else if (kind == "datetime")
         {
             if (!DateTimeOffset.TryParse(left, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var a)
                 || !DateTimeOffset.TryParse(right, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var b)) return false;
             order = a.CompareTo(b);
         }
-        else if (Kind == "time")
+        else if (kind == "time")
         {
             if (!TimeOnly.TryParse(left, CultureInfo.InvariantCulture, out var a) || !TimeOnly.TryParse(right, CultureInfo.InvariantCulture, out var b)) return false;
             order = a.CompareTo(b);
         }
         else order = string.CompareOrdinal(left, right);
-        return Comparison switch {
+        return comparison switch {
             "Is" => order == 0, "Is not" => order != 0, "Is greater than" => order > 0, "Is at least" => order >= 0,
             "Is less than" => order < 0, "Is at most" => order <= 0, _ => false,
         };
@@ -104,7 +112,7 @@ public sealed record FieldRule(string Field, string Action, string Match, string
             foreach (var c in rule.Conditions)
             {
                 if (!fields.Contains(c.Field) || c.OtherField.Length > 0 && !fields.Contains(c.OtherField)) yield return "Choose comparison fields that appear on this form.";
-                if (c.Comparison is not ("Is" or "Is not" or "Is empty" or "Has a value" or "Is greater than" or "Is at least" or "Is less than" or "Is at most"))
+                if (!FieldCondition.IsComparison(c.Comparison))
                     yield return "Choose a field comparison.";
                 if (c.Literal.Length > 0 && c.OtherField.Length > 0) yield return "Choose either a comparison field or a fixed value.";
             }

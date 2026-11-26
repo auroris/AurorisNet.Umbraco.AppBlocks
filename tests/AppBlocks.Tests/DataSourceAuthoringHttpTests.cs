@@ -261,7 +261,7 @@ public sealed class DataSourceAuthoringHttpTests
         var preset = Assert.Single(manifests.RootElement.EnumerateArray().SelectMany(package => package.GetProperty("extensions").EnumerateArray()),
             extension => extension.GetProperty("type").GetString() == "propertyValuePreset"
                 && extension.TryGetProperty("forPropertyEditorSchemaAlias", out var schema) && schema.GetString() == dataType.EditorAlias
-                && extension.GetProperty("alias").GetString()!.StartsWith("AppBlocks.", StringComparison.Ordinal));
+                && extension.GetProperty("alias").GetString() == "AppBlocks.PropertyValuePreset.DataSourceAccess");
         var script = await client.GetStringAsync(preset.GetProperty("api").GetString());
         Assert.Contains($"\"{type.Key}\"", script);
         Assert.Contains("\"access\"", script);

@@ -17,6 +17,7 @@ The other layers are there for rules a page cannot express. Requests pass throug
 | Sign-in | Who the caller is: an Umbraco Member or a backoffice User | Umbraco, including its external login providers |
 | Public Access (the baseline) | Which Members may reach a page | The page's **Public Access** in the backoffice |
 | `IProtectedPageAdmission` | Who the site admits to a page Umbraco's Public Access refuses, asked only when Umbraco refuses | C#, registered with dependency injection, such as a rule that admits a page's editors |
+| Block Security | Which blocks and form fields this visitor may receive or submit | The block’s **Visibility and Security** group |
 | Read groups and Write groups | Which Member Groups may use a data source | The data source |
 | Row restriction | Which rows a caller can see and write | The data source's **Row restriction** |
 | Backing class (`IDataSourceHandler`) | What a data source writes and shows, rows it writes itself, refusals, and a form's rows saved with its record | C#, registered with dependency injection and picked on the data source's **Advanced** tab |
@@ -41,6 +42,23 @@ Two things apply to every layer.
 | Tabular form | Read-only rows when the child data source is Public and the owning record loads for them |
 | Schedule | Data when both sources are Public; otherwise a sign-in notice |
 | Paper report | Requires a signed-in account at its download endpoint |
+
+## Block Visibility and Security
+
+Every block starts **Always visible** and **Always rendered**. To change either setting, open the block’s **Visibility and Security** group and add a condition to the corresponding list. All conditions in a list must pass. Clearing the list restores its default.
+
+| Setting | Unconditional choices | When a condition fails |
+| --- | --- | --- |
+| **Visibility** | Always visible (default), Never visible | Razor renders the block with `display: none;`. Its fields still load, validate and submit. |
+| **Security** | Always rendered (default), Never rendered | Razor omits the block and its children. The form API omits their bound values and rejects submissions that include those fields. |
+
+For a public submission form with staff-only notes, put the notes and review controls in a **Fieldset**. On the fieldset, add a **Security** condition, choose **Member is in group**, and select **Staff** in the Umbraco Member Group picker. Staff can use the review fields under the form resource’s usual permissions. Other visitors can submit the public fields, and editing those fields preserves existing staff notes. For staff fields required only during review, use **Required on this form** and allow the resource to create a record before review.
+
+AppBlocks keeps responses that evaluate visitor or item-based Security conditions out of shared caches. Site-owned plugin blocks can use the same conditions by assigning the **Application: Visibility conditions** data type to `blockVisibility` and **Application: Security conditions** to `blockSecurity`.
+
+Both lists also offer sign-in, anonymous, Member Group, backoffice User Group, and item comparisons. A Member Group condition passes for any of its selected groups. A backoffice User Group condition takes the group's alias and uses the site's website identity setting described below.
+
+Use an item comparison for equality, inequality, ordering, an empty value or a populated value. Inside a form, **Item** is a resource field key. The comparison reads the initialized or stored record for this visitor. On a form block itself or elsewhere on a page, **Item** is a published page property alias. For example, **Is at least** with item `amount` and value `100` shows a review section for records whose numeric amount is 100 or more. Use ISO dates and invariant numbers for comparison values. The template evaluates conditions when it renders. For a field that responds immediately as someone types, use the form's **Field rules**.
 
 ## The authenticated caller
 

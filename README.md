@@ -13,6 +13,7 @@ AppBlocks adds forms, reports and database-backed blocks to the pages of an exis
 Editors add AppBlocks blocks to the Block Grid or Block List a site already has, beside its other content. The site keeps its page types, templates, layout and sign-in. The blocks read and write the application's own database tables:
 
 - **Forms** bound to a C# class you register, or to a SQL data source an editor publishes. Field blocks, file attachments and editable tables of related rows are included.
+- **Visibility and Security** conditions on individual blocks or whole fieldsets. A public form can include staff-only fields for members of a selected group. [Configure block conditions](docs/business-rules.md#block-visibility-and-security).
 - **Schedules** that draw the rows of one data source against time, with the rows of another as bars.
 - **Anti-spam** for public forms: Turnstile, reCAPTCHA, hCaptcha or a honeypot, checked on the server.
 - **API endpoints** that serve a data source's rows as JSON at a route an editor defines.

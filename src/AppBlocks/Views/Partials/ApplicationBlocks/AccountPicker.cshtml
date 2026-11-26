@@ -19,6 +19,8 @@
     }
     var endpoint = Context.Request.PathBase + AppBlocks.AppBlocksRoutes.Under(Configuration, $"account-picker/{Model.Page.Key}/{Model.Block.ContentKey}");
     if (Model.Form.Culture is { } culture) endpoint += "?appCulture=" + Uri.EscapeDataString(culture);
+    if (Context.Request.QueryString.HasValue)
+        endpoint = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(endpoint, "appPageQuery", Context.Request.QueryString.Value);
     var options = JsonSerializer.Serialize(new { settings.IdentityField, settings.NameField, settings.AllowManualEntry, settings.AllowsEmpty,
         settings.FieldMappings, settings.PrefillMappings, settings.FallbackFields, settings.CompactUpperFields }, JsonSerializerOptions.Web);
     Assets.AddStylesheet(Url.Content("~/App_Plugins/ApplicationBlocks/account-picker.css"));

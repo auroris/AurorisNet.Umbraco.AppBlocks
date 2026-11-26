@@ -89,6 +89,8 @@ internal sealed class SetupSite : IAsyncDisposable
             ["ConnectionStrings:AppBlocksDb"] = database.AccountConnection,
             ["ConnectionStrings:AppBlocksDb_ProviderName"] = "Microsoft.Data.SqlClient",
             ["AppBlocks:DataRoot"] = root,
+            // The editor exercises website form endpoints using the backoffice session.
+            ["AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers"] = "true",
             ["AppBlocks:ReportAdministratorGroups:0"] = "admin",
             ["Umbraco:CMS:Global:Id"] = Guid.NewGuid().ToString(), ["Umbraco:CMS:Global:UseHttps"] = "false",
             ["Umbraco:CMS:ModelsBuilder:ModelsMode"] = "Nothing",

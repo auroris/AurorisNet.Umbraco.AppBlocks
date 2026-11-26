@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 using Umbraco.Cms.Core.Models.Blocks;
@@ -18,6 +19,12 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
     public IReadOnlyList<BlockGridItem> AntiSpam { get; init; } = [];
     public string Revision => $"{Page.UpdateDate.Ticks}:{Culture}{ListsRevision}:{Resource.ContractVersion}";
     public IReadOnlyList<FieldRule> Rules { get; init; } = [];
+    internal IReadOnlySet<Guid> DeniedBlocks { get; init; } = FrozenSet<Guid>.Empty;
+    internal IReadOnlySet<Guid> InvisibleBlocks { get; init; } = FrozenSet<Guid>.Empty;
+    internal IReadOnlySet<string> ExcludedFields { get; init; } = FrozenSet<string>.Empty;
+    public IEnumerable<FieldRule> ClientRules => Rules.Where(rule => rule.Conditions.All(c => !ExcludedFields.Contains(c.Field) && !ExcludedFields.Contains(c.OtherField)));
+    public bool Includes(BlockGridItem item) => !DeniedBlocks.Contains(item.ContentKey);
+    public bool IsVisible(BlockGridItem item) => !InvisibleBlocks.Contains(item.ContentKey);
     public FormRelationship? Relationship { get; init; }
     public bool ViewOnly => Interface.Value<bool>("viewOnly");
     public string KeyParameter => ReadKeyParameter(Interface, Relationship is not null);
@@ -31,7 +38,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         !string.IsNullOrWhiteSpace(item.Content.Value<string>("listOfValues"))
         || item.Content.Value<string>(AppBlockField.DefaultValueAlias)?.TrimStart().StartsWith(':') == true)
         || AppBlockContent.Flatten(Block.Areas.SelectMany(area => area)).Any(item =>
-            item.Content.ContentType.Alias is AppBlockSchema.AttachmentsAlias or AppBlockSchema.ScheduleAlias);
+            item.Content.ContentType.Alias is AppBlockSchema.AttachmentsAlias or AppBlockSchema.ScheduleAlias || BlockConditions.VariesByRequest(item));
 
     /// <summary>Where Save and Cancel return to: the Form interface's return page, or the site's root under <paramref name="pathBase"/>.</summary>
     public string ReturnUrl(PathString pathBase) => Interface.Value<IPublishedContent>("returnPage")?.Url() ?? pathBase + "/";
@@ -127,7 +134,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
             else if (field.Choices is not null && (value.ValueKind != JsonValueKind.String || !field.Choices.Any(choice => choice.Value == value.GetString()))) errors[field.Key] = ["Select an available choice."];
         }
         if (creating) {
-            foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly))
+            foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly && !ExcludedFields.Contains(f.Key)))
                 if ((field.Required || bindings.TryGetValue(field.Key, out var block) && block.Content.Value<bool>("required") && !HasAccessRule(field.Key))
                     && field.Key != Relationship?.LinkField && !input.TryGetProperty(field.Key, out _)) errors[field.Key] = ["A value is required."];
         }
