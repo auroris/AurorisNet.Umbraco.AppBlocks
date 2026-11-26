@@ -8,7 +8,7 @@ using static Umbraco.Cms.Core.PropertyEditors.BlockGridConfiguration;
 namespace AppBlocks.Blocks;
 
 /// <summary>
-/// One block placed on a grid or in an area, as <see cref="AppBlockValues"/> made it. <see cref="Place"/> puts other blocks in one of
+/// One block placed on a grid, list or area, as <see cref="AppBlockValues"/> made it. <see cref="Place"/> puts other blocks in one of
 /// its areas, by the area's alias in the Forms container's grid, such as a form's <c>fields</c> and <c>actions</c>.
 /// </summary>
 public sealed class AppBlockItem
@@ -29,6 +29,7 @@ public sealed class AppBlockItem
     public Guid Key { get; }
     public string Alias { get; }
     public int ColumnSpan { get; }
+    public Guid? SettingsKey => settingsKey;
 
     /// <summary>Places <paramref name="items"/> at the end of the area <paramref name="area"/>; an area the block's grid entry lacks is refused.</summary>
     public AppBlockItem Place(string area, params AppBlockItem[] items)
@@ -48,13 +49,18 @@ public sealed class AppBlockItem
             ["items"] = new JsonArray(areas.GetValueOrDefault(area.Alias!)?.Select(item => (JsonNode)item.Layout()).ToArray() ?? []),
         }).ToArray()),
     };
+
+    internal JsonObject ListLayout() => new() {
+        ["contentKey"] = Key.ToString(),
+        ["settingsKey"] = settingsKey?.ToString(),
+    };
 }
 
 /// <summary>
-/// A Block Grid value built from aliases, for a plugin that installs pages from code: fields, a form with its Form Interface and
-/// actions, and any other block, with every element type and area key taken from the package's schema, so no caller writes a GUID.
+/// A Block Grid or Block List value built from aliases or element type keys, for a plugin that installs pages from code: fields, a form with its Form Interface and
+/// actions, and any other built-in or custom block, with every built-in element type and area key taken from the package's schema, so no caller writes a GUID for them.
 /// A block's own key derives from the <c>id</c> it is given, so installing the same page again writes the same keys; without one
-/// it is new each time. <see cref="ToJson"/> gives the value to set on a Block Grid property.
+/// it is new each time. <see cref="ToJson"/> gives the value to set on a Block Grid property, and <see cref="ToBlockListJson"/> gives the value for a Block List property.
 /// </summary>
 public sealed class AppBlockValues
 {
@@ -63,28 +69,60 @@ public sealed class AppBlockValues
     private readonly List<AppBlockItem> layout = [];
     private readonly HashSet<Guid> keys = [];
 
+    /// <summary>Deterministic block content key for <paramref name="name"/>, matching the key derivation used by <see cref="Add(string, object?, string?, int, object?)"/>.</summary>
+    public static Guid BlockKey(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return AppBlockSchema.Key("block:" + name);
+    }
+
+    /// <summary>Formats an Umbraco UDI string for <paramref name="key"/> (defaulting to <c>umb://document/{key:N}</c>).</summary>
+    public static string Udi(Guid key, string entityType = "document")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(entityType);
+        return $"umb://{entityType}/{key:N}";
+    }
+
     /// <summary>
     /// Adds a block of element type <paramref name="alias"/> with <paramref name="values"/>, an object or dictionary whose members are
     /// the element's property aliases, and returns its item for the caller to place: on the page with <see cref="Place"/> or in an area.
     /// </summary>
     /// <param name="id">A stable name for the block, unique in the value, which its key derives from.</param>
     /// <param name="columnSpan">The columns it spans of the grid or area it is placed in, which are twelve in the Forms container.</param>
-    public AppBlockItem Add(string alias, object? values = null, string? id = null, int columnSpan = 12)
+    /// <param name="settings">Optional settings property values when the element type has a settings element type in the schema.</param>
+    public AppBlockItem Add(string alias, object? values = null, string? id = null, int columnSpan = 12, object? settings = null)
     {
-        var key = id is null ? Guid.NewGuid() : AppBlockSchema.Key("block:" + id);
         var typeKey = AppBlockSchema.Key(alias);
-        var content = Element(typeKey, key, values);
         var definition = BlockTypes.Value.GetValueOrDefault(typeKey);
-        if (!keys.Add(key)) throw new ArgumentException($"Another block in this value already has the id '{id}'.", nameof(id));
+        if (settings is not null && definition?.SettingsElementTypeKey is null)
+            throw new ArgumentException($"Element type '{alias}' has no settings element type in the Forms container's grid.", nameof(settings));
+        return Add(typeKey, values, key: null, id: id, columnSpan: columnSpan, settingsElementTypeKey: definition?.SettingsElementTypeKey, settings: settings, alias: alias);
+    }
+
+    /// <summary>
+    /// Adds a block of any element type identified by <paramref name="elementTypeKey"/> (built-in, companion, or site-specific),
+    /// with optional <paramref name="values"/>, explicit <paramref name="key"/> or deterministic <paramref name="id"/>, and optional settings.
+    /// </summary>
+    public AppBlockItem Add(Guid elementTypeKey, object? values = null, Guid? key = null, string? id = null, int columnSpan = 12,
+        Guid? settingsElementTypeKey = null, object? settings = null, string? alias = null)
+    {
+        var itemKey = key ?? (id is null ? Guid.NewGuid() : BlockKey(id));
+        if (!keys.Add(itemKey))
+            throw new ArgumentException(id is not null ? $"Another block in this value already has the id '{id}'." : $"Another block in this value already has the key '{itemKey}'.", id is not null ? nameof(id) : nameof(key));
+        var definition = BlockTypes.Value.GetValueOrDefault(elementTypeKey);
+        var resolvedSettingsType = settingsElementTypeKey ?? definition?.SettingsElementTypeKey;
+        if (settings is not null && resolvedSettingsType is null)
+            throw new ArgumentException("Specify settingsElementTypeKey when providing settings for a block without a schema settings type.", nameof(settingsElementTypeKey));
+        var content = Element(elementTypeKey, itemKey, values);
         Guid? settingsKey = null;
-        if (definition?.SettingsElementTypeKey is Guid settingsType)
+        if (resolvedSettingsType is Guid settingsType)
         {
             // Umbraco creates this element on opening a block if it is missing, even with all settings at their defaults.
-            settingsKey = AppBlockSchema.Key($"settings:{key:D}");
-            settingsData.Add(Element(settingsType, settingsKey.Value, null));
+            settingsKey = AppBlockSchema.Key($"settings:{itemKey:D}");
+            settingsData.Add(Element(settingsType, settingsKey.Value, settings));
         }
         contentData.Add(content);
-        return new AppBlockItem(key, alias, columnSpan, definition?.Areas ?? [], settingsKey);
+        return new AppBlockItem(itemKey, alias ?? elementTypeKey.ToString(), columnSpan, definition?.Areas ?? [], settingsKey);
     }
 
     /// <summary>A field block, such as <c>appText</c> or <c>appSelect</c>, bound to the resource's <paramref name="field"/>, with any other of its properties in <paramref name="values"/>.</summary>
@@ -103,13 +141,14 @@ public sealed class AppBlockValues
     /// block's own, such as its heading; <paramref name="formInterface"/> adds to the interface's, such as <c>viewOnly</c>.
     /// </summary>
     public AppBlockItem Form(string resource, IEnumerable<AppBlockItem> fields, Guid? returnPage = null, string? keyParameter = null, object? actions = null,
-        object? values = null, object? formInterface = null, string? id = null, int columnSpan = 12)
+        object? values = null, object? formInterface = null, string? id = null, int columnSpan = 12, bool returnWithKey = false)
     {
         var settings = Properties(formInterface);
         settings["resource"] = resource;
         var properties = Properties(values);
         settings["keyParameter"] = keyParameter ?? (properties["parentForm"] is null ? "id" : "detailId");
-        if (returnPage is { } page) settings["returnPage"] = "umb://document/" + page.ToString("N");
+        if (returnPage is { } page) settings["returnPage"] = Udi(page);
+        if (returnWithKey) settings["returnWithKey"] = true;
         var interfaceKey = id is null ? Guid.NewGuid() : AppBlockSchema.Key("block:" + id + ":interface");
         properties["formInterface"] = new JsonObject {
             ["contentData"] = new JsonArray(Element(AppBlockSchema.Key("appFormInterface"), interfaceKey, settings)), ["settingsData"] = new JsonArray(),
@@ -122,7 +161,7 @@ public sealed class AppBlockValues
         return form;
     }
 
-    /// <summary>Places <paramref name="items"/> on the page's own grid, in order.</summary>
+    /// <summary>Places <paramref name="items"/> on the page's own grid or list, in order.</summary>
     public AppBlockValues Place(params AppBlockItem[] items)
     {
         layout.AddRange(items);
@@ -136,6 +175,23 @@ public sealed class AppBlockValues
         ["expose"] = new JsonArray(contentData.Select(block => (JsonNode)Expose(Guid.Parse(block["key"]!.GetValue<string>()))).ToArray()),
         ["layout"] = new JsonObject { ["Umbraco.BlockGrid"] = new JsonArray(layout.Select(item => (JsonNode)item.Layout()).ToArray()) },
     }.ToJsonString();
+
+    /// <summary>The Block List value as the backoffice saves it.</summary>
+    public string ToBlockListJson() => new JsonObject {
+        ["contentData"] = new JsonArray(contentData.Select(block => (JsonNode)block.DeepClone()).ToArray()),
+        ["settingsData"] = new JsonArray(settingsData.Select(block => (JsonNode)block.DeepClone()).ToArray()),
+        ["expose"] = new JsonArray(contentData.Select(block => (JsonNode)Expose(Guid.Parse(block["key"]!.GetValue<string>()))).ToArray()),
+        ["layout"] = new JsonObject { ["Umbraco.BlockList"] = new JsonArray(layout.Select(item => (JsonNode)item.ListLayout()).ToArray()) },
+    }.ToJsonString();
+
+    /// <summary>Builds a Block List JSON value using a fresh <see cref="AppBlockValues"/> instance.</summary>
+    public static string BlockList(Action<AppBlockValues> build)
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        var values = new AppBlockValues();
+        build(values);
+        return values.ToBlockListJson();
+    }
 
     private static JsonObject Element(Guid typeKey, Guid key, object? values) => new() {
         ["key"] = key.ToString(), ["contentTypeKey"] = typeKey.ToString(),

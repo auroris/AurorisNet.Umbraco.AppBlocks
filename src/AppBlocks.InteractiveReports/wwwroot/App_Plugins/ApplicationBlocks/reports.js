@@ -45,7 +45,9 @@ async function mountReports() {
     });
     if (!templates.length) return;
     templates.forEach(showSetupNote);
-    await import(`${pathBase}/api/reports/ui/ir.js`);
+    const firstApiBase = templates[0].content.querySelector("interactive-report")?.getAttribute("api-base");
+    const reportsBase = firstApiBase ? new URL(firstApiBase, location.href).pathname.replace(/\/+$/, "") : `${pathBase}/api/reports`;
+    await import(`${reportsBase}/ui/ir.js`);
     for (const template of templates) {
         const report = template.content.querySelector("interactive-report").cloneNode(true);
         const setPageQuery = () => {

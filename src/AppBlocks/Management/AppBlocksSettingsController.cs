@@ -11,9 +11,9 @@ using Umbraco.Cms.Web.Common.Authorization;
 namespace AppBlocks.Management;
 
 /// <summary>
-/// The Settings screens' connections and database setup. The guide, the connection list, the database types and the table list are open
-/// to every backoffice user, because the data source and report pickers read them, as is whether the User is an AppBlocks administrator;
-/// everything else is for administrators.
+/// The Settings screens' connections and database setup. The guide, the connection list, the database types and whether the User is an
+/// AppBlocks administrator are open to every backoffice user; the table list, database setup and connection changes require
+/// <see cref="AppBlocksAuthorization.AdministratorPolicy"/>.
 /// </summary>
 [ApiVersion("1.0")]
 [VersionedApiBackOfficeRoute("appblocks")]

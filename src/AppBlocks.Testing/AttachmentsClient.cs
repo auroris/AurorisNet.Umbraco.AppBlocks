@@ -13,9 +13,9 @@ public sealed record AttachmentFile(string FileName, string ContentType, byte[] 
 /// the block follows, travel as a query string on every call.
 /// </summary>
 /// <remarks>List before the first write and again whenever a browser would reload the page.</remarks>
-public sealed class AttachmentsClient(HttpClient client, string pathBase, Guid pageKey, Guid blockKey)
+public sealed class AttachmentsClient(HttpClient client, string pathBase, Guid pageKey, Guid blockKey, string apiRoot = "api")
 {
-    private readonly string api = $"{pathBase}/api/attachments/{pageKey}/{blockKey}";
+    private readonly string api = $"{Http.ApiRoot(pathBase, apiRoot)}/attachments/{pageKey}/{blockKey}";
     private string? antiforgeryToken;
 
     /// <summary>The record's files, whether the caller may write, and the block's purposes and limits.</summary>
@@ -26,9 +26,21 @@ public sealed class AttachmentsClient(HttpClient client, string pathBase, Guid p
         return listed;
     }
 
+    /// <summary>Lists files pending under <paramref name="submissionKey"/> for a form whose record is not yet saved.</summary>
+    public async Task<AttachmentsResponse> ListPendingAsync(Guid submissionKey, string? query = null)
+    {
+        var listed = await SendAsync(new HttpRequestMessage(HttpMethod.Get, Http.WithQuery(Pending(submissionKey), query)));
+        if (listed.IsSuccess) antiforgeryToken = Http.Text(listed.Body, "antiforgeryToken");
+        return listed;
+    }
+
     /// <summary>Uploads a file; the answer is the new item (201).</summary>
     public Task<AttachmentsResponse> UploadAsync(AttachmentFile file, string? purpose = null, string? label = null, string? notes = null, string? query = null)
         => WriteAsync(HttpMethod.Post, api, query, file, purpose, label, notes);
+
+    /// <summary>Uploads a pending file under <paramref name="submissionKey"/> before the owning form saves; the answer is the new item (201).</summary>
+    public Task<AttachmentsResponse> UploadPendingAsync(Guid submissionKey, AttachmentFile file, string? purpose = null, string? label = null, string? notes = null, string? query = null)
+        => WriteAsync(HttpMethod.Post, Pending(submissionKey), query, file, purpose, label, notes);
 
     /// <summary>
     /// Renames a file: its display and download name change, its id and contents stay. The answer is the renamed item.
@@ -52,7 +64,27 @@ public sealed class AttachmentsClient(HttpClient client, string pathBase, Guid p
         return await client.SendAsync(request);
     }
 
+    /// <summary>Removes the pending file <paramref name="id"/> under <paramref name="submissionKey"/>.</summary>
+    public async Task<HttpResponseMessage> RemovePendingAsync(Guid submissionKey, long id, string? query = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, Http.WithQuery($"{Pending(submissionKey)}/{id}", query));
+        request.Headers.Add("RequestVerificationToken", Token());
+        return await client.SendAsync(request);
+    }
+
+    /// <summary>Adopts pending files under <paramref name="submissionKey"/> into the saved record <paramref name="recordKey"/>.</summary>
+    public Task<AttachmentsResponse> AdoptAsync(Guid submissionKey, string recordKey, string? query = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, Http.WithQuery($"{Pending(submissionKey)}/adopt", query))
+        {
+            Content = JsonContent.Create(new { key = recordKey }),
+        };
+        request.Headers.Add("RequestVerificationToken", Token());
+        return SendAsync(request);
+    }
+
     private string Item(long id) => $"{api}/{id}";
+    private string Pending(Guid submissionKey) => $"{api}/new/{submissionKey}";
 
     private string Token() => antiforgeryToken
         ?? throw new TestSiteException($"List the attachments at {api} before writing to them: a write carries the antiforgery token the list returns.");

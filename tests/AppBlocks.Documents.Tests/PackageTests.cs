@@ -24,11 +24,16 @@ public sealed class PackageTests
     }
 
     [Fact]
-    public void Document_links_preserve_the_virtual_path_and_legacy_endpoint()
+    public void Document_links_preserve_the_virtual_path_and_follow_configured_api_root()
     {
         IAppDocumentLinks links = new DocumentLinks();
         var key = Guid.NewGuid();
-        Assert.Equal($"/wing/api/paper-reports/{key}", links.Url(key, "/wing"));
+        Assert.Equal($"/portal/api/paper-reports/{key}", links.Url(key, "/portal"));
         Assert.Equal("AppBlocks", typeof(IAppDocumentLinks).Assembly.GetName().Name);
+
+        var custom = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [AppBlocksRoutes.Setting] = "/services" }).Build();
+        Assert.Equal($"/portal/services/paper-reports/{key}", new DocumentLinks(custom).Url(key, "/portal"));
+        Assert.Equal("/services/paper-reports/{key:guid}", DocumentLinks.RouteFor(custom));
     }
 }

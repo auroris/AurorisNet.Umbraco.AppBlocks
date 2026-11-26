@@ -57,8 +57,11 @@ public sealed class AppReportDefinitionStore(
         }
         if (await ReportBlocks.ResolveAsync(content, name) is not { } instance) return null;
         if (instance.Block.Content.Value<string>("dataSource", culture: instance.Culture) is { Length: > 0 } selection)
+        {
+            if (ReportBlockSource.IsPublishedDataSource(selection)) await catalog.EnsureSourcesLoadedAsync();
             return catalog.ResolveBlockSource(instance.Block.Content.Key, selection, new List<string>()) is { } source
                 ? new(name, BlockAuthorization(instance.Page, source)) : null;
+        }
         return null;
     }
 
@@ -102,6 +105,8 @@ public sealed class AppReportDefinitionStore(
         }
         if (await ReportBlocks.ResolveAsync(content, name) is not { } instance) return null;
         var block = instance.Block.Content;
+        if (ReportBlockSource.IsPublishedDataSource(block.Value<string>("dataSource", culture: instance.Culture)))
+            await catalog.EnsureSourcesLoadedAsync();
         var authored = ReadBlock(block.Key, property => block.GetProperty(property)?.GetValue(instance.Culture));
         if (authored?.DataSource is null) return null;
         var result = Copy(authored.Definition);

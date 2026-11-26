@@ -150,6 +150,7 @@ export function mountForm(form, panel) {
         }
         // Read before the form is disabled below, which would take every control with it.
         const formData = otherControls(form);
+        const creating = !remove && !state.record.key;
         body.disabled = true; showErrors(null); message.textContent = t(remove ? "deleting" : "saving");
         try {
             let result;
@@ -178,8 +179,14 @@ export function mountForm(form, panel) {
                 record: result.record, definitionVersion: state.definitionVersion, details: result.details ?? [],
                 waitUntil: task => followUp.push(task),
             } }));
-            // Pending uploads must join a newly created record before the panel can be dismissed.
-            if (panel && (await Promise.all(followUp)).every(ok => ok !== false)) panel.saved();
+            // Pending uploads must join a newly created record before the panel closes or a post-create redirect leaves the page.
+            const followUpOk = (await Promise.all(followUp)).every(ok => ok !== false);
+            if (panel && followUpOk) panel.saved();
+            else if (!panel && creating && result.record.key && form.dataset.returnWithKey === "true" && form.dataset.return && followUpOk) {
+                const destination = new URL(form.dataset.return, location.origin);
+                destination.searchParams.set(form.dataset.keyParameter || "id", result.record.key);
+                location.assign(destination.toString());
+            }
         } catch { showErrors({ "": [t("requestFailedRetained")] }); message.textContent = ""; }
         finally {
             busy = false; form.removeAttribute("aria-busy"); body.disabled = false;

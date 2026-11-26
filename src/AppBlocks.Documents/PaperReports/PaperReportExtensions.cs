@@ -36,7 +36,7 @@ public static class PaperReportExtensions
     public static void MapPaperReports(this IEndpointRouteBuilder endpoints)
     {
         if (endpoints.DataSources.SelectMany(source => source.Endpoints).Any(endpoint => endpoint.Metadata.GetMetadata<DocumentEndpoint>() is not null)) return;
-        endpoints.MapGet(DocumentLinks.Route, Download).WithMetadata(new DocumentEndpoint());
+        endpoints.MapGet(DocumentLinks.RouteFor(endpoints.ServiceProvider.GetService<IConfiguration>()), Download).WithMetadata(new DocumentEndpoint());
     }
 
     private sealed record DocumentEndpoint;

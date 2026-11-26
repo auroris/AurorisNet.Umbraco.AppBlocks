@@ -50,11 +50,16 @@ export default class ReportSource extends UmbLitElement {
         const savedTable = selected.source && !this.tables.some(table => tableValue(table) === tableValue(selected));
         return html`
             <label for="kind">Source type</label>
-            <select id="kind" .value=${selected.kind} ?disabled=${this.readonly} @change=${event => this.change({ kind: event.target.value, connection: selected.connection, source: "" })}>
+            <select id="kind" .value=${selected.kind} ?disabled=${this.readonly} @change=${event => this.change(event.target.value === "dataSource" ? { kind: "dataSource", source: "" } : { kind: event.target.value, connection: selected.connection || "AppBlocksDb", source: "" })}>
                 <option value="table" ?selected=${selected.kind === "table"}>Table</option>
                 <option value="sql" ?selected=${selected.kind === "sql"}>SQL query</option>
+                <option value="dataSource" ?selected=${selected.kind === "dataSource"}>Published data source</option>
             </select>
-            ${selected.kind === "sql" ? html`
+            ${selected.kind === "dataSource" ? html`
+                <label for="data-source">Published data source alias</label>
+                <input id="data-source" type="text" style="width:100%;box-sizing:border-box;padding:10px;color:inherit;background:var(--uui-color-surface);border:1px solid var(--uui-color-border);border-radius:4px;" .value=${selected.source ?? ""} ?readonly=${this.readonly} @input=${event => this.change({ kind: "dataSource", source: event.target.value })} />
+                <p>Uses a published SQL data source's connection, query, row restriction and read access rules.</p>
+            ` : selected.kind === "sql" ? html`
                 <label for="connection">Data source</label>
                 <select id="connection" .value=${selected.connection} ?disabled=${this.readonly} @change=${event => this.change({ ...selected, connection: event.target.value })}>
                     ${!this.connections.some(connection => connection.name === selected.connection) ? html`<option value=${selected.connection}>${selected.connection} (unavailable)</option>` : ""}

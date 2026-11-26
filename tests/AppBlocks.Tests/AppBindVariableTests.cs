@@ -18,13 +18,13 @@ public sealed class AppBindVariableTests
     [Fact]
     public async Task Providers_are_merged_by_name_in_any_letter_case_and_nothing_is_asked_without_one()
     {
-        var first = new Provider(new Dictionary<string, object?> { ["tenant"] = "4wing", ["period"] = new DateOnly(2026, 11, 1), ["not a name"] = 1 });
-        var second = new Provider(new Dictionary<string, object?> { ["TENANT"] = "10ftts", ["flag"] = true, ["empty"] = null });
+        var first = new Provider(new Dictionary<string, object?> { ["tenant"] = "acme", ["period"] = new DateOnly(2026, 11, 1), ["not a name"] = 1 });
+        var second = new Provider(new Dictionary<string, object?> { ["TENANT"] = "north", ["flag"] = true, ["empty"] = null });
         var providers = new BindVariableProviders([first, second]);
         Assert.True(providers.Any);
         var values = await providers.ResolveAsync(Context, default);
         // A later provider wins a name; a name that is not an identifier is dropped; null is kept as a value that binds NULL.
-        Assert.Equal("10ftts", values["Tenant"]);
+        Assert.Equal("north", values["Tenant"]);
         Assert.Equal(new DateOnly(2026, 11, 1), values["period"]);
         Assert.True(values.ContainsKey("empty"));
         Assert.False(values.ContainsKey("not a name"));
@@ -54,19 +54,19 @@ public sealed class AppBindVariableTests
         Assert.Null(BindVariable.Parse("APP.fiscal-year"));
         // Rendering binds the value through a parameter, never into the text.
         var parameters = new SqlParameters(SqlDialect.For(AppBlocks.Connections.DatabaseDialect.Sqlite)!);
-        var sql = source.Render(parameters, variable => variable.Kind == BindVariableKind.App ? "4wing" : "42");
-        Assert.DoesNotContain("4wing", sql);
-        Assert.Contains(parameters.Bindings, binding => Equals(binding.Value, "4wing"));
+        var sql = source.Render(parameters, variable => variable.Kind == BindVariableKind.App ? "acme" : "42");
+        Assert.DoesNotContain("acme", sql);
+        Assert.Contains(parameters.Bindings, binding => Equals(binding.Value, "acme"));
     }
 
     [Fact]
     public void Field_defaults_read_the_application_values_and_resolve_to_nothing_without_them()
     {
         var query = new QueryCollection(new Dictionary<string, StringValues> { ["topic"] = "sales" });
-        var application = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["tenant"] = "4wing", ["since"] = new DateOnly(2026, 11, 1) };
+        var application = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["tenant"] = "acme", ["since"] = new DateOnly(2026, 11, 1) };
         var variables = new AppBindVariables("1", null, "pilot", null, DateTimeOffset.Now, query, application);
-        Assert.Equal("4wing", variables.Resolve(":APP.tenant", "text"));
-        Assert.Equal("4wing", variables.Resolve(":app.TENANT", "text"));
+        Assert.Equal("acme", variables.Resolve(":APP.tenant", "text"));
+        Assert.Equal("acme", variables.Resolve(":app.TENANT", "text"));
         Assert.Equal("2026-11-01", variables.Resolve(":APP.since", "date"));
         Assert.Null(variables.Resolve(":APP.region", "text"));
         Assert.Equal("sales", variables.Resolve(":PARAM.topic", "text"));

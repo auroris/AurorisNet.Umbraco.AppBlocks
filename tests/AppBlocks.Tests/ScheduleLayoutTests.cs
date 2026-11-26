@@ -86,7 +86,7 @@ public sealed class ScheduleLayoutTests
             Bar(6, "201", "2026-09-01", "2026-09-05", "Gone", "Stay", null),
             Bar(7, "999", "2026-10-29", "2026-10-29", "Lost", "Stay", null),
             Bar(8, "201", "2026-10-29", "2026-10-28", "Backwards", "", null));
-        var layout = ScheduleLayout.Build(window, rows, bars, "/stays/?id={key}&room={row}", "/wing");
+        var layout = ScheduleLayout.Build(window, rows, bars, "/stays/?id={key}&room={row}", "/portal");
 
         Assert.Equal((3, 6), (layout.RowCount, layout.BarCount));
         Assert.Equal(new[] { "Main building", "Annex" }, layout.Groups.Select(g => g.Title));
@@ -94,14 +94,14 @@ public sealed class ScheduleLayoutTests
         Assert.Equal(("101", "Room 101", 2), (room101.Key, room101.Label, room101.Lanes));
         var smith = room101.Bars.Single(b => b.Label == "Smith");
         Assert.Equal((0, 2, 0), (smith.Start, smith.Span, smith.Lane));
-        Assert.Equal("/wing/stays/?id=1&room=101", smith.Link);
+        Assert.Equal("/portal/stays/?id=1&room=101", smith.Link);
         var jones = room101.Bars.Single(b => b.Label == "Jones");
         Assert.Equal((1, 3, 1), (jones.Start, jones.Span, jones.Lane));
         var repair = room101.Bars.Single(b => b.Label == "Repair");
         Assert.True(repair.OpenEnded);
         Assert.False(repair.ClippedEnd);
         Assert.Equal((4, 3, 0), (repair.Start, repair.Span, repair.Lane));
-        Assert.Equal("/wing/repairs/3", repair.Link);
+        Assert.Equal("/portal/repairs/3", repair.Link);
         var room102 = layout.Groups[0].Rows[1];
         Assert.Equal(1, room102.Lanes);
         var early = room102.Bars.Single(b => b.Label == "Early");
@@ -274,8 +274,8 @@ public sealed class ScheduleLayoutTests
         var bars = Result([("STAY_ID", "key"), ("ROW", "row"), ("START", "start"), ("END", "end"), ("LABEL", "label"), ("KIND", "kind"), ("LINK", "link")],
             Bar(1, "101", "2026-10-27", "2026-10-27", "Script", "", "javascript:alert(1)"),
             Bar(2, "101", "2026-10-28", "2026-10-28", "Safe", "", "https://example.org/stays/2"));
-        var templated = ScheduleLayout.Build(window, rows, bars, "/stays/?id={key}", "/wing").Rows.Single().Bars;
-        Assert.Equal("/wing/stays/?id=1", templated.Single(b => b.Label == "Script").Link);
+        var templated = ScheduleLayout.Build(window, rows, bars, "/stays/?id={key}", "/portal").Rows.Single().Bars;
+        Assert.Equal("/portal/stays/?id=1", templated.Single(b => b.Label == "Script").Link);
         Assert.Equal("https://example.org/stays/2", templated.Single(b => b.Label == "Safe").Link);
         Assert.Null(ScheduleLayout.Build(window, rows, bars).Rows.Single().Bars.Single(b => b.Label == "Script").Link);
     }

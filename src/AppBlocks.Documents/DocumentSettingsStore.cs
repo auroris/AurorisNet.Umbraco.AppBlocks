@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Pressroom.Contracts;
@@ -16,17 +17,26 @@ public sealed class DocumentSettingsStore(IConfiguration configuration, IWebHost
     private const string ConfigurationSection = "AppBlocks:Documents:Pressroom:";
     private readonly IDataProtector protector = protection.CreateProtector("AppBlocks.Documents.Settings.v1");
     private readonly SemaphoreSlim gate = new(1, 1);
+    private SettingsFile<StoredPressroomConfiguration[]?>? savedFile;
     /// <summary>The id of the PDF configuration that site configuration supplies, which keeps it once saved.</summary>
     internal static readonly Guid ConfiguredId = new("3d49f9bd-ec0d-4397-9017-689245984630");
     private string FilePath => Path.Combine(configuration["AppBlocks:DataRoot"]
         ?? environment.ContentRootPath, "App_Data", "AppBlocks", "documents.json");
+    private SettingsFile<StoredPressroomConfiguration[]?> SavedFile => savedFile ??= new(() => FilePath, ParseSaved);
 
-    public PressroomConfigurationList List() => new(ReadConfigurations().Where(c => !string.IsNullOrWhiteSpace(c.Url)).Select(Info).ToArray(), File.Exists(FilePath));
+    public PressroomConfigurationList List()
+    {
+        var saved = SavedFile.Read();
+        var items = saved ?? ConfiguredFallback();
+        return new(items.Where(c => !string.IsNullOrWhiteSpace(c.Url)).Select(Info).ToArray(), saved is not null);
+    }
+
     private static PressroomConfigurationInfo Info(StoredPressroomConfiguration item)
         => new(item.Id, item.Name, item.Url, item.ProtectedApiKey is not null, item.Output, item.TimeoutSeconds);
 
     internal ResolvedPressroomConfiguration? DefaultPdf()
         => ReadConfigurations().FirstOrDefault(c => c.Output == "pdf" && !string.IsNullOrWhiteSpace(c.Url)) is { } item ? Resolve(item) : null;
+
     internal ResolvedPressroomConfiguration Resolve(Guid id)
     {
         var item = ReadConfigurations().SingleOrDefault(c => c.Id == id) ?? throw new KeyNotFoundException("The selected document configuration no longer exists.");
@@ -38,8 +48,20 @@ public sealed class DocumentSettingsStore(IConfiguration configuration, IWebHost
     /// <summary>"pdf", or "printer:" and a printer identifier, as a save accepts and the file should hold.</summary>
     internal static bool ValidOutput(string? output) => output == "pdf"
         || output?.StartsWith("printer:", StringComparison.Ordinal) == true && RequestValidator.IsPrinterIdentifier(output[8..]);
+
     private ResolvedPressroomConfiguration Resolve(StoredPressroomConfiguration item)
-        => new(item.Id, item.Name, item.Url, item.ProtectedApiKey is null ? null : protector.Unprotect(item.ProtectedApiKey), item.Output, item.TimeoutSeconds);
+        => new(item.Id, item.Name, item.Url, item.ProtectedApiKey is null ? null : UnprotectOrThrow(item.ProtectedApiKey, item.Name), item.Output, item.TimeoutSeconds);
+
+    private string UnprotectOrThrow(string protectedApiKey, string name)
+    {
+        try { return protector.Unprotect(protectedApiKey); }
+        catch (CryptographicException error)
+        {
+            throw new InvalidOperationException(
+                $"The saved Pressroom API key for '{name}' cannot be read: it was saved under Data Protection keys this installation no longer has. Save the configuration again with its API key or clear the existing key.",
+                error);
+        }
+    }
 
     public async Task<PressroomConfigurationInfo> SaveConfigurationAsync(SavePressroomConfiguration request, CancellationToken ct = default)
     {
@@ -102,7 +124,13 @@ public sealed class DocumentSettingsStore(IConfiguration configuration, IWebHost
         if (existing?.ProtectedApiKey is null) return null;
         if (!existing.Url.TrimEnd('/').Equals(url.Trim().TrimEnd('/'), StringComparison.Ordinal))
             throw new ArgumentException("Enter the API key for the new URL, or choose to remove the existing key.");
-        return protector.Unprotect(existing.ProtectedApiKey);
+        try { return protector.Unprotect(existing.ProtectedApiKey); }
+        catch (CryptographicException error)
+        {
+            throw new ArgumentException(
+                $"The saved Pressroom API key for '{existing.Name}' cannot be read: it was saved under Data Protection keys this installation no longer has. Enter the API key again or choose to clear the existing key.",
+                error);
+        }
     }
 
     private static void ValidateConnection(string url, double timeout)
@@ -114,32 +142,29 @@ public sealed class DocumentSettingsStore(IConfiguration configuration, IWebHost
 
     internal static bool ValidAddress(string url) => Uri.TryCreate(url, UriKind.Absolute, out var address)
         && address.Scheme is "http" or "https" && address.UserInfo.Length == 0 && address.Query.Length == 0 && address.Fragment.Length == 0;
+
     internal static bool ValidTimeout(double seconds) => double.IsFinite(seconds) && seconds is > 0 and <= int.MaxValue / 1000d;
-    private async Task WriteAsync(List<StoredPressroomConfiguration> items, CancellationToken ct)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        var temporary = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(new StoredPressroomConfigurations(2, items)), ct);
-            File.Move(temporary, FilePath, overwrite: true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
-    }
+
+    private Task WriteAsync(List<StoredPressroomConfiguration> items, CancellationToken ct)
+        => SavedFile.WriteAsync(JsonSerializer.Serialize(new StoredPressroomConfigurations(2, items)), ct);
 
     private List<StoredPressroomConfiguration> ReadConfigurations()
+        => [.. (SavedFile.Read() ?? ConfiguredFallback())];
+
+    private StoredPressroomConfiguration[] ConfiguredFallback()
     {
-        if (!File.Exists(FilePath))
-        {
-            var url = configuration[ConfigurationSection + "Url"];
-            var key = configuration[ConfigurationSection + "ApiKey"];
-            var timeout = double.TryParse(configuration[ConfigurationSection + "TimeoutSeconds"], NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ? seconds : 65;
-            return string.IsNullOrWhiteSpace(url) ? [] : [new(ConfiguredId, "Pressroom PDF", url,
-                string.IsNullOrWhiteSpace(key) ? null : protector.Protect(key), "pdf", timeout)];
-        }
-        using var stream = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var json = JsonDocument.Parse(stream);
+        var url = configuration[ConfigurationSection + "Url"];
+        var key = configuration[ConfigurationSection + "ApiKey"];
+        var timeout = double.TryParse(configuration[ConfigurationSection + "TimeoutSeconds"], NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ? seconds : 65;
+        return string.IsNullOrWhiteSpace(url) ? [] : [new(ConfiguredId, "Pressroom PDF", url,
+            string.IsNullOrWhiteSpace(key) ? null : protector.Protect(key), "pdf", timeout)];
+    }
+
+    private static StoredPressroomConfiguration[]? ParseSaved(string? text)
+    {
+        if (text is null) return null;
+        using var json = JsonDocument.Parse(text);
         if (!json.RootElement.TryGetProperty("Version", out var version) || version.GetInt32() != 2) throw new JsonException("Unsupported document settings version.");
-        return json.RootElement.Deserialize<StoredPressroomConfigurations>()?.Configurations ?? throw new JsonException("Missing Pressroom configurations.");
+        return json.RootElement.Deserialize<StoredPressroomConfigurations>()?.Configurations.ToArray() ?? throw new JsonException("Missing Pressroom configurations.");
     }
 }

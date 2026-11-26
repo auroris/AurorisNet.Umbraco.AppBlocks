@@ -12,9 +12,9 @@ namespace AppBlocks.Testing;
 /// Writes carry the definition version and the antiforgery token of the last successful load, so load
 /// before the first write and again whenever a browser would reload the page.
 /// </remarks>
-public sealed class FormsClient(HttpClient client, string pathBase, Guid pageKey, Guid formKey)
+public sealed class FormsClient(HttpClient client, string pathBase, Guid pageKey, Guid formKey, string apiRoot = "api")
 {
-    private readonly string api = $"{pathBase}/api/forms/{pageKey}/{formKey}";
+    private readonly string api = $"{Http.ApiRoot(pathBase, apiRoot)}/forms/{pageKey}/{formKey}";
     private string? antiforgeryToken, definitionVersion;
 
     /// <summary>The query parameter that names the record to load, as the form block's Key parameter does.</summary>

@@ -34,13 +34,8 @@ public sealed class DefaultReportAccessPolicy(ApplicationAccessPolicy access, IO
     /// The names of the Member groups a member group picker's value holds: group ids or keys, separated by commas. A group deleted
     /// since it was picked names nobody.
     /// </summary>
-    internal static async Task<IReadOnlyList<string>> MemberGroupNamesAsync(IMemberGroupService groups, string picked)
-    {
-        var all = (await groups.GetAllAsync()).ToArray();
-        return picked.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(item => int.TryParse(item, out var id) ? all.FirstOrDefault(g => g.Id == id) : Guid.TryParse(item, out var key) ? all.FirstOrDefault(g => g.Key == key) : null)
-            .Select(group => group?.Name).OfType<string>().ToArray();
-    }
+    internal static Task<IReadOnlyList<string>> MemberGroupNamesAsync(IMemberGroupService groups, string picked)
+        => MemberGroupNames.ResolveAsync(groups, picked);
 
     public async Task<bool> IsAdministratorAsync(ClaimsPrincipal principal)
     {

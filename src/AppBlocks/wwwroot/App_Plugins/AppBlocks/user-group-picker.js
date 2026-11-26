@@ -2,10 +2,10 @@ import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 import { html, css } from "@umbraco-cms/backoffice/external/lit";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
 import { UMB_AUTH_CONTEXT } from "@umbraco-cms/backoffice/auth";
-import { request } from "../AppBlocks/api.js";
+import { request } from "./api.js";
 
 /**
- * Picks backoffice user groups. The value is their aliases separated by commas, which ReportLinkRule.UserGroupAliases reads.
+ * Picks backoffice user groups. The value is their aliases separated by commas.
  * A picked group that no longer exists stays listed, marked, until it is cleared.
  */
 export default class UserGroupPicker extends UmbLitElement {

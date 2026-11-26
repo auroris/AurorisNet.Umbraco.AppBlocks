@@ -12,9 +12,9 @@ public sealed record TabularChange(string Operation, string? Key = null, string?
 /// follows, travel as a query string on every call.
 /// </summary>
 /// <remarks>List before the first save and again whenever a browser would reload the page.</remarks>
-public sealed class TabularClient(HttpClient client, string pathBase, Guid pageKey, Guid blockKey)
+public sealed class TabularClient(HttpClient client, string pathBase, Guid pageKey, Guid blockKey, string apiRoot = "api")
 {
-    private readonly string api = $"{pathBase}/api/tabular/{pageKey}/{blockKey}";
+    private readonly string api = $"{Http.ApiRoot(pathBase, apiRoot)}/tabular/{pageKey}/{blockKey}";
     private string? antiforgeryToken;
 
     /// <summary>The record's rows, the columns, what the caller may do, and the record a new row starts from.</summary>

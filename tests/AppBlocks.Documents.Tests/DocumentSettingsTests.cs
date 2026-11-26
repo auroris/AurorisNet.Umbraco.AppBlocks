@@ -42,6 +42,24 @@ public sealed class DocumentSettingsTests
         Assert.Throws<JsonException>(() => site.Store.List());
     }
 
+    [Fact]
+    public async Task Unreadable_protected_api_keys_report_a_clear_error_and_can_be_replaced_or_cleared()
+    {
+        using var site = new SettingsSite(new());
+        var saved = await site.Store.SaveConfigurationAsync(new(null, "PDF", "https://pdf.example/", ApiKey: "secret-key"));
+        // Another key ring cannot decrypt the stored secret.
+        var otherKeyRing = new DocumentSettingsStore(site.Configuration, new TestEnvironment { ContentRootPath = site.Root }, new EphemeralDataProtectionProvider());
+        Assert.Single(otherKeyRing.List().Configurations);
+        var resolveError = Assert.Throws<InvalidOperationException>(() => otherKeyRing.Resolve(saved.Id));
+        Assert.Contains("Data Protection keys", resolveError.Message);
+        var saveError = await Assert.ThrowsAsync<ArgumentException>(() => otherKeyRing.SaveConfigurationAsync(new(saved.Id, "PDF", "https://pdf.example/")));
+        Assert.Contains("Data Protection keys", saveError.Message);
+        // Clearing or supplying a new key recovers cleanly.
+        var cleared = await otherKeyRing.SaveConfigurationAsync(new(saved.Id, "PDF", "https://pdf.example/", ClearApiKey: true));
+        Assert.False(cleared.HasApiKey);
+        Assert.Null(otherKeyRing.Resolve(saved.Id).ApiKey);
+    }
+
     [Theory]
     [InlineData("relative/address")]
     [InlineData("ftp://pressroom.example/")]

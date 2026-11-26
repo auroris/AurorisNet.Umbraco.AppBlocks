@@ -34,7 +34,7 @@ public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocument
         sources = found;
         using var reference = contexts.EnsureUmbracoContext();
         if (reference.UmbracoContext.Content is not { } cache || !navigation.TryGetRootKeysOfType(DataSourceSchema.RootAlias, out var roots)) return;
-        var names = new MemberGroupNames((await groups.GetAllAsync()).ToArray());
+        var allGroups = (await groups.GetAllAsync()).ToArray();
         foreach (var root in roots)
         {
             if (await cache.GetByIdAsync(root, false) is null) continue;
@@ -44,7 +44,8 @@ public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocument
                 if (await cache.GetByIdAsync(key, false) is not { } node) continue;
                 var definition = runtime.Definition(node.Key, node.UpdateDate, () => {
                     var errors = new List<string>();
-                    var read = DataSourceDefinition.Read(node.Key, node.Name, alias => node.GetProperty(alias)?.GetValue(), names.Resolve, errors);
+                    var read = DataSourceDefinition.Read(node.Key, node.Name, alias => node.GetProperty(alias)?.GetValue(),
+                        picked => AppBlocks.Authentication.MemberGroupNames.Resolve(allGroups, picked, failOnMissing: true), errors);
                     if (read is null) logger.LogWarning("Data source {Name} ({Key}) is left out: {Errors}", node.Name, node.Key, string.Join(" ", errors));
                     return read;
                 });
@@ -57,23 +58,6 @@ public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocument
                 found.Add(new SqlDataSource(definition, runtime, users, policies, providers, handlers));
             }
         }
-    }
-}
-
-/// <summary>Turns a member group picker value, which Umbraco stores as group ids, into group names; null when a picked group is gone.</summary>
-internal sealed class MemberGroupNames(IReadOnlyList<IMemberGroup> all)
-{
-
-    public IReadOnlyList<string>? Resolve(string picked)
-    {
-        var names = new List<string>();
-        foreach (var item in picked.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var group = int.TryParse(item, out var id) ? all.FirstOrDefault(g => g.Id == id) : Guid.TryParse(item, out var key) ? all.FirstOrDefault(g => g.Key == key) : null;
-            if (group?.Name is not { } name) return null;
-            names.Add(name);
-        }
-        return names;
     }
 }
 
@@ -128,8 +112,9 @@ public sealed class DataSourcePublishValidator(DataSourceRuntime runtime, IMembe
     public async Task<IReadOnlyList<string>> ValidateAsync(Guid key, string name, Func<string, object?> value, ICollection<string> warnings)
     {
         var errors = new List<string>();
-        var names = new MemberGroupNames((await groups.GetAllAsync()).ToArray());
-        var definition = DataSourceDefinition.Read(key, name, value, names.Resolve, errors);
+        var allGroups = (await groups.GetAllAsync()).ToArray();
+        var definition = DataSourceDefinition.Read(key, name, value,
+            picked => AppBlocks.Authentication.MemberGroupNames.Resolve(allGroups, picked, failOnMissing: true), errors);
         await catalog.LoadAsync();
         if (definition is null) return errors;
         if (code.Concat(compiled?.Create<IFormResource>() ?? []).Any(resource => resource.Alias == definition.Alias))

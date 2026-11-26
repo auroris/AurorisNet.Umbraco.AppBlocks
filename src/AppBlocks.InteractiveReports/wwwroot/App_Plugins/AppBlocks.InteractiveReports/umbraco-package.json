@@ -29,18 +29,6 @@
     },
     {
       "type": "propertyEditorUi",
-      "alias": "AppBlocks.UserGroupPicker",
-      "name": "Application backoffice user group picker",
-      "element": "/App_Plugins/AppBlocks.InteractiveReports/user-group-picker.js",
-      "meta": {
-        "label": "Backoffice user groups",
-        "icon": "icon-users",
-        "group": "Application",
-        "propertyEditorSchemaAlias": "Umbraco.TextBox"
-      }
-    },
-    {
-      "type": "propertyEditorUi",
       "alias": "AppBlocks.ReportSource",
       "name": "Application report table or SQL",
       "element": "/App_Plugins/ApplicationBlocks/report-source.js",

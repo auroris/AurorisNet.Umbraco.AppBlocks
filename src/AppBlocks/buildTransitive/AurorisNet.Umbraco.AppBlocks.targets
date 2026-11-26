@@ -7,4 +7,5 @@
   <ItemGroup>
     <Compile Remove="$(AppBlocksCodeDirectory)/**" />
   </ItemGroup>
+  <Import Project="$(MSBuildThisFileDirectory)Migrations.props" Condition="'$(MigrationsDirectory)' != '' and '$(InstallRoot)' == ''" />
 </Project>

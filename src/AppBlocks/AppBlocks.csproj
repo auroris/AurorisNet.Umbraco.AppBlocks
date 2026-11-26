@@ -14,16 +14,6 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <Using Include="Microsoft.AspNetCore.Builder" />
-    <Using Include="Microsoft.AspNetCore.Hosting" />
-    <Using Include="Microsoft.AspNetCore.Http" />
-    <Using Include="Microsoft.AspNetCore.Routing" />
-    <Using Include="Microsoft.Extensions.Configuration" />
-    <Using Include="Microsoft.Extensions.DependencyInjection" />
-    <Using Include="Microsoft.Extensions.Hosting" />
-    <Using Include="Microsoft.Extensions.Logging" />
-    <Using Include="Umbraco.Cms.Core.DependencyInjection" />
-    <Using Include="Umbraco.Extensions" />
     <InternalsVisibleTo Include="AppBlocks.Tests" />
     <InternalsVisibleTo Include="AppBlocks.InteractiveReports.Tests" />
   </ItemGroup>
@@ -50,6 +40,7 @@
     <Content Update="Schema/**/*.config;appsettings-schema*.json;umbraco-package-schema.json" Pack="false" />
     <EmbeddedResource Include="$(InstallRoot)AppBlocks/Schema/**/*.config" Link="Schema\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="../../Migrations/Runtime/**/*.cs" />
-    <EmbeddedResource Include="../../Migrations/**/*.sql" Link="Migrations\%(RecursiveDir)%(Filename)%(Extension)" />
+    <_AppBlocksMigrationSql Include="../../Migrations/*/AppBlocks/**/*.sql" />
+    <EmbeddedResource Include="@(_AppBlocksMigrationSql)" Link="Migrations\$([MSBuild]::MakeRelative('$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../Migrations'))', '%(FullPath)'))" />
   </ItemGroup>
 </Project>

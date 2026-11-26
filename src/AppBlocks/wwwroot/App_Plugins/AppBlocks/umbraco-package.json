@@ -110,6 +110,18 @@
       }
     },
     {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.UserGroupPicker",
+      "name": "Application backoffice user group picker",
+      "element": "/App_Plugins/AppBlocks/user-group-picker.js",
+      "meta": {
+        "label": "Backoffice user groups",
+        "icon": "icon-users",
+        "group": "AppBlocks",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
       "type": "workspaceView",
       "alias": "AppBlocks.WorkspaceView.forms",
       "name": "AppBlocks Forms",

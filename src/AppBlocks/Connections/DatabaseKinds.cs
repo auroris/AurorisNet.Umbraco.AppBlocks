@@ -77,19 +77,39 @@ public static class DatabaseKinds
         _ => throw new ArgumentException("Choose SQLite, SQL Server, PostgreSQL, Oracle 11.2 or Oracle 12+."),
     };
 
+    /// <summary>Attempts to recognize a connection's dialect by its type without throwing on unknown connection types.</summary>
+    public static bool TryOf(DbConnection connection, out DatabaseDialect dialect)
+    {
+        switch (connection)
+        {
+            case SqliteConnection:
+                dialect = DatabaseDialect.Sqlite;
+                return true;
+            case SqlConnection:
+                dialect = DatabaseDialect.SqlServer;
+                return true;
+            default:
+                switch (connection.GetType().Name)
+                {
+                    case "NpgsqlConnection":
+                        dialect = DatabaseDialect.Postgres;
+                        return true;
+                    case "OracleConnection":
+                        dialect = DatabaseDialect.Oracle;
+                        return true;
+                    default:
+                        dialect = default;
+                        return false;
+                }
+        }
+    }
+
     /// <summary>
     /// The kind of a connection by its type, without opening it. PostgreSQL and Oracle connections are recognized by their type's name,
     /// since AppBlocks references neither driver; an Oracle connection is the automatic mode, which opening it may narrow to 11.2.
     /// </summary>
     /// <exception cref="InvalidOperationException">The connection is none of the supported databases.</exception>
-    public static DatabaseDialect Of(DbConnection connection) => connection switch {
-        SqliteConnection => DatabaseDialect.Sqlite,
-        SqlConnection => DatabaseDialect.SqlServer,
-        _ => connection.GetType().Name switch {
-            "NpgsqlConnection" => DatabaseDialect.Postgres,
-            "OracleConnection" => DatabaseDialect.Oracle,
-            _ => throw new InvalidOperationException(
-                $"AppBlocks works with SQLite, SQL Server, PostgreSQL and Oracle; {connection.GetType().FullName} is none of them."),
-        },
-    };
+    public static DatabaseDialect Of(DbConnection connection) => TryOf(connection, out var dialect) ? dialect
+        : throw new InvalidOperationException(
+            $"AppBlocks works with SQLite, SQL Server, PostgreSQL and Oracle; {connection.GetType().FullName} is none of them.");
 }

@@ -94,14 +94,7 @@ public sealed class AntiSpamSettings(IConfiguration configuration, IWebHostEnvir
             var saved = request.RemoveSecret ? null : string.IsNullOrEmpty(secret) ? old?.ProtectedSecretKey : protector.Protect(secret);
             entries.RemoveAll(entry => entry.Service.Equals(request.Service, StringComparison.OrdinalIgnoreCase));
             entries.Add(new(request.Service, siteKey ?? old?.SiteKey, saved));
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            var temporary = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(entries), ct);
-                File.Move(temporary, FilePath, overwrite: true);
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); SavedFile.Invalidate(); }
+            await SavedFile.WriteAsync(JsonSerializer.Serialize(entries), ct);
         }
         finally { gate.Release(); }
     }

@@ -11,6 +11,10 @@ internal static class Http
     public static string WithQuery(string path, string? query)
         => string.IsNullOrEmpty(query) ? path : path + (path.Contains('?') ? "&" : "?") + query.TrimStart('?', '&');
 
+    /// <summary>Joins <paramref name="pathBase"/> and <paramref name="apiRoot"/> with one slash, defaulting blank roots to <c>api</c>.</summary>
+    public static string ApiRoot(string pathBase, string apiRoot)
+        => $"{pathBase.TrimEnd('/')}/{(string.IsNullOrWhiteSpace(apiRoot) ? "api" : apiRoot.Trim('/'))}";
+
     /// <summary>The response's JSON body, or an empty object when it has none.</summary>
     public static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
     {

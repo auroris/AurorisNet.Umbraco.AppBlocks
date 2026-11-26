@@ -355,7 +355,7 @@ public sealed class NoticeSettingsController(NoticeSettings settings) : Manageme
 
 Where the policy applies in AppBlocks itself:
 
-- The connection list, database types, table list and business rules guide are open to every backoffice user, because the data source and report pickers read them.
+- The connection list, database types and business rules guide are open to every backoffice user. The table list requires `AppBlocks.Administrator`.
 - The data source and API endpoint **Test** actions require the policy, because they run the current SQL before it is saved or published. They also require Content section access and permission to update the node, or to create under the parent of a new node. An editor who is not an AppBlocks administrator sees a note in place of the Test button.
 - The Backing Classes editor requires the policy and Settings section access.
 

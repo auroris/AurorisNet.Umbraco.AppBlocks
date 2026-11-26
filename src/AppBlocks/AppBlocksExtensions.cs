@@ -36,7 +36,7 @@ public static class AppBlocksExtensions
             configure?.Invoke(existing);
             return builder;
         }
-        var connections = new AppBlocksBuilder();
+        var connections = new AppBlocksBuilder(services);
         services.AddSingleton(connections);
         connections.AddConnection(ConnectionCatalog.ApplicationConnection, provider => provider.GetRequiredService<ConnectionCatalog>().Openable(ConnectionCatalog.ApplicationConnection));
         connections.AddAttachmentsDatabase(builder.Config);
@@ -64,6 +64,7 @@ public static class AppBlocksExtensions
         services.TryAddScoped<ApplicationAccessPolicy>();
         services.AddControllersWithViews().AddApplicationPart(typeof(AppBlocksExtensions).Assembly);
         services.AddScoped<AppBlockContent>();
+        services.AddSingleton<Umbraco.Cms.Infrastructure.Manifest.IPackageManifestReader, BlockTypeAliasesManifest>();
         // The texts the blocks show, with whatever sources a host registers (its Umbraco dictionary among them) answering first.
         services.AddScoped<AppBlocksText>();
         services.AddScoped<AppPageAccess>();
@@ -114,6 +115,20 @@ public static class AppBlocksExtensions
             PostMapEndpoints = endpoints => endpoints.MapAppBlocks(),
         }));
         return builder;
+    }
+
+    /// <summary>Scans <paramref name="assembly"/> and registers public non-abstract AppBlocks extension implementations.</summary>
+    public static IUmbracoBuilder AddAppBlocksExtensionsFromAssembly(this IUmbracoBuilder builder, System.Reflection.Assembly assembly)
+    {
+        AppBlocksBuilder.RegisterExtensionsFromAssembly(builder.Services, assembly);
+        return builder;
+    }
+
+    /// <summary>Scans <paramref name="assembly"/> and registers public non-abstract AppBlocks extension implementations.</summary>
+    public static IServiceCollection AddAppBlocksExtensionsFromAssembly(this IServiceCollection services, System.Reflection.Assembly assembly)
+    {
+        AppBlocksBuilder.RegisterExtensionsFromAssembly(services, assembly);
+        return services;
     }
 
     public static void MapAppBlocks(this IEndpointRouteBuilder endpoints)

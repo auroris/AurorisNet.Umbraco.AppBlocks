@@ -1,11 +1,21 @@
 using System.Data.Common;
+using System.Reflection;
+using AppBlocks.Blocks;
 using AppBlocks.Databases;
+using AppBlocks.DataSources;
+using AppBlocks.Forms;
 
 // The public namespace is retained for hosts; the builder configures the whole package.
 namespace AppBlocks.Connections;
 
 public sealed class AppBlocksBuilder
 {
+    private readonly IServiceCollection? services;
+    internal int ReadyPublished;
+
+    public AppBlocksBuilder() { }
+
+    internal AppBlocksBuilder(IServiceCollection services) => this.services = services;
     internal Dictionary<string, Func<IServiceProvider, DbConnection>> Connections { get; } = new(StringComparer.OrdinalIgnoreCase);
     internal Dictionary<string, DatabaseDialect> Dialects { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The application databases, apart from their factories: a configured or saved connection string never runs its factory.</summary>
@@ -71,15 +81,20 @@ public sealed class AppBlocksBuilder
     /// once its definitions are installed, so a package's block can be placed on the site's pages without an editor configuring the grid by
     /// hand. Without <paramref name="areaKey"/> the block goes at the grid's root and in any area; with it, in that area only, named by key or
     /// alias, which also lists the block when the area allows only certain blocks. An element the data type already lists is left as the site
-    /// configured it, and nothing is changed when either is missing. <see cref="Setup.BlockGridAllowances"/> applies it.
+    /// configured it (except wiring <paramref name="settingsElementTypeAlias"/> if missing), and nothing is changed when either is missing.
+    /// <see cref="Setup.BlockGridAllowances"/> applies it.
     /// </summary>
-    public AppBlocksBuilder AllowInBlockGrid(string blockGridDataTypeName, string elementTypeAlias, int columnSpan = 12, int rowSpan = 1, string? areaKey = null)
+    public AppBlocksBuilder AllowInBlockGrid(string blockGridDataTypeName, string elementTypeAlias, int columnSpan = 12, int rowSpan = 1, string? areaKey = null,
+        string? settingsElementTypeAlias = null, int[]? columnSpanOptions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(blockGridDataTypeName);
         ArgumentException.ThrowIfNullOrWhiteSpace(elementTypeAlias);
         ArgumentOutOfRangeException.ThrowIfLessThan(columnSpan, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(rowSpan, 1);
-        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, columnSpan, rowSpan, string.IsNullOrWhiteSpace(areaKey) ? null : areaKey));
+        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, columnSpan, rowSpan,
+            string.IsNullOrWhiteSpace(areaKey) ? null : areaKey,
+            SettingsElementTypeAlias: string.IsNullOrWhiteSpace(settingsElementTypeAlias) ? null : settingsElementTypeAlias,
+            ColumnSpanOptions: columnSpanOptions));
         return this;
     }
 
@@ -89,14 +104,73 @@ public sealed class AppBlocksBuilder
 
     /// <summary>Registers a grouped block with its initial grid width. A restricted block is offered only in areas that explicitly allow its group.</summary>
     public AppBlocksBuilder AllowInBlockGrid(string blockGridDataTypeName, string elementTypeAlias, string blockGroupName,
-        int columnSpan, bool restrictToGroupAreas = false)
+        int columnSpan, bool restrictToGroupAreas = false, string? settingsElementTypeAlias = null, int[]? columnSpanOptions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(blockGridDataTypeName);
         ArgumentException.ThrowIfNullOrWhiteSpace(elementTypeAlias);
         ArgumentException.ThrowIfNullOrWhiteSpace(blockGroupName);
         ArgumentOutOfRangeException.ThrowIfLessThan(columnSpan, 1);
-        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, columnSpan, 1, Area: null, Group: blockGroupName, RestrictToGroupAreas: restrictToGroupAreas));
+        BlockGridAllowances.Add(new(blockGridDataTypeName, elementTypeAlias, columnSpan, 1, Area: null, Group: blockGroupName,
+            RestrictToGroupAreas: restrictToGroupAreas,
+            SettingsElementTypeAlias: string.IsNullOrWhiteSpace(settingsElementTypeAlias) ? null : settingsElementTypeAlias,
+            ColumnSpanOptions: columnSpanOptions));
         return this;
+    }
+
+    /// <summary>
+    /// Allows element type <paramref name="elementTypeAlias"/> in the site's Block List data type named <paramref name="blockListDataTypeName"/>,
+    /// optionally wiring <paramref name="settingsElementTypeAlias"/>.
+    /// </summary>
+    public AppBlocksBuilder AllowInBlockList(string blockListDataTypeName, string elementTypeAlias, string? settingsElementTypeAlias = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(blockListDataTypeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(elementTypeAlias);
+        BlockGridAllowances.Add(new(blockListDataTypeName, elementTypeAlias,
+            SettingsElementTypeAlias: string.IsNullOrWhiteSpace(settingsElementTypeAlias) ? null : settingsElementTypeAlias));
+        return this;
+    }
+
+    private static readonly Type[] ExtensionInterfaces = [
+        typeof(IFormResource),
+        typeof(IFormResourceProvider),
+        typeof(IDataSourceHandler),
+        typeof(IDataSourcePolicy),
+        typeof(IBindVariableProvider),
+        typeof(IAppBlockPlugin),
+    ];
+
+    /// <summary>
+    /// Scans <paramref name="assembly"/> and registers every public, non-abstract implementation of AppBlocks extension interfaces
+    /// (<see cref="IFormResource"/>, <see cref="IFormResourceProvider"/>, <see cref="IDataSourceHandler"/>,
+    /// <see cref="IDataSourcePolicy"/>, <see cref="IBindVariableProvider"/>, <see cref="IAppBlockPlugin"/>) as scoped services,
+    /// skipping any (service, implementation) pair already registered.
+    /// </summary>
+    public AppBlocksBuilder AddExtensionsFromAssembly(Assembly assembly)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+        if (services is null)
+            throw new InvalidOperationException("AddExtensionsFromAssembly requires an AppBlocksBuilder created by AddAppBlocks.");
+        RegisterExtensionsFromAssembly(services, assembly);
+        return this;
+    }
+
+    internal static void RegisterExtensionsFromAssembly(IServiceCollection services, Assembly assembly)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(assembly);
+        Type[] types;
+        try { types = assembly.GetExportedTypes(); }
+        catch (ReflectionTypeLoadException error) { types = error.Types.OfType<Type>().Where(t => t.IsPublic).ToArray(); }
+        foreach (var type in types)
+        {
+            if (type.IsAbstract || type.IsInterface || type.ContainsGenericParameters) continue;
+            foreach (var serviceType in ExtensionInterfaces)
+            {
+                if (!serviceType.IsAssignableFrom(type)) continue;
+                if (services.Any(descriptor => descriptor.ServiceType == serviceType && descriptor.ImplementationType == type)) continue;
+                services.AddScoped(serviceType, type);
+            }
+        }
     }
 
     public AppBlocksBuilder AddConnection(string name, Func<IServiceProvider, DbConnection> factory, DatabaseDialect? dialect = null)
