@@ -1,15 +1,17 @@
 @using AppBlocks.Blocks
 @model AppBlocksPage
 @inject BlockConditions Conditions
+@inject IVariationContextAccessor VariationContext
 @{
     var native = Model.Blocks?.FirstOrDefault();
     var visitor = Model.Variables is not null || Model.MemberId is not null ? Context.User : null;
-    if (native is null || !await Conditions.MatchesAsync(native, BlockConditions.Security, Model.Page, visitor, ct: Context.RequestAborted)) { return; }
+    var culture = VariationContext.VariationContext?.Culture is { Length: > 0 } c && Model.Page.Cultures.ContainsKey(c) ? c : null;
+    if (native is null || !await Conditions.MatchesAsync(native, BlockConditions.Security, Model.Page, visitor, culture, ct: Context.RequestAborted)) { return; }
 }
 @if (native.Content.ContentType.Alias == AppBlockSchema.HtmlAlias)
 {
     var view = new AppBlockView(Model.Page, native, MemberId: Model.MemberId, Variables: Model.Variables);
-    if (await Conditions.MatchesAsync(native, BlockConditions.Visibility, Model.Page, visitor, ct: Context.RequestAborted))
+    if (await Conditions.MatchesAsync(native, BlockConditions.Visibility, Model.Page, visitor, culture, ct: Context.RequestAborted))
     { @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view) }
     else { <div style="display: none;">@await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view)</div> }
     return;

@@ -45,12 +45,12 @@ Two things apply to every layer.
 
 ## Block Visibility and Security
 
-Every block starts **Always visible** and **Always rendered**. Editable blocks and their containers also start **Never read only**. Open the block and add a condition to the corresponding list. All conditions in a list must pass. Clearing a list restores its default.
+Every block starts **Always visible** and **Always rendered**. Editable blocks and their containers also start **Never read only**. Open the block and add a condition to the corresponding list. For **Visibility** and **Security**, all conditions in a list must pass. For **Read Only**, **any** matching condition locks the block, so every Security or Read Only condition you add narrows access. Clearing a list restores its default.
 
-| Setting | Unconditional choices | When a condition fails |
+| Setting | Unconditional choices | When a condition applies |
 | --- | --- | --- |
-| **Visibility** | Always visible (default), Never visible | Razor renders the block with `display: none;`. Its fields still load, validate and submit. |
-| **Security** | Always rendered (default), Never rendered | Razor omits the block and its children. The form API omits their bound values and rejects submissions that include those fields. |
+| **Visibility** | Always visible (default), Never visible | When a condition fails, Razor renders the block with `display: none;`. Its fields still load, validate and submit (use **Field rules** or **Security** for conditionally required fields). |
+| **Security** | Always rendered (default), Never rendered | When a condition fails, Razor omits the block and its children. Security also implies read only: the form API omits their bound values, skips field rules that depend on them, and rejects submissions that include those fields. |
 
 For a public submission form with staff-only notes, put the notes and review controls in a **Fieldset**. On the fieldset, add a **Security** condition, choose **Member is in group**, and select **Staff** in the Umbraco Member Group picker. Staff can use the review fields under the form resource’s usual permissions. Other visitors can submit the public fields, and editing those fields preserves existing staff notes. For staff fields required only during review, use **Required on this form** and allow the resource to create a record before review.
 
@@ -64,11 +64,11 @@ Use an item comparison for equality, inequality, ordering, an empty value or a p
 
 ### Read Only
 
-Open **Visibility, Security and Read Only** on a field, fieldset, form, layout, account picker, attachments block or tabular form. Choose **Always read only** to lock it for everyone, or add conditions that specify when to lock it. **Never read only** is the default and preserves the field, form and resource’s own write permissions.
+Open **Visibility, Security and Read Only** on a field, fieldset, form, layout, account picker, attachments block or tabular form. Choose **Always read only** to lock it for everyone, or add conditions that specify when to lock it. **Never read only** is the default and preserves the field, form and resource’s own write permissions. If any Read Only condition matches—or cannot be resolved—the block is locked, so you can combine conditions such as `status` Is `Closed` and **User is outside member groups** without weakening either rule.
 
 For review notes that everyone can see but only staff can edit, add **User is outside member groups** to the field’s **Read Only** list and pick **Staff**. Visitors outside Staff can still submit the other fields. The server checks the condition again on every save and preserves the stored notes.
 
-To close an entire form after review, set its **Read Only** condition to **Is**, enter the resource field key `status` under **Item**, and enter `Closed` under **Value**. Read Only on a form or its fields uses the initialized or stored record. A locked form can be opened and read. Create, update and delete are disabled, including changes to nested rows and files. A locked fieldset applies to its children. A locked account picker applies to all of its writable field bindings.
+To close an entire form after review, set its **Read Only** condition to **Is**, enter the resource field key `status` under **Item**, and enter `Closed` under **Value** (use the form's **Read Only** list—not **Security** on **Form actions**—to enforce read-only at the API). Read Only on a form or its fields uses the initialized or stored record. A locked form can be opened and read. Create, update and delete are disabled, including changes to nested rows and files. A locked fieldset applies to its children. A locked account picker applies to all of its writable field bindings.
 
 ## The authenticated caller
 

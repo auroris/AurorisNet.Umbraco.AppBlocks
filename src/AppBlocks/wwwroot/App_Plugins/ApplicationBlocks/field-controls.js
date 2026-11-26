@@ -1,7 +1,7 @@
 import { t } from "./runtime-text.js";
 
 // One CSV record, matching ShuttleValue on the server. Item values cannot contain line breaks or be empty/duplicated.
-function parseShuttleValue(csv) {
+export function parseShuttleValue(csv) {
     if (!csv) return [];
     if (/[\r\n]/.test(csv)) throw new Error(t("shuttleOneLine"));
     const values = [], seen = new Set();
@@ -30,7 +30,7 @@ function parseShuttleValue(csv) {
     }
     return values;
 }
-const shuttleCsv = values => values.map(value => /[",]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value).join(",");
+export const shuttleCsv = values => values.map(value => /[",]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value).join(",");
 
 export function mountShuttle(root) {
     const field = root.querySelector("[data-field]");

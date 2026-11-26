@@ -41,11 +41,17 @@ public sealed class AccountPickerLookup(AppBlockContent content, AppPageAccess a
             var query = http.Request.Query;
             if (query["s"].Count > 1 || query[keyParameter].Count > 1 || query.ContainsKey("s") && query.ContainsKey(keyParameter))
                 return Results.BadRequest();
-            // A locked key-only picker still displays the selected account's name.
-            if (form.ReadOnlyBlocks.Contains(blockKey) && (query[keyParameter].Count != 1 || await Record() is not { } current
-                || !current.Values.TryGetValue(picker.Settings.IdentityField, out var selectedKey)
-                || string.IsNullOrWhiteSpace(selectedKey?.ToString()) || query[keyParameter][0] != selectedKey.ToString()))
-                return Results.StatusCode(403);
+            var current = await Record();
+            var canEdit = !form.IsReadOnly(blockKey) && current is not null
+                && (current.Key is null ? current.Capabilities.Create : current.Capabilities.Update);
+            if (!canEdit)
+            {
+                // A read-only key-only picker still displays the loaded record's selected account name.
+                if (query[keyParameter].Count != 1 || current is null
+                    || !current.Values.TryGetValue(picker.Settings.IdentityField, out var selectedKey)
+                    || BlockOwnerAccess.Text(selectedKey) is not { } expected || query[keyParameter][0] != expected)
+                    return Results.StatusCode(403);
+            }
             var provider = http.RequestServices.GetRequiredKeyedService<IAccountPickerProvider>(picker.Alias);
             project ??= item => item;
             if (query.TryGetValue(keyParameter, out var key))

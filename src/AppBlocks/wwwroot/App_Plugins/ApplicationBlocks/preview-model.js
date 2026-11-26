@@ -34,7 +34,7 @@ export function table(columns, message = "Rows appear on the page for the permit
     return `<table><thead><tr>${names.map(name => `<th>${escape(name)}</th>`).join("")}</tr></thead><tbody><tr><td colspan="${names.length}">${escape(message)}</td></tr></tbody></table>`;
 }
 
-export const fieldTypes = Object.freeze({ appText: "text", appTextArea: "textarea", appNumber: "number", appDate: "date", appTime: "time", appDateTime: "datetime-local", appCheckbox: "checkbox", appSelect: "select", appShuttle: "shuttle", appColor: "color", appDisplay: "display" });
+export const fieldTypes = Object.freeze({ appText: "text", appTextArea: "textarea", appNumber: "number", appDate: "date", appTime: "time", appDateTime: "datetime-local", appCheckbox: "checkbox", appSelect: "select", appSearchSelect: "search", appShuttle: "shuttle", appColor: "color", appDisplay: "display" });
 export function fieldPreview(alias, content) {
     const type = fieldTypes[alias];
     const label = content.label || content.field || "Choose a field";
@@ -44,6 +44,7 @@ export function fieldPreview(alias, content) {
     switch (type) {
         case "textarea": input = `<textarea disabled rows="3" placeholder="${placeholder}">${value}</textarea>`; break;
         case "select": input = `<select disabled><option>${placeholder || "Select a value"}</option></select>`; break;
+        case "search": input = `<input disabled type="search" placeholder="${placeholder || ([true, 1, "true", "1"].includes(content.allowMultiple) ? "Search and select values" : "Search and select a value")}" value="${value}">`; break;
         case "shuttle": input = `<div class="preview-columns"><div><label>Available</label><select disabled size="3"><option>Choices from the configured list</option></select></div><div>${button("Add →")}${button("← Remove")}</div><div><label>Selected</label><select disabled size="3"><option>${value}</option></select></div></div>`; break;
         case "display": input = `<output>${value || "Value from the record"}</output>`; break;
         default: input = `<input disabled type="${type}" placeholder="${placeholder}" value="${value}" ${type === "checkbox" && [true, 1, "true", "1"].includes(content.defaultValue) ? "checked" : ""}>`;

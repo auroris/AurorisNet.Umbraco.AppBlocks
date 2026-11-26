@@ -1,6 +1,7 @@
 @using AppBlocks.Blocks
 @model AppBlockItems
 @inject BlockConditions Conditions
+@inject IVariationContextAccessor VariationContext
 @*
     One grid of blocks: the page, or one area of a block. The Umbraco classes and custom properties
     are the ones umbraco-blockgridlayout.css computes columns from; ah-grid and ah-grid__item are the
@@ -18,8 +19,9 @@
     {
         var view = new AppBlockView(Model.Page, item, Model.Form, Model.MemberId, Model.HeadingLevel, Model.Variables);
         var caller = view.Admitted ? Context.User : null;
-        if (!(Model.Form?.Includes(item) ?? await Conditions.MatchesAsync(item, BlockConditions.Security, Model.Page, caller, ct: Context.RequestAborted))) { continue; }
-        var visible = Model.Form?.IsVisible(item) ?? await Conditions.MatchesAsync(item, BlockConditions.Visibility, Model.Page, caller, ct: Context.RequestAborted);
+        var culture = VariationContext.VariationContext?.Culture is { Length: > 0 } c && Model.Page.Cultures.ContainsKey(c) ? c : null;
+        if (!(Model.Form?.Includes(item) ?? await Conditions.MatchesAsync(item, BlockConditions.Security, Model.Page, caller, culture, ct: Context.RequestAborted))) { continue; }
+        var visible = Model.Form?.IsVisible(item) ?? await Conditions.MatchesAsync(item, BlockConditions.Visibility, Model.Page, caller, culture, ct: Context.RequestAborted);
         if (!AppBlockLayout.OccupiesCell(item))
         {
             if (visible) { @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/Block.cshtml", view) }

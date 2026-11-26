@@ -63,6 +63,49 @@ async function mount(body, answer, { head = '', lang = 'en', base = '', timezone
 }
 const runtime = base => `<script type="module" src="${base}/App_Plugins/ApplicationBlocks/runtime.js"></script>`;
 
+test('searchable selects filter by label and save scalar and ordered CSV values', async () => {
+    const picker = (name, multiple) => `<div class="app-form-field"><label for="${name}-picker">${name}</label>
+        <div data-app-search-select class="app-search-select" data-required="true">
+            <input type="hidden" id="${name}" data-field="${name}" data-kind="${multiple ? 'csv' : 'text'}">
+            <select id="${name}-picker" ${multiple ? 'multiple' : ''} aria-describedby="${name}-help">
+              <option value="a,b">North East</option><option value="hasOwnProperty">West</option><option value="say &quot;yes&quot;">South</option>
+            </select></div><small id="${name}-help">Choose a region</small></div>`;
+    const { page, requests, errors } = await mount(form(picker('Primary', false) + picker('Regions', true)) + runtime(''),
+        ({ method, body }) => formAnswer(method === 'GET' ? record('1', { Primary: '', Regions: 'Retired' })
+            : { ...record('1', body.values), readOnlyFields: ['Regions'] }));
+    try {
+        const primary = page.getByRole('combobox', { name: 'Primary' });
+        const regions = page.getByRole('combobox', { name: 'Regions' });
+        await primary.waitFor();
+        assert.equal(await page.locator('link[href$="tom-select.css"]').count(), 1);
+        await page.locator('[data-save]').click();
+        assert.equal(await primary.evaluate(el => el.validationMessage), 'Select at least one item.');
+        assert.equal(requests.filter(r => r.method === 'PUT').length, 0);
+        await primary.fill('north');
+        const matches = page.getByRole('listbox', { name: 'Primary' });
+        await matches.getByRole('option', { name: 'North East' }).waitFor();
+        await matches.getByRole('option', { name: 'West' }).waitFor({ state: 'hidden' });
+        await primary.press('Enter');
+        assert.equal(await page.locator('#Primary').inputValue(), 'a,b');
+
+        await page.locator('.item').filter({ hasText: 'Retired (current value)' }).getByRole('button').click();
+        await regions.fill('retired');
+        await page.getByText('No matching choices').waitFor();
+        for (const label of ['West', 'North East', 'South']) {
+            await regions.fill(label);
+            await page.getByRole('listbox', { name: 'Regions' }).getByRole('option', { name: label, exact: true }).click();
+        }
+        await regions.press('Escape');
+        await page.locator('[data-save]').click();
+        await page.getByText('Saved.', { exact: true }).waitFor();
+        assert.deepEqual(requests.at(-1).body.values, { title: null, Primary: 'a,b', Regions: 'hasOwnProperty,"a,b","say ""yes"""' });
+        assert.deepEqual(requests.at(-1).body.formData, {});
+        assert.equal(await page.locator('.app-search-select .item').count(), 4);
+        assert.ok(await regions.isDisabled());
+        assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+});
+
 async function openUploader(page, index = 0) {
     const block = page.locator('[data-app-attachments]').nth(index);
     if (!await block.locator('dialog').evaluate(dialog => dialog.open)) await block.locator('[data-attachment-add]').click();

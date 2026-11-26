@@ -37,8 +37,11 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         condition.ContentType.Alias == ConditionAlias(property) ? ConstantResult(property, condition.Value<string>("comparison")) : false;
 
     internal static bool VariesByRequest(BlockGridItem item) =>
+        RequiresNoStore(item)
+        || Conditions(item.Content, Visibility).Any(entry => ConstantResult(Visibility, entry.Content) is null);
+
+    internal static bool RequiresNoStore(BlockGridItem item) =>
         Conditions(item.Content, Security).Any(entry => ConstantResult(Security, entry.Content) is null)
-        || Conditions(item.Content, Visibility).Any(entry => ConstantResult(Visibility, entry.Content) is null)
         || Conditions(item.Content, ReadOnly).Any(entry => ConstantResult(ReadOnly, entry.Content) is null);
 
     internal static bool HasSecurity(BlockGridItem item) =>
@@ -48,14 +51,16 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         string? culture = null, FormDefinition? form = null, Func<Task<FormRecord?>>? load = null, CancellationToken ct = default)
     {
         var conditions = Conditions(item.Content, alias);
-        var readOnly = alias == ReadOnly;
-        if (conditions.Count == 0) return !readOnly;
-        foreach (var entry in conditions)
+        if (alias == ReadOnly)
         {
-            var passes = await EvaluateAsync(entry.Content, alias, page, visitor, culture, form, load, ct);
-            // An unavailable item or identity cannot grant rendering or editing.
-            if (!(passes ?? readOnly)) return false;
+            // Editable by default; any matching or indeterminate Read Only condition locks the block.
+            foreach (var entry in conditions)
+                if (await EvaluateAsync(entry.Content, alias, page, visitor, culture, form, load, ct) ?? true) return true;
+            return false;
         }
+        // Visible/rendered by default; every condition must pass, and an unavailable item or identity fails closed.
+        foreach (var entry in conditions)
+            if (await EvaluateAsync(entry.Content, alias, page, visitor, culture, form, load, ct) != true) return false;
         return true;
     }
 
@@ -65,12 +70,12 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         if (condition.ContentType.Alias != ConditionAlias(alias)) return null;
         var comparison = condition.Value<string>("comparison");
         if (ConstantResult(alias, comparison) is { } passes) return passes;
-        if (alias is Security or ReadOnly) http.HttpContext?.KeepOutOfCaches();
+        if (alias is Security or ReadOnly && http.HttpContext is { Response.HasStarted: false } context) context.KeepOutOfCaches();
         if (visitor is null) return null;
         if (!FieldCondition.IsComparison(comparison)) return await VisitorMatchesAsync(condition, comparison, visitor, ct);
         var name = condition.Value<string>("item")?.Trim();
         if (string.IsNullOrEmpty(name)) return null;
-        var value = form is null ? PageValue(page, name, culture) : await FieldValueAsync(form, name, load, emptyOnNewRecord: alias == ReadOnly);
+        var value = form is null ? PageValue(page, name, culture) : await FieldValueAsync(form, name, load);
         return value is { } left ? FieldCondition.Compare(left.Kind, comparison!, left.Text, condition.Value<string>("literal") ?? "") : null;
     }
 
@@ -105,12 +110,12 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         return (kind, ItemText(value));
     }
 
-    private static async Task<(string Kind, string Text)?> FieldValueAsync(FormDefinition form, string name, Func<Task<FormRecord?>>? load, bool emptyOnNewRecord)
+    private static async Task<(string Kind, string Text)?> FieldValueAsync(FormDefinition form, string name, Func<Task<FormRecord?>>? load)
     {
         if (form.Resource.Fields.FirstOrDefault(f => f.Key == name) is not { } field || load is null
             || await load() is not { } record) return null;
         if (record.Values.TryGetValue(name, out var value)) return (field.Kind, ItemText(value));
-        return emptyOnNewRecord && record.Key is null ? (field.Kind, "") : null;
+        return record.Key is null ? (field.Kind, "") : null;
     }
 
     private static string ItemText(object? value) => value switch {
@@ -142,29 +147,36 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         return false;
     }
 
-    /// <summary>Evaluates a form's Read Only list against its record and enclosing layouts against the published page.</summary>
+    /// <summary>Evaluates a form's View Only setting, its Read Only list against its record, and enclosing layouts against the published page.</summary>
     public async Task<bool> IsFormReadOnlyAsync(FormDefinition form, ClaimsPrincipal visitor, Func<Task<FormRecord?>> load, CancellationToken ct)
-        => await ReadOnlyOnPathAsync(form.Page, form.Ancestors, visitor, form.Culture, ct)
+        => form.Interface.Value<bool>("viewOnly")
+            || await ReadOnlyOnPathAsync(form.Page, form.Ancestors, visitor, form.Culture, ct)
             || await MatchesAsync(form.Block, ReadOnly, form.Page, visitor, form.Culture, form, load, ct);
 
     /// <summary>Scopes field binding, projection, validation and child blocks to this caller and record.
-    /// Only item comparisons need the record, which is loaded at most once.</summary>
+    /// Recomputes from the form's full published blocks so post-save state transitions stay accurate, and
+    /// enforces the invariant that Security denial also implies Read Only. Only item comparisons need the record,
+    /// which is loaded at most once.</summary>
     public async Task<FormDefinition> ForFormAsync(FormDefinition form, ClaimsPrincipal visitor, Func<Task<FormRecord?>> load,
         bool rendering, CancellationToken ct)
     {
-        var denied = new HashSet<Guid>(form.DeniedBlocks);
+        var denied = new HashSet<Guid>();
         var hidden = new HashSet<Guid>();
+        var locked = new HashSet<Guid>();
         Task<FormRecord?>? record = null;
         Task<FormRecord?> Record() => record ??= load();
-        var locked = new HashSet<Guid>();
         var wholeForm = await IsFormReadOnlyAsync(form, visitor, Record, ct);
         if (wholeForm) locked.Add(form.Block.ContentKey);
         async Task Visit(BlockGridItem item, bool parentLocked)
         {
-            if (denied.Contains(item.ContentKey)) return;
             if (!await MatchesAsync(item, Security, form.Page, visitor, form.Culture, form, Record, ct))
             {
-                foreach (var excluded in AppBlockContent.Flatten([item], form.Culture)) denied.Add(excluded.ContentKey);
+                foreach (var excluded in AppBlockContent.Flatten([item], form.Culture))
+                {
+                    denied.Add(excluded.ContentKey);
+                    // Security also implies read only, so every write path sees one unified invariant.
+                    locked.Add(excluded.ContentKey);
+                }
                 return;
             }
             if (rendering && !await MatchesAsync(item, Visibility, form.Page, visitor, form.Culture, form, Record, ct)) hidden.Add(item.ContentKey);
@@ -173,33 +185,45 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
             foreach (var child in AppBlockContent.Children(item, form.Culture)) await Visit(child, itemLocked);
         }
         foreach (var child in form.Block.Areas.SelectMany(a => a)) await Visit(child, wholeForm);
-        if (denied.Count == 0 && hidden.Count == 0 && locked.Count == 0 && form.ReadOnlyBlocks.Count == 0) return form;
-        var lockedFields = form.Fields.Where(f => locked.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
-        var excludedFields = form.Fields.Where(f => denied.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
-        excludedFields.UnionWith(form.ExcludedFields);
+        var allFields = form.AllFields;
+        var allRules = form.AllRules;
+        var allAntiSpam = form.AllAntiSpam;
+        var excludedFields = allFields.Where(f => denied.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
+        var lockedFields = allFields.Where(f => locked.Contains(f.ContentKey)).Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
+        lockedFields.UnionWith(excludedFields);
         if (denied.Count > 0 || locked.Count > 0)
         {
             var pickers = plugins.OfType<AccountPickerBlock>().ToDictionary(p => p.Alias);
             foreach (var block in AppBlockContent.Flatten(form.Block.Areas.SelectMany(a => a), form.Culture))
             {
                 if (!pickers.TryGetValue(block.Content.ContentType.Alias, out var picker)) continue;
-                var settings = picker.ReadSettings(block.Content);
+                AccountPickerSettings settings;
+                try { settings = picker.ReadSettings(block.Content); }
+                catch (AccountPickerException) { continue; }
                 var writable = settings.WritableFields().ToArray();
                 // A picker writes several fields. Omit the companion as a whole when one of its bindings is secured.
-                if (writable.Concat(settings.FallbackFields.Values).Any(excludedFields.Contains)) denied.Add(block.ContentKey);
-                var omitted = denied.Contains(block.ContentKey);
-                if (!omitted && !locked.Contains(block.ContentKey) && !writable.Any(lockedFields.Contains)) continue;
-                // Only the picker checks an account against its provider. Its fields are locked with it, and when Security omits it.
-                if (!omitted) locked.Add(block.ContentKey);
-                lockedFields.UnionWith(writable.Where(field => !excludedFields.Contains(field)));
+                if (writable.Concat(settings.FallbackFields.Values).Any(excludedFields.Contains))
+                {
+                    denied.Add(block.ContentKey);
+                    locked.Add(block.ContentKey);
+                }
+                if (!locked.Contains(block.ContentKey) && !writable.Any(lockedFields.Contains)) continue;
+                // Only the picker checks an account against its provider. Its fields are locked whenever the picker is locked or omitted.
+                locked.Add(block.ContentKey);
+                lockedFields.UnionWith(writable);
             }
         }
+        if (denied.Count == 0 && hidden.Count == 0 && locked.Count == 0
+            && form.DeniedBlocks.Count == 0 && form.InvisibleBlocks.Count == 0 && form.ReadOnlyBlocks.Count == 0)
+            return form;
         return form with {
+            AllFields = allFields, AllRules = allRules, AllAntiSpam = allAntiSpam,
             DeniedBlocks = denied, InvisibleBlocks = hidden, ExcludedFields = excludedFields,
             ReadOnlyBlocks = locked, ReadOnlyFields = lockedFields,
-            Fields = form.Fields.Where(f => !denied.Contains(f.ContentKey)).ToArray(),
-            Rules = form.Rules.Where(r => !excludedFields.Contains(r.Field)).ToArray(),
-            AntiSpam = form.AntiSpam.Where(b => !denied.Contains(b.ContentKey)).ToArray(),
+            Fields = allFields.Where(f => !denied.Contains(f.ContentKey)).ToArray(),
+            Rules = allRules.Where(r => !excludedFields.Contains(r.Field)
+                && r.Conditions.All(c => !excludedFields.Contains(c.Field) && !excludedFields.Contains(c.OtherField))).ToArray(),
+            AntiSpam = allAntiSpam.Where(b => !denied.Contains(b.ContentKey)).ToArray(),
         };
     }
 }

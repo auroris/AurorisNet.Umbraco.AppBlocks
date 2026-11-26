@@ -38,6 +38,10 @@ public sealed class AppBlockContent(IUmbracoContextFactory contexts, IHttpContex
             || BlockConditions.VariesByRequest(block)
             || plugins.Any(plugin => Varies(plugin) && plugin.Alias == block.Content.ContentType.Alias));
 
+    /// <summary>Whether any block on <paramref name="page"/> carries a visitor- or item-based Security or Read Only condition.</summary>
+    public static bool HasDynamicAccessConditions(IPublishedContent page, string? culture = null)
+        => AppBlockSchema.HasBlocks(page.ContentType) && Flatten(Blocks(page, culture), culture).Any(BlockConditions.RequiresNoStore);
+
     /// <summary>Whether a plugin's block keeps its page out of caches: it requires the user, or its output varies by data.</summary>
     internal static bool Varies(IAppBlockPlugin plugin) => plugin.RequiresUser || plugin.VariesByData;
 

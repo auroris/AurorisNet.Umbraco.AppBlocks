@@ -39,7 +39,7 @@ public sealed class TabularAccess(BlockOwnerAccess owners, FormResourceRegistry 
         }, Definition, ct, allowAnonymous: true);
         if (owner.Status != 200) return TabularScope.Refused(owner.Status, owner.Problem!);
         if (Source(owner.Item!.Content, out var block) is not { } source) return Unresolved(block);
-        if (owner.ReadOnly) block = block with { ReadOnly = true };
+        if (owner.ReadOnly || block.OwnedByForm && owner.Form?.ViewOnly == true) block = block with { ReadOnly = true };
         return new(200, null, block, owner.User, source, new DataSourceScope(block.LinkField, owner.OwnerKey), owner.Resource!.Alias, owner.Parameters);
     }
 
@@ -64,7 +64,7 @@ public sealed class TabularAccess(BlockOwnerAccess owners, FormResourceRegistry 
         if (initialized.Status != 200)
             return TabularScope.Refused(initialized.Status, initialized.Errors?.Values.SelectMany(errors => errors).FirstOrDefault() ?? "The form could not start a new record.");
         if (form.ViewOnly || initialized.Record?.Capabilities.Create != true) return TabularScope.Refused(404, "Save the record before adding rows.");
-        if (owner.ReadOnly) block = block with { ReadOnly = true };
+        if (owner.ReadOnly || block.OwnedByForm && owner.Form?.ViewOnly == true) block = block with { ReadOnly = true };
         return new(200, null, block, owner.User, source, null, owner.Resource!.Alias, owner.Parameters);
     }
 

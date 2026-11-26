@@ -15,8 +15,9 @@ public static class AppBlockSchema
     public static bool HasBlocks(IPublishedContentType type) => type.PropertyTypes.Any(p => IsBlockEditor(p.EditorAlias));
     public static bool HasBlocks(IContentBase page) => page.Properties.Any(p => IsBlockEditor(p.PropertyType.PropertyEditorAlias));
     public const string ShuttleAlias = "appShuttle";
+    public const string SearchSelectAlias = "appSearchSelect";
     public const string ColorAlias = "appColor";
-    public static readonly string[] FieldAliases = ["appText", "appTextArea", ColorAlias, "appNumber", "appDate", "appTime", "appDateTime", "appCheckbox", "appSelect", ShuttleAlias, "appDisplay"];
+    public static readonly string[] FieldAliases = ["appText", "appTextArea", ColorAlias, "appNumber", "appDate", "appTime", "appDateTime", "appCheckbox", "appSelect", SearchSelectAlias, ShuttleAlias, "appDisplay"];
 
     /// <summary>Page and form column layouts share the same renderer and settings.</summary>
     public static readonly string[] ColumnLayoutAliases = ["appFullWidth", "appColumns", "appThreeColumns", "appFormFullWidth", "appFormColumns", "appFormThreeColumns"];

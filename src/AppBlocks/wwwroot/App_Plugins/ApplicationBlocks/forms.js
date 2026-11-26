@@ -9,9 +9,10 @@ import { detailsFor, attachmentsFor, setSubmissionKey } from "./form-coordinatio
 export function mountForm(form, panel) {
     const fields = [...form.querySelectorAll("[data-field]")];
     const dateTimes = new Map();
-    const shuttles = new Map([...form.querySelectorAll("[data-app-shuttle]")].map(root => [root.querySelector("[data-field]"), mountShuttle(root)]));
+    const choiceControls = new Map([...form.querySelectorAll("[data-app-shuttle]")].map(root => [root.querySelector("[data-field]"), mountShuttle(root)]));
+    const searchSelects = form.querySelectorAll("[data-app-search-select]");
     const colors = new Map([...form.querySelectorAll("[data-app-color]")].map(root => [root.querySelector("[data-field]"), mountColor(root)]));
-    const applyRules = mountFieldRules(form, fields, shuttles, colors, field => {
+    const applyRules = mountFieldRules(form, fields, choiceControls, colors, field => {
         if (field.type === "checkbox") return field.checked;
         if (field.type === "datetime-local" && field.value) {
             const original = dateTimes.get(field);
@@ -33,12 +34,12 @@ export function mountForm(form, panel) {
     setSubmissionKey(form, () => submissionKey);
     function showErrors(values) {
         errors.replaceChildren(); errors.hidden = !values || !Object.keys(values).length;
-        for (const field of fields) { (shuttles.get(field)?.control ?? field).removeAttribute("aria-invalid"); const error = errorOf(field); if (error) error.textContent = ""; }
+        for (const field of fields) { (choiceControls.get(field)?.control ?? field).removeAttribute("aria-invalid"); const error = errorOf(field); if (error) error.textContent = ""; }
         if (errors.hidden) return;
         const list = document.createElement("ul");
         for (const [key, entries] of Object.entries(values)) {
             const field = fields.find(input => input.dataset.field === key);
-            const control = shuttles.get(field)?.control ?? field;
+            const control = choiceControls.get(field)?.control ?? field;
             if (control) { control.setAttribute("aria-invalid", "true"); const error = errorOf(field); if (error) error.textContent = entries.join(" "); }
             for (const text of entries) {
                 const item = document.createElement("li");
@@ -69,7 +70,7 @@ export function mountForm(form, panel) {
             if (field.type === "datetime-local") dateTimes.set(field, { shown: field.value, value: blank(value) ? null : value });
             field.disabled = field.dataset.readonly === "true" || !!record.readOnlyFields?.includes(field.dataset.field)
                 || !(record.key ? record.capabilities.update : record.capabilities.create);
-            shuttles.get(field)?.display();
+            choiceControls.get(field)?.display(record);
             colors.get(field)?.display();
         }
         // A Display value shown as a link: its text is the field's value, and it leads somewhere only when there is a value
@@ -99,6 +100,11 @@ export function mountForm(form, panel) {
         try {
             state = await request(requestUrl());
             if (!form.isConnected) return;
+            if (searchSelects.length) {
+                const { mountSearchSelect } = await import("./search-select.js");
+                if (!form.isConnected) return;
+                for (const root of searchSelects) choiceControls.set(root.querySelector("[data-field]"), mountSearchSelect(root));
+            }
             display(state.record); message.textContent = "";
             // Blocks that follow the record, such as Attachments, learn which record is shown.
             form.dispatchEvent(new CustomEvent("app-form:loaded", { bubbles: true, detail: { record: state.record, definitionVersion: state.definitionVersion } }));
@@ -130,7 +136,7 @@ export function mountForm(form, panel) {
                 const original = dateTimes.get(field);
                 value = value === original.shown ? original.value : fromLocalInput(value);
             }
-            else if (value === "" && field.dataset.kind !== "shuttle") value = null;
+            else if (value === "" && !["shuttle", "csv"].includes(field.dataset.kind)) value = null;
             values[field.dataset.field] = value;
         }
         // The pending rows of the form's tabular blocks go with the record, so the server saves them together.
@@ -233,6 +239,9 @@ export function mountForm(form, panel) {
     form.addEventListener("submit", event => { event.preventDefault(); submit(); });
     form.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => submit(true)));
     load();
-    return () => { for (const widget of antiSpam) widget.dispose(); };
+    return () => {
+        for (const widget of antiSpam) widget.dispose();
+        for (const widget of choiceControls.values()) widget.dispose?.();
+    };
 }
 // Opening an Attachments block's Upload dialog fetches the locally packaged Uppy modules and stylesheet once.

@@ -29,10 +29,10 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
         form = await conditions.ForFormAsync(form, member, ReadBaseline, false, ct);
         if (baseline is not null && await baseline is { Record: null } unavailable) return Result(unavailable);
         if (form.ViewOnly) return new(403);
-        if ((form.ExcludedFields.Count > 0 || form.ReadOnlyFields.Count > 0) && context.FormData.Count > 0)
+        if (form.ReadOnlyFields.Count > 0 && context.FormData.Count > 0)
         {
             var controls = new Dictionary<string, string>(context.FormData, StringComparer.OrdinalIgnoreCase);
-            foreach (var field in form.ExcludedFields.Concat(form.ReadOnlyFields)) controls.Remove(field);
+            foreach (var field in form.ReadOnlyFields) controls.Remove(field);
             context = context with { FormData = controls };
         }
         if (operation == FormOperation.Delete) {
@@ -73,9 +73,8 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
             // Omission preserves the current value. Explicit null remains a deliberate change.
             var merged = current.Record.Values.Where(p => form.Resource.Fields.Any(f => f.Key == p.Key && !f.ReadOnly)).ToDictionary(p => p.Key, p => p.Value);
             foreach (var value in values.EnumerateObject()) merged[value.Name] = value.Value.Clone();
-            var writableBindings = form.Fields.Where(f => f.Content.ContentType.Alias != "appDisplay" && !f.Content.Value<bool>("readOnly"))
+            var writableBindings = form.Fields.Where(form.CanWrite)
                 .Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
-            writableBindings.ExceptWith(form.ReadOnlyFields);
             var mergedErrors = form.Validate(JsonSerializer.SerializeToElement(merged.Where(p => writableBindings.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value)), false);
             if (mergedErrors.Count > 0) return Result(new(422, Errors: mergedErrors));
             values = JsonSerializer.SerializeToElement(merged);
@@ -104,16 +103,16 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
             var effective = new Dictionary<string, object?>(ruleRecord.Values);
             foreach (var property in values.EnumerateObject()) effective[property.Name] = property.Value;
             var required = form.Fields.Where(b => b.Content.Value<bool>("required")).Select(b => b.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
-            var ruleErrors = FieldRule.Validate(form.Rules.Where(r => !form.ReadOnlyFields.Contains(r.Field)).ToArray(),
+            var ruleErrors = FieldRule.Validate(form.Rules.Where(r => !form.IsFieldReadOnly(r.Field)).ToArray(),
                 JsonSerializer.SerializeToElement(effective), submission.Values, ruleRecord, required);
             if (ruleErrors.Count > 0) return Result(new(422, Errors: ruleErrors));
         }
         var choiceErrors = await lists.ValidateAsync(form, values, context, ct, stored?.Values);
         if (choiceErrors.Count > 0) return Result(new(422, Errors: choiceErrors));
-        // SQL merges partial updates with the row under its write lock. Leave excluded columns out so a concurrent
+        // SQL merges partial updates with the row under its write lock. Leave read-only and excluded columns out so a concurrent
         // staff edit survives even on a source configured for last-write-wins.
-        if (key is not null && form.Resource is SqlDataSource && (form.ExcludedFields.Count > 0 || form.ReadOnlyFields.Count > 0))
-            values = JsonSerializer.SerializeToElement(values.EnumerateObject().Where(p => !form.ExcludedFields.Contains(p.Name) && !form.ReadOnlyFields.Contains(p.Name))
+        if (key is not null && form.Resource is SqlDataSource && form.ReadOnlyFields.Count > 0)
+            values = JsonSerializer.SerializeToElement(values.EnumerateObject().Where(p => !form.IsFieldReadOnly(p.Name))
                 .ToDictionary(p => p.Name, p => p.Value));
         if (details is not null) return await SaveWithDetailsAsync(form, key, values, submission.Checksum, details, context, operation, member, antiforgeryToken, ct);
         var result = key is null ? await form.Resource.CreateAsync(values, context, ct)
@@ -217,7 +216,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
             return DetailRefusal(details[0].Key, 422, null, new Dictionary<string, string[]> { [""] = ["This record keeps no key, so its rows cannot be saved with it."] }, record);
         foreach (var detail in details)
         {
-            if (form.DeniedBlocks.Contains(detail.Key)) return DetailRefusal(detail.Key, 403, null, null, record, answers);
+            if (form.IsReadOnly(detail.Key)) return DetailRefusal(detail.Key, 403, null, null, record, answers);
             var rows = await detail.Source.SaveRowsAsync(new DataSourceScope(detail.Block.LinkField, owner), detail.Changes, detail.Context, detail.Block.MaxRows, ct);
             TabularOperations.Audit(tabularLogger, "save", detail.Source.Alias, form.Resource.Alias, owner, member, rows.Status);
             if (rows.Status != 200) return DetailRefusal(detail.Key, rows.Status, rows.Index, rows.Errors, record, answers);
@@ -229,7 +228,7 @@ internal sealed class FormSubmissionService(AntiSpamGate antiSpam, ListOfValuesS
     /// <summary>A block's rows as its own endpoint answers them, with the block's key.</summary>
     private static async Task<object> DetailAnswerAsync(FormDetail detail, FormDefinition form, string? owner, DataSourceRowsResult rows, ClaimsPrincipal member,
         Func<string?> antiforgeryToken, CancellationToken ct)
-        => new { block = detail.Key, list = await TabularOperations.Answer(detail.Block with { ReadOnly = form.ReadOnlyBlocks.Contains(detail.Key) || detail.Block.ReadOnly },
+        => new { block = detail.Key, list = await TabularOperations.Answer(detail.Block with { ReadOnly = form.IsReadOnly(detail.Key) || detail.Block.ReadOnly },
             detail.Source, member, form.Resource.Alias, owner, rows, antiforgeryToken, ct) };
 
     private void Audit(FormOperation operation, string resource, string? key, ClaimsPrincipal member, int status)

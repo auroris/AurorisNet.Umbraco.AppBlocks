@@ -19,14 +19,30 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
     public IReadOnlyList<BlockGridItem> AntiSpam { get; init; } = [];
     public string Revision => $"{Page.UpdateDate.Ticks}:{Culture}{ListsRevision}:{Resource.ContractVersion}";
     public IReadOnlyList<FieldRule> Rules { get; init; } = [];
+    private IReadOnlyList<BlockGridItem>? allFields;
+    internal IReadOnlyList<BlockGridItem> AllFields { get => allFields ?? Fields; init => allFields = value; }
+    private IReadOnlyList<FieldRule>? allRules;
+    internal IReadOnlyList<FieldRule> AllRules { get => allRules ?? Rules; init => allRules = value; }
+    private IReadOnlyList<BlockGridItem>? allAntiSpam;
+    internal IReadOnlyList<BlockGridItem> AllAntiSpam { get => allAntiSpam ?? AntiSpam; init => allAntiSpam = value; }
     internal IReadOnlySet<Guid> DeniedBlocks { get; init; } = FrozenSet<Guid>.Empty;
     internal IReadOnlySet<Guid> InvisibleBlocks { get; init; } = FrozenSet<Guid>.Empty;
     internal IReadOnlySet<string> ExcludedFields { get; init; } = FrozenSet<string>.Empty;
     internal IReadOnlyList<BlockGridItem> Ancestors { get; init; } = [];
     internal IReadOnlySet<Guid> ReadOnlyBlocks { get; init; } = FrozenSet<Guid>.Empty;
     internal IReadOnlySet<string> ReadOnlyFields { get; init; } = FrozenSet<string>.Empty;
-    /// <summary>Whether a Read Only condition on this block or an enclosing block matched for this caller and record.</summary>
-    public bool IsReadOnly(BlockGridItem item) => ReadOnlyBlocks.Contains(item.ContentKey);
+    /// <summary>Whether Security omitted or a Read Only condition locked this block (or an enclosing block) for this caller and record.</summary>
+    public bool IsReadOnly(BlockGridItem item) => IsReadOnly(item.ContentKey);
+    /// <summary>Whether Security omitted or a Read Only condition locked the block <paramref name="blockKey"/>.</summary>
+    public bool IsReadOnly(Guid blockKey) => DeniedBlocks.Contains(blockKey) || ReadOnlyBlocks.Contains(blockKey);
+    /// <summary>Whether Security omitted or a Read Only condition locked the field <paramref name="field"/>.</summary>
+    internal bool IsFieldReadOnly(string field) => ExcludedFields.Contains(field) || ReadOnlyFields.Contains(field);
+    /// <summary>Whether a field block on this form can accept submitted changes for this caller and record.</summary>
+    internal bool CanWrite(BlockGridItem block)
+        => Includes(block) && !IsReadOnly(block)
+            && block.Content.ContentType.Alias != "appDisplay"
+            && !block.Content.Value<bool>("readOnly")
+            && (block.Content.Value<string>("field") is not { } field || !IsFieldReadOnly(field));
     public IEnumerable<FieldRule> ClientRules => Rules.Where(rule => rule.Conditions.All(c => !ExcludedFields.Contains(c.Field) && !ExcludedFields.Contains(c.OtherField)));
     public bool Includes(BlockGridItem item) => !DeniedBlocks.Contains(item.ContentKey);
     public bool IsVisible(BlockGridItem item) => !InvisibleBlocks.Contains(item.ContentKey);
@@ -72,8 +88,9 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         var fields = children.Where(b => AppBlockSchema.FieldAliases.Contains(b.Content.ContentType.Alias)).ToArray();
         var bindings = fields.Select(f => f.Content.Value<string>("field") ?? "").ToArray();
         if (bindings.Distinct(StringComparer.Ordinal).Count() != bindings.Length || bindings.Any(binding => !resource.Fields.Any(f => f.Key == binding))) return null;
-        if (fields.Any(f => !AppBlocksValidator.Compatible(f.Content.ContentType.Alias, resource.Fields.First(r => r.Key == f.Content.Value<string>("field")), !string.IsNullOrWhiteSpace(f.Content.Value<string>("listOfValues"))))) return null;
-        var selected = fields.Where(f => f.Content.ContentType.Alias is "appSelect" or AppBlockSchema.ShuttleAlias).Select(f => f.Content.Value<string>("listOfValues")).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
+        if (fields.Any(f => !AppBlocksValidator.Compatible(f.Content.ContentType.Alias, resource.Fields.First(r => r.Key == f.Content.Value<string>("field")),
+            !string.IsNullOrWhiteSpace(f.Content.Value<string>("listOfValues")), AppBlockField.StoresMultipleValues(f.Content)))) return null;
+        var selected = fields.Where(f => AppBlockField.UsesChoices(f.Content.ContentType.Alias)).Select(f => f.Content.Value<string>("listOfValues")).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
         if (selected.Length > 0 && definitions is not null) await definitions.LoadAsync();
         var lists = selected.Select(s => definitions?.FindList(s)).ToArray();
         if (lists.Any(list => list is null)) return null;
@@ -106,7 +123,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         foreach (var property in input.EnumerateObject()) {
             if (!seen.Add(property.Name)) { errors[property.Name] = ["Duplicate field."]; continue; }
             var field = Resource.Fields.FirstOrDefault(f => f.Key == property.Name);
-            if (field is null || !bindings.TryGetValue(property.Name, out var block) || ReadOnlyFields.Contains(property.Name) || field.ReadOnly || block.Content.Value<bool>("readOnly") || block.Content.ContentType.Alias == "appDisplay") {
+            if (field is null || !bindings.TryGetValue(property.Name, out var block) || field.ReadOnly || !CanWrite(block)) {
                 errors[property.Name] = ["This field cannot be changed through this form."]; continue;
             }
             var value = property.Value;
@@ -115,9 +132,9 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
                     && (color.Length != 7 || color[0] != '#' || !color.Skip(1).All(char.IsAsciiHexDigit)))) {
                 errors[field.Key] = ["Enter a color in #RRGGBB format, such as #2a5d8f."]; continue;
             }
-            var shuttle = block.Content.ContentType.Alias == AppBlockSchema.ShuttleAlias;
+            var multiple = AppBlockField.StoresMultipleValues(block.Content);
             IReadOnlyList<string> selected = [];
-            if (shuttle && value.ValueKind == JsonValueKind.String && !ShuttleValue.TryParse(value.GetString(), out selected)) {
+            if (multiple && value.ValueKind == JsonValueKind.String && !ShuttleValue.TryParse(value.GetString(), out selected)) {
                 errors[field.Key] = ["Use a single line of CSV with unique, non-empty values."]; continue;
             }
             var empty = value.ValueKind == JsonValueKind.Null || value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString());
@@ -137,13 +154,13 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
             if (value.ValueKind == JsonValueKind.String && field.MaxLength is { } max && value.GetString()!.Length > max) errors[field.Key] = [$"Use at most {max} characters."];
             if (field.Kind == "number" && Number(value, out var numeric)
                 && (field.Minimum is { } min && numeric < min || field.Maximum is { } upper && numeric > upper)) errors[field.Key] = ["The number is outside the allowed range."];
-            if (shuttle) {
+            if (multiple) {
                 if (field.Choices is not null && selected.Any(item => !field.Choices.Any(choice => choice.Value == item))) errors[field.Key] = ["Select available choices."];
             }
             else if (field.Choices is not null && (value.ValueKind != JsonValueKind.String || !field.Choices.Any(choice => choice.Value == value.GetString()))) errors[field.Key] = ["Select an available choice."];
         }
         if (creating) {
-            foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly && !ExcludedFields.Contains(f.Key) && !ReadOnlyFields.Contains(f.Key)))
+            foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly && !IsFieldReadOnly(f.Key)))
                 if ((field.Required || bindings.TryGetValue(field.Key, out var block) && block.Content.Value<bool>("required") && !HasAccessRule(field.Key))
                     && field.Key != Relationship?.LinkField && !input.TryGetProperty(field.Key, out _)) errors[field.Key] = ["A value is required."];
         }
@@ -160,10 +177,11 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
     public FormRecord Project(FormRecord record)
     {
         var fields = Fields.Select(f => f.Content.Value<string>("field")!).ToHashSet(StringComparer.Ordinal);
+        var readOnly = ReadOnlyFields.Where(fields.Contains).ToArray();
         return record with {
             Values = record.Values.Where(p => fields.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value),
             Capabilities = ViewOnly ? new() : record.Capabilities,
-            ReadOnlyFields = ReadOnlyFields.Count > 0 ? ReadOnlyFields.Where(fields.Contains).ToArray() : null,
+            ReadOnlyFields = readOnly.Length > 0 ? readOnly : null,
         };
     }
 

@@ -175,6 +175,21 @@ public sealed class AnonymousAccessSiteTests
         }
         using (var sent = await Update(staff, new { title = "Reopened", owner = "Changed" }))
             Assert.Equal(HttpStatusCode.UnprocessableEntity, sent.StatusCode);
+        using (var sent = await Update(staff, new { title = "Reopened" }))
+        {
+            sent.EnsureSuccessStatusCode();
+            // Post-save evaluation recomputes from the full published form, so the newly-allowed field reappears immediately.
+            Assert.Contains("Reviewed", await sent.Content.ReadAsStringAsync());
+        }
+
+        // Report links following the form page omit both Open and Create when the target form's Security refuses the visitor.
+        var privateLinks = "/api/reports/" + PublicSite.ReportName(PublicSite.LinksPage, PublicSite.PrivateLinks) + "/schema";
+        var visitorLinks = await Load(visitor, privateLinks);
+        Assert.False(visitorLinks.TryGetProperty("createLink", out var visitorCreate) && visitorCreate.ValueKind != JsonValueKind.Null);
+        Assert.False(visitorLinks.TryGetProperty("editLink", out var visitorEdit) && visitorEdit.ValueKind != JsonValueKind.Null);
+        var staffLinks = await Load(staff, privateLinks);
+        Assert.Contains("/staff-only/", staffLinks.GetProperty("createLink").GetProperty("url").GetString());
+        Assert.Contains("/staff-only/", staffLinks.GetProperty("editLink").GetProperty("urlTemplate").GetString());
 
         var initial = await Load(visitor, api);
         using var created = await Post(visitor, api, initial.GetProperty("antiforgeryToken").GetString(), initial, new { title = "New submission" }, []);

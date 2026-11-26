@@ -1,0 +1,10 @@
+{
+  "name": "appblocks-tom-select-assets",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "tom-select": "2.7.0"
+  }
+}

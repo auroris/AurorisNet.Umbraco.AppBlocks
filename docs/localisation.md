@@ -134,6 +134,9 @@ The browser runtime formats dates, times and file sizes for the page's language,
 | `yes` | Yes |
 | `no` | No |
 | `currentValue` | {value} (current value) |
+| `noMatchingChoices` | No matching choices |
+| `removeChoice` | Remove selection |
+| `chooseAvailable` | Select an available choice. |
 | `requestFailed` | The request could not be completed. |
 | `requestFailedRetained` | The request could not be completed. Your entered values have been retained. |
 | `signInForm` | Sign in to use this form. |
@@ -237,6 +240,7 @@ The browser runtime formats dates, times and file sizes for the page's language,
 | `delete` | Delete |
 | `print` | Print |
 | `selectValue` | Select a value |
+| `searchChoices` | Search choices |
 | `choicesUnavailable` | The choices for this field are not available. Try reloading the page. |
 | `chooseColorFor` | Choose a color for {label} |
 | `clearColorFor` | Clear color for {label} |

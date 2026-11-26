@@ -207,6 +207,7 @@ public sealed class AppReportDefinitionStore(
 
     private async Task<bool> AllowsAsync(FormDefinition form, System.Security.Claims.ClaimsPrincipal caller, IReadOnlyDictionary<string, string> parameters, bool update, CancellationToken ct)
     {
+        if (conditions is not null && !await conditions.AllowsPathAsync(form.Page, form.Block.ContentKey, caller, form.Culture, ct)) return false;
         if (form.ViewOnly || FormResourceAccess.Refusal(form.Resource, caller) is not null) return false;
         if (form.Resource is SqlDataSource source && (!(update ? source.Definition.AllowUpdate : source.Definition.AllowInsert) || !await source.MayWriteAsync(caller, ct))) return false;
         // A form class is asked through its Initialize, which the form page asks too and which must be safe to repeat, with the parameters

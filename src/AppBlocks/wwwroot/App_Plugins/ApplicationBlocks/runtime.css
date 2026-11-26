@@ -146,6 +146,14 @@
 .app-form > h2 { margin: 0 0 1.25rem; font-size: 1.4rem; line-height: 1.25; letter-spacing: -.01em; }
 .app-form-body { border: 0; margin: 0; padding: 0; min-width: 0; }
 .app-form-body:disabled { opacity: .7; }
+.app-form-body:disabled .app-search-select { pointer-events: none; }
+.app-search-select .ts-wrapper, .app-search-select .ts-dropdown { font: inherit; color: var(--app-text); }
+.app-search-select .ts-wrapper .ts-control {
+    font: inherit; background: var(--app-surface); color: var(--app-text);
+    border: 1px solid var(--app-border-strong); border-radius: var(--app-radius-sm); padding: var(--app-control-padding);
+}
+.app-search-select .ts-wrapper.focus .ts-control { border-color: var(--app-accent); box-shadow: var(--app-focus); }
+.app-search-select .ts-control input:not([type=checkbox]) { width: auto; padding: 0; background: transparent; border: 0; box-shadow: none; }
 .app-form-field { display: flex; flex-direction: column; gap: .35rem; margin: 0 0 .25rem; min-width: 0; }
 .app-form-field label { font-weight: 600; font-size: .9375rem; line-height: 1.3; }
 .app-form-field label span[aria-hidden] { color: var(--app-danger); }

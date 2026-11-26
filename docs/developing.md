@@ -95,6 +95,10 @@ It also holds `SchemaCheck` and `SchemaListing`, which an application's tests ru
 - The same holds for `ContentListing`, which lists a site's documents and their blocks for `ContentCheck` to compare with a file. `ContentListingTests` covers both.
 - Keep the package free of any test framework reference, because sites test with different runners.
 
+## Tom Select assets
+
+The searchable select uses Tom Select's browser module and stylesheet. To refresh its packaged assets after updating the pinned dependency, run `npm ci` and `npm run build` in `tools/tom-select`.
+
 ## Uppy assets
 
 The attachment uploader is a bundle of Uppy's Core, Dashboard and XHR Upload. Its pinned dependencies and bundler are in `tools/uppy`. After updating them, run `npm ci` and `npm run build` there. Commit the lockfile and the generated `uppy.js`, `uppy.css` and `uppy-LICENSE.txt` under `src/AppBlocks/wwwroot/App_Plugins/ApplicationBlocks`.

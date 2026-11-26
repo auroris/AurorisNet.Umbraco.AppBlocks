@@ -182,5 +182,57 @@ public sealed class AccountPickerHttpTests
         Assert.DoesNotContain("data-app-account-picker", html);
         Assert.Equal(2, System.Text.RegularExpressions.Regex.Count(html, "(?s)<input [^>]*name=\"notes\"[^>]* disabled"));
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "(?s)<input [^>]*name=\"item\"[^>]* disabled"));
+
+        // A non-insertable form with an item-based Read Only picker cannot be bypassed by omitting appPageQuery.
+        var rootSources = contents.GetRootContent().Single(c => c.ContentType.Alias == AppBlocks.DataSources.DataSourceSchema.RootAlias);
+        var updateOnly = contents.Create("Orders lines update only", rootSources.Id, AppBlocks.DataSources.DataSourceSchema.SqlAlias);
+        updateOnly.SetValue("access", "Public");
+        updateOnly.SetValue("alias", "orders.lines.updateOnly");
+        updateOnly.SetValue("connection", AppBlocks.Connections.ConnectionCatalog.ApplicationConnection);
+        updateOnly.SetValue("source", "ORDER_LINES");
+        updateOnly.SetValue("keyColumns", "LINE_ID");
+        updateOnly.SetValue("allowInsert", 0);
+        updateOnly.SetValue("allowUpdate", 1);
+        updateOnly.SetValue("allowDelete", 0);
+        updateOnly.SetValue("concurrencyMode", nameof(AppBlocks.DataSources.DataSourceConcurrency.Checksum));
+#pragma warning disable CS0618
+        Assert.True(contents.Save(updateOnly).Success);
+        Assert.True(contents.Publish(updateOnly, ["*"]).Success);
+#pragma warning restore CS0618
+        var guardedPicker = BlockPages.Add(content, UmbracoAccountPickerBlock.AliasName, ("identityField", "notes"), ("nameField", "item"), ("accountType", "Members"));
+        var readOnlyCondition = Guid.NewGuid().ToString();
+        var pickerData = content["contentData"]!.AsArray().Single(item => item!["key"]!.GetValue<string>() == guardedPicker["contentKey"]!.GetValue<string>())!;
+        pickerData["values"]!.AsArray().Add(new JsonObject {
+            ["alias"] = BlockConditions.ReadOnly, ["culture"] = null, ["segment"] = null,
+            ["value"] = new JsonObject {
+                ["contentData"] = new JsonArray(new JsonObject {
+                    ["key"] = readOnlyCondition, ["contentTypeKey"] = AppBlockSchema.Key("appReadOnlyCondition").ToString(),
+                    ["values"] = new JsonArray(
+                        new JsonObject { ["alias"] = "comparison", ["culture"] = null, ["segment"] = null, ["value"] = "Is" },
+                        new JsonObject { ["alias"] = "item", ["culture"] = null, ["segment"] = null, ["value"] = "item" },
+                        new JsonObject { ["alias"] = "literal", ["culture"] = null, ["segment"] = null, ["value"] = "Bearing" }),
+                }),
+                ["settingsData"] = new JsonArray(),
+                ["expose"] = new JsonArray(new JsonObject { ["contentKey"] = readOnlyCondition, ["culture"] = null, ["segment"] = null }),
+                ["layout"] = new JsonObject { ["Umbraco.BlockList"] = new JsonArray(new JsonObject { ["contentKey"] = readOnlyCondition, ["settingsKey"] = null }) },
+            },
+        });
+        var guardedForm = BlockPages.FormBlock(content, "orders.lines.updateOnly", [guardedPicker,
+            BlockPages.Add(content, "appText", ("field", "notes")), BlockPages.Add(content, "appText", ("field", "item"))], []);
+        BlockPages.Layout(content).Add(guardedForm);
+#pragma warning disable CS0618
+        page.SetValue(BlockSite.BodyAlias, content.ToJsonString());
+        Assert.True(contents.Save(page).Success);
+        published = contents.Publish(page, ["*"]);
+        Assert.True(published.Success, string.Join(" ", published.EventMessages?.GetAll().Select(m => m.Message) ?? []));
+#pragma warning restore CS0618
+        var guardedKey = Guid.Parse(guardedPicker["contentKey"]!.ToString());
+        var pickerUrl = $"/api/account-picker/{page.Key}/{guardedKey}";
+        // Omitting appPageQuery hits InitializeAsync (Create = false) and must not bypass the locked picker.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(pickerUrl + "?s=Omitted")).StatusCode);
+        // Record 1 has item = "Bearing" (locked) -> 403.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(pickerUrl + "?s=Omitted&appPageQuery=" + Uri.EscapeDataString("?id=1"))).StatusCode);
+        // Record 2 has item = "Sprocket" (editable) -> 200.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(pickerUrl + "?s=Omitted&appPageQuery=" + Uri.EscapeDataString("?id=2"))).StatusCode);
     }
 }

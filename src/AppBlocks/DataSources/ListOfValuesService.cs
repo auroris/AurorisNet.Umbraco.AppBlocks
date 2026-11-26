@@ -22,7 +22,7 @@ public sealed class ListOfValuesService(PublishedDataCatalog catalog, DataSource
     {
         var errors = new Dictionary<string, string[]>();
         if (input.ValueKind != JsonValueKind.Object) return errors;
-        foreach (var block in form.Fields.Where(block => block.Content.ContentType.Alias is "appSelect" or AppBlockSchema.ShuttleAlias))
+        foreach (var block in form.Fields.Where(block => AppBlockField.UsesChoices(block.Content.ContentType.Alias)))
         {
             var selection = block.Content.Value<string>("listOfValues");
             var field = block.Content.Value<string>("field")!;
@@ -31,7 +31,7 @@ public sealed class ListOfValuesService(PublishedDataCatalog catalog, DataSource
             try
             {
                 var choices = await ChoicesAsync(selection, context, ct);
-                if (block.Content.ContentType.Alias == AppBlockSchema.ShuttleAlias)
+                if (AppBlockField.StoresMultipleValues(block.Content))
                 {
                     // Retired items already on this record may be reordered or removed, but cannot be added to another record.
                     ShuttleValue.TryParse(stored?.GetValueOrDefault(field)?.ToString(), out var previousItems);

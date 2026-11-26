@@ -156,6 +156,11 @@ export const appBlockTypes = [
     "name": "Select"
   },
   {
+    "alias": "appSearchSelect",
+    "key": "8ca20eb0-0547-d09b-9fab-f28c720955ba",
+    "name": "Searchable select"
+  },
+  {
     "alias": "appShuttle",
     "key": "a847a825-df14-a3ed-8cbe-a3f986bdb2eb",
     "name": "Shuttle"

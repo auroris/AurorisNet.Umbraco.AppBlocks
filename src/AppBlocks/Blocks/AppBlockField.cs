@@ -15,6 +15,10 @@ public static class AppBlockField
     public const string DefaultValueAlias = "defaultValue";
     public const string WidthAlias = "width";
     public const string PlaceholderAlias = "placeholder";
+    public const string MultipleAlias = "allowMultiple";
+    public static bool UsesChoices(string alias) => alias is "appSelect" or AppBlockSchema.SearchSelectAlias or AppBlockSchema.ShuttleAlias;
+    public static bool StoresMultipleValues(IPublishedElement block) => block.ContentType.Alias == AppBlockSchema.ShuttleAlias
+        || block.ContentType.Alias == AppBlockSchema.SearchSelectAlias && block.Value<bool>(MultipleAlias);
     /// <summary>A Display value's own setting: the address its value links to, with the record's fields in braces.</summary>
     public const string LinkTemplateAlias = "linkTemplate";
 

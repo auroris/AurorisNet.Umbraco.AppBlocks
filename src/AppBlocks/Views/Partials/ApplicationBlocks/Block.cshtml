@@ -181,6 +181,8 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
         var required = field.Required || block.Value<bool>("required");
         var label = Property("label") ?? field.Label;
         var placeholder = Property(AppBlockField.PlaceholderAlias);
+        var multiple = AppBlockField.StoresMultipleValues(block);
+        var kind = alias == AppBlockSchema.ShuttleAlias ? "shuttle" : multiple ? "csv" : field.Kind;
         // Resolved now and applied by the runtime to a new record's empty field; null leaves the field as the resource starts it.
         var defaultValue = Model.Variables?.Resolve(Property(AppBlockField.DefaultValueAlias), field.Kind);
         // Razor writes a data-* attribute even when its value is null, so this one is written whole, and only when there is a default.
@@ -188,15 +190,16 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
         if (AppBlockField.IsHidden(block))
         {
             @* Bound and submitted like any other field, but not shown; Items.cshtml gives it no grid cell. *@
-            <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="@(alias == AppBlockSchema.ShuttleAlias ? "shuttle" : field.Kind)" data-readonly="@readOnly.ToString().ToLowerInvariant()"
+            <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="@kind" data-readonly="@readOnly.ToString().ToLowerInvariant()"
                 data-label="@label" @defaultAttribute />
         }
         else
         {
             // A Display value with a link template shows its value as a link, which no label can point at; the link names the label instead.
             var linkTemplate = alias == "appDisplay" ? Property(AppBlockField.LinkTemplateAlias) : null;
+            var labelTarget = alias switch { AppBlockSchema.ShuttleAlias => id + "-available", AppBlockSchema.SearchSelectAlias => id + "-picker", _ => id };
             <div class="app-form-field">
-                <label id="@id-label" for="@(linkTemplate is not null ? null : alias == AppBlockSchema.ShuttleAlias ? id + "-available" : id)">@(label)@if (required || Model.Form.Rules.Any(rule => rule.Field == key && rule.Action == "Require")) { <span data-required-mark aria-hidden="true" hidden="@(!required)"> *</span> }</label>
+                <label id="@id-label" for="@(linkTemplate is not null ? null : labelTarget)">@(label)@if (required || Model.Form.Rules.Any(rule => rule.Field == key && rule.Action == "Require")) { <span data-required-mark aria-hidden="true" hidden="@(!required)"> *</span> }</label>
                 @if (alias == "appTextArea")
                 {
                     <textarea id="@id" name="@key" data-field="@key" data-kind="@field.Kind" data-readonly="@readOnly.ToString().ToLowerInvariant()"
@@ -215,7 +218,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                         <button type="button" data-color-clear disabled="@(readOnly || locked)" aria-label="@Text["clearColorFor", "Clear color for {label}"].Replace("{label}", label)">@Text["clear", "Clear"]</button>
                     </div>
                 }
-                else if (alias is "appSelect" or AppBlockSchema.ShuttleAlias)
+                else if (AppBlockField.UsesChoices(alias))
                 {
                     IReadOnlyList<FormChoice> choices = field.Choices ?? [];
                     string? listProblem = null;
@@ -228,7 +231,19 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                         }
                         catch (Exception error) when (error is not OperationCanceledException) { choices = []; listProblem = Text["choicesUnavailable", "The choices for this field are not available. Try reloading the page."]; }
                     }
-                    @if (alias == AppBlockSchema.ShuttleAlias)
+                    @if (alias == AppBlockSchema.SearchSelectAlias)
+                    {
+                        Assets.AddStylesheet(Url.Content("~/App_Plugins/ApplicationBlocks/tom-select.css"));
+                        <div class="app-search-select" data-app-search-select data-required="@required.ToString().ToLowerInvariant()">
+                            <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="@kind" data-readonly="@readOnly.ToString().ToLowerInvariant()" data-label="@label" @defaultAttribute />
+                            <select id="@labelTarget" multiple="@multiple" disabled="@(readOnly || locked)" aria-describedby="@id-help @id-error"
+                                data-placeholder="@(placeholder ?? Text["searchChoices", "Search choices"])">
+                                @foreach (var choice in choices.Where(c => multiple ? ShuttleValue.IsItemValue(c.Value) : !string.IsNullOrWhiteSpace(c.Value)).DistinctBy(c => c.Value, StringComparer.Ordinal))
+                                { <option value="@choice.Value">@choice.Label</option> }
+                            </select>
+                        </div>
+                    }
+                    else if (alias == AppBlockSchema.ShuttleAlias)
                     {
                         <div class="app-shuttle" data-app-shuttle data-required="@required.ToString().ToLowerInvariant()" role="group" aria-labelledby="@id-label">
                             <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="shuttle" data-readonly="@readOnly.ToString().ToLowerInvariant()" data-label="@label" @defaultAttribute />

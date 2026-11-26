@@ -330,6 +330,14 @@
     },
     {
       "type": "blockEditorCustomView",
+      "alias": "AppBlocks.Preview.appSearchSelect",
+      "name": "Searchable select preview",
+      "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
+      "forContentTypeAlias": "appSearchSelect",
+      "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "blockEditorCustomView",
       "alias": "AppBlocks.Preview.appShuttle",
       "name": "Shuttle preview",
       "element": "/App_Plugins/ApplicationBlocks/block-preview.js",

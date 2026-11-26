@@ -57,7 +57,7 @@ namespace AppBlocks.InteractiveReports.Tests;
 internal sealed class PublicSite : IAsyncDisposable
 {
     public static readonly Guid ContactPage = Key("contact"), ContactForm = Key("contact-form");
-    public static readonly Guid ReviewPage = Key("review"), ReviewForm = Key("review-form"), PrivatePage = Key("staff-only");
+    public static readonly Guid ReviewPage = Key("review"), ReviewForm = Key("review-form"), PrivatePage = Key("staff-only"), PrivateLinks = Key("links:staff-only");
     public static readonly Guid ReadOnlyPage = Key("read-only-review"), ReadOnlyForm = Key("read-only-form"), ArchivePage = Key("archive"), ArchiveLinks = Key("links:archive");
     public static readonly Guid RefusingPage = Key("refusing"), RefusingForm = Key("refusing-form");
     public static readonly Guid EnginePage = Key("engine"), EngineForm = Key("engine-form");
@@ -370,7 +370,7 @@ internal sealed class PublicSite : IAsyncDisposable
         Page("Links", LinksPage, home.Id, LinkedReports(reviewers.Result!.Key, [
             .. from link in new[] { "create", "open" } from choice in LinkChoices
                select (LinkReport(link, choice), WritersPage, link == "create" ? choice : "Hidden", link == "open" ? choice : "Hidden"),
-            (RefusingLinks, RefusingPage, "", ""), (ArchiveLinks, ArchivePage, "Form page decides", "Form page decides")]));
+            (RefusingLinks, RefusingPage, "", ""), (ArchiveLinks, ArchivePage, "Form page decides", "Form page decides"), (PrivateLinks, PrivatePage, "Form page decides", "Form page decides")]));
         var line = FormBlock(LinePanel, "public.engine", Field("title", "Line title"));
         var binding = (JsonObject)line.Values.Single(v => v.Alias == "formInterface").Value;
         binding["contentData"]![0]!["values"]!.AsArray().Add(new JsonObject { ["alias"] = "keyParameter", ["value"] = "lineId" });

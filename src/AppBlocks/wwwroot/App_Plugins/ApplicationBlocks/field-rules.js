@@ -42,12 +42,13 @@ export function matchesCondition(c, values) {
     }
 }
 
-export function mountFieldRules(form, fields, shuttles, colors, readValue) {
+export function mountFieldRules(form, fields, choiceControls, colors, readValue) {
     const rules = JSON.parse(form.dataset.fieldRules || "[]");
     if (!rules.length) return () => {};
     const controls = new Map(fields.map(field => [field.dataset.field, field]));
     const groups = Map.groupBy(rules, rule => rule.field);
-    const fixed = new Map(fields.map(field => [field, field.required || field.closest("[data-app-shuttle]")?.dataset.required === "true"]));
+    const choiceRoot = field => field.closest("[data-app-shuttle], [data-app-search-select]");
+    const fixed = new Map(fields.map(field => [field, field.required || choiceRoot(field)?.dataset.required === "true"]));
     let record;
     function apply(current) {
         record = current;
@@ -80,13 +81,13 @@ export function mountFieldRules(form, fields, shuttles, colors, readValue) {
             if (!field) continue;
             const required = fixed.get(field) || rules.some(r => r.action === "Require" && matches(r));
             field.required = required && field.type !== "checkbox";
-            const root = field.closest("[data-app-shuttle]");
-            if (root) { root.dataset.required = String(required); shuttles.get(field)?.refresh(); }
+            const root = choiceRoot(field);
+            if (root) { root.dataset.required = String(required); choiceControls.get(field)?.refresh(); }
             colors.get(field)?.display();
             const marker = field.closest(".app-form-field")?.querySelector("[data-required-mark]");
             if (marker) marker.hidden = !required;
             const message = !field.disabled && String(values.get(name) ?? "").trim() && rules.find(r => r.action === "Validate" && !matches(r))?.message;
-            if (!root || message) (shuttles.get(field)?.control ?? field).setCustomValidity(message || "");
+            if (!root || message) (choiceControls.get(field)?.control ?? field).setCustomValidity(message || "");
         }
     }
     form.addEventListener("input", () => apply(record));

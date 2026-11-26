@@ -14,11 +14,17 @@ public sealed class PageCacheHeaders(IOptions<PageCacheOptions> settings, IHttpC
     public Task HandleAsync(RoutingRequestNotification notification, CancellationToken cancellationToken)
     {
         var mode = settings.Value.NoStorePages;
-        if (mode == NoStorePages.Off || http.HttpContext is not { } context) return Task.CompletedTask;
+        if (http.HttpContext is not { } context) return Task.CompletedTask;
         // Keep the original route's decision across Public Access's login/denied-page rewrite.
-        if (notification.RequestBuilder.PublishedContent is { } page
-            && (mode == NoStorePages.AllPages || AppBlockContent.IsInteractive(page, plugins, AppBlockContent.RequestCulture(context))))
-            context.Items[NoStoreRequest] = true;
+        if (notification.RequestBuilder.PublishedContent is { } page)
+        {
+            var culture = AppBlockContent.RequestCulture(context)
+                ?? (notification.RequestBuilder.Culture is { Length: > 0 } c && page.Cultures.ContainsKey(c) ? c : null);
+            if (mode == NoStorePages.AllPages
+                || mode == NoStorePages.AppBlocksPages && AppBlockContent.IsInteractive(page, plugins, culture)
+                || AppBlockContent.HasDynamicAccessConditions(page, culture))
+                context.Items[NoStoreRequest] = true;
+        }
         if (context.Items[NoStoreRequest] is not true) return Task.CompletedTask;
 
         context.KeepOutOfCaches();
