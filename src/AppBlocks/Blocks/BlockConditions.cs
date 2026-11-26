@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using AppBlocks.AccountPickers;
+using AppBlocks.Authentication;
 using AppBlocks.DataSources;
 using AppBlocks.Forms;
 using AppBlocks.Publishing;

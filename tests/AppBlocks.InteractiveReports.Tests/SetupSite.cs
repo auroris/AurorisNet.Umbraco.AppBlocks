@@ -84,7 +84,6 @@ internal sealed class SetupSite : IAsyncDisposable
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         var logs = new RecordingLoggerProvider();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
-            ["AppBlocks:WebsiteIdentity:IncludeBackOfficeUsers"] = "true",
             ["ConnectionStrings:umbracoDbDSN"] = $"Data Source={Path.Combine(root, "umbraco.db")};Pooling=False",
             ["ConnectionStrings:umbracoDbDSN_ProviderName"] = "Microsoft.Data.Sqlite",
             ["ConnectionStrings:AppBlocksDb"] = database.AccountConnection,
