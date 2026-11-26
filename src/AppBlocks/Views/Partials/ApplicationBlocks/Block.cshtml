@@ -233,11 +233,11 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                     }
                     @if (alias == AppBlockSchema.SearchSelectAlias)
                     {
-                        Assets.AddStylesheet(Url.Content("~/App_Plugins/ApplicationBlocks/tom-select.css"));
+                        Assets.PrependStylesheet(Url.Content("~/App_Plugins/ApplicationBlocks/tom-select.css"));
                         <div class="app-search-select" data-app-search-select data-required="@required.ToString().ToLowerInvariant()">
                             <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="@kind" data-readonly="@readOnly.ToString().ToLowerInvariant()" data-label="@label" @defaultAttribute />
                             <select id="@labelTarget" multiple="@multiple" disabled="@(readOnly || locked)" aria-describedby="@id-help @id-error"
-                                data-placeholder="@(placeholder ?? Text["searchChoices", "Search choices"])">
+                                data-placeholder="@(placeholder ?? Text["searchChoices", "Search choices"])" data-max-options="@(AppBlockField.MaxOptions(block) ?? 0)">
                                 @foreach (var choice in choices.Where(c => multiple ? ShuttleValue.IsItemValue(c.Value) : !string.IsNullOrWhiteSpace(c.Value)).DistinctBy(c => c.Value, StringComparer.Ordinal))
                                 { <option value="@choice.Value">@choice.Label</option> }
                             </select>

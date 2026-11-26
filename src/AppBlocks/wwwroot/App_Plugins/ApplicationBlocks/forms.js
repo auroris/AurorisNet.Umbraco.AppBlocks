@@ -97,11 +97,12 @@ export function mountForm(form, panel) {
     }
     async function load() {
         message.textContent = t("loading");
+        const searchSelectModule = searchSelects.length ? import("./search-select.js") : null;
         try {
             state = await request(requestUrl());
             if (!form.isConnected) return;
-            if (searchSelects.length) {
-                const { mountSearchSelect } = await import("./search-select.js");
+            if (searchSelectModule) {
+                const { mountSearchSelect } = await searchSelectModule;
                 if (!form.isConnected) return;
                 for (const root of searchSelects) choiceControls.set(root.querySelector("[data-field]"), mountSearchSelect(root));
             }

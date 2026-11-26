@@ -44,6 +44,14 @@ public sealed partial class AppPageAssets
     /// <summary>Links a stylesheet in the head, ahead of the inline styles so a page's own CSS wins a tie with it.</summary>
     public void AddStylesheet(string href) => Add(stylesheets, href);
 
+    /// <summary>Links a vendor stylesheet ahead of AppBlocks' runtime stylesheet so runtime tokens and site styles override it cleanly.</summary>
+    public void PrependStylesheet(string href)
+    {
+        var text = href?.Trim();
+        if (string.IsNullOrEmpty(text) || stylesheets.Contains(text, StringComparer.Ordinal)) return;
+        stylesheets.Insert(0, text);
+    }
+
     /// <summary>Adds a CSS block's code to the head. Blank code adds nothing.</summary>
     public void AddStyle(string? css) => Add(styles, css);
 

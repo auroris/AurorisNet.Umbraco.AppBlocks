@@ -45,7 +45,7 @@ export function mountFormPanel(dialog, mountChildren) {
         dialog.append(form);
         form.addEventListener("app-form:loaded", () => {
             if (document.activeElement === dialog.querySelector("[data-panel-close]"))
-                form.querySelector("[data-field]:enabled:not([type=hidden], [readonly])")?.focus();
+                form.querySelector("[data-field]:enabled:not([type=hidden], [readonly]), .app-search-select input[role=combobox]:enabled, [data-shuttle-available]:enabled")?.focus();
         }, { once: true });
         const unmountChildren = mountChildren(form);
         const unmountForm = mountForm(form, {

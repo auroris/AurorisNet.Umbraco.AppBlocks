@@ -16,9 +16,24 @@ public static class AppBlockField
     public const string WidthAlias = "width";
     public const string PlaceholderAlias = "placeholder";
     public const string MultipleAlias = "allowMultiple";
+    public const string MaxOptionsAlias = "maxOptions";
+    public const int DefaultMaxOptions = 50;
     public static bool UsesChoices(string alias) => alias is "appSelect" or AppBlockSchema.SearchSelectAlias or AppBlockSchema.ShuttleAlias;
     public static bool StoresMultipleValues(IPublishedElement block) => block.ContentType.Alias == AppBlockSchema.ShuttleAlias
         || block.ContentType.Alias == AppBlockSchema.SearchSelectAlias && block.Value<bool>(MultipleAlias);
+
+    /// <summary>
+    /// Maximum matching choices shown in a Searchable select dropdown: <see cref="DefaultMaxOptions"/> when unset,
+    /// <see langword="null"/> when explicitly 0 (show all loaded choices), or the configured positive count.
+    /// </summary>
+    public static int? MaxOptions(IPublishedElement block)
+    {
+        var raw = block.GetProperty(MaxOptionsAlias)?.GetSourceValue()?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(raw)) return DefaultMaxOptions;
+        return int.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count) && count >= 0
+            ? count == 0 ? null : count
+            : DefaultMaxOptions;
+    }
     /// <summary>A Display value's own setting: the address its value links to, with the record's fields in braces.</summary>
     public const string LinkTemplateAlias = "linkTemplate";
 

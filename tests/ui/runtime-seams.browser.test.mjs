@@ -64,13 +64,13 @@ async function mount(body, answer, { head = '', lang = 'en', base = '', timezone
 const runtime = base => `<script type="module" src="${base}/App_Plugins/ApplicationBlocks/runtime.js"></script>`;
 
 test('searchable selects filter by label and save scalar and ordered CSV values', async () => {
-    const picker = (name, multiple) => `<div class="app-form-field"><label for="${name}-picker">${name}</label>
+    const picker = (name, multiple, maxOptions) => `<div class="app-form-field"><label for="${name}-picker">${name}</label>
         <div data-app-search-select class="app-search-select" data-required="true">
             <input type="hidden" id="${name}" data-field="${name}" data-kind="${multiple ? 'csv' : 'text'}">
-            <select id="${name}-picker" ${multiple ? 'multiple' : ''} aria-describedby="${name}-help">
+            <select id="${name}-picker" ${multiple ? 'multiple' : ''} ${maxOptions !== undefined ? `data-max-options="${maxOptions}"` : ''} aria-describedby="${name}-help">
               <option value="a,b">North East</option><option value="hasOwnProperty">West</option><option value="say &quot;yes&quot;">South</option>
             </select></div><small id="${name}-help">Choose a region</small></div>`;
-    const { page, requests, errors } = await mount(form(picker('Primary', false) + picker('Regions', true)) + runtime(''),
+    const { page, requests, errors } = await mount(form(picker('Primary', false, 2) + picker('Regions', true, 0)) + runtime(''),
         ({ method, body }) => formAnswer(method === 'GET' ? record('1', { Primary: '', Regions: 'Retired' })
             : { ...record('1', body.values), readOnlyFields: ['Regions'] }));
     try {
@@ -79,18 +79,24 @@ test('searchable selects filter by label and save scalar and ordered CSV values'
         await primary.waitFor();
         assert.equal(await page.locator('link[href$="tom-select.css"]').count(), 1);
         await page.locator('[data-save]').click();
-        assert.equal(await primary.evaluate(el => el.validationMessage), 'Select at least one item.');
+        assert.equal(await primary.evaluate(el => el.validationMessage), 'Select an available choice.');
         assert.equal(requests.filter(r => r.method === 'PUT').length, 0);
+        // Primary caps visible dropdown options at 2; Regions (0) shows all 3.
+        await primary.press('ArrowDown');
+        const primaryMatches = page.getByRole('listbox', { name: 'Primary' });
+        await primaryMatches.getByRole('option', { name: 'North East' }).waitFor();
+        assert.equal(await primaryMatches.getByRole('option').count(), 2);
         await primary.fill('north');
-        const matches = page.getByRole('listbox', { name: 'Primary' });
-        await matches.getByRole('option', { name: 'North East' }).waitFor();
-        await matches.getByRole('option', { name: 'West' }).waitFor({ state: 'hidden' });
+        await primaryMatches.getByRole('option', { name: 'North East' }).waitFor();
+        await primaryMatches.getByRole('option', { name: 'West' }).waitFor({ state: 'hidden' });
         await primary.press('Enter');
         assert.equal(await page.locator('#Primary').inputValue(), 'a,b');
 
         await page.locator('.item').filter({ hasText: 'Retired (current value)' }).getByRole('button').click();
         await regions.fill('retired');
         await page.getByText('No matching choices').waitFor();
+        await regions.fill('');
+        assert.equal(await page.getByRole('listbox', { name: 'Regions' }).getByRole('option').count(), 3);
         for (const label of ['West', 'North East', 'South']) {
             await regions.fill(label);
             await page.getByRole('listbox', { name: 'Regions' }).getByRole('option', { name: label, exact: true }).click();

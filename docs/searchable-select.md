@@ -11,6 +11,8 @@ Add **Searchable select** inside an AppBlocks form. Visitors can type part of a 
 
 The form searches the choices loaded for the visitor. The list's data-source access rules and **Maximum rows** setting apply. The default limit is 1,000 rows. For a column with repeated values, `SELECT DISTINCT` removes duplicates before the row limit. A list can also display a label and store a separate key. A form class that supplies its own field choices can leave **List of values** empty.
 
+By default, the dropdown shows up to **50** matching choices at a time while still searching every loaded choice as you type. Set **Maximum visible choices** on the field block to change how many matching choices appear in the dropdown, or enter `0` to show all loaded choices.
+
 ## Store one or more values
 
 By default the form stores one value exactly as selected, including any commas. A single selection from a published list can bind to a text or number field.

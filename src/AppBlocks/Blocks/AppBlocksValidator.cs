@@ -264,6 +264,9 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 else if (!Compatible(alias, field, Text(child, "listOfValues").Length > 0, Flag(child, AppBlockField.MultipleAlias))) errors.Add($"The block for '{binding}' does not match its {field.Kind} type.");
                 if (definitions is not null && AppBlockField.UsesChoices(alias) && Text(child, "listOfValues") is { Length: > 0 } selected && definitions.FindList(selected) is null)
                     errors.Add($"Select a published list of values for '{binding}'.");
+                if (alias == AppBlockSchema.SearchSelectAlias && Text(child, AppBlockField.MaxOptionsAlias).Trim() is { Length: > 0 } maxOptions
+                    && (!int.TryParse(maxOptions, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var maxCount) || maxCount < 0))
+                    errors.Add($"The maximum visible choices for '{binding}' must be a whole number of 0 or more.");
                 if (alias == "appDisplay" && Text(child, AppBlockField.LinkTemplateAlias).Trim() is { Length: > 0 } template) links.Add((binding, template, target));
             }
             else if (Plugin(alias) is AccountPickerBlock picker) {

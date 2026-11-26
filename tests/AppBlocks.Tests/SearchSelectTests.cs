@@ -42,6 +42,7 @@ public sealed class SearchSelectTests
                 BlockPages.SetValue(block, "listOfValues", "items");
             }
             BlockPages.SetValue(many, AppBlockField.MultipleAlias, "1");
+            BlockPages.SetValue(many, AppBlockField.MaxOptionsAlias, "0");
             formKey = Guid.Parse(BlockPages.Blocks(blocks, "appForm").Single()["key"]!.ToString());
             var page = contents.Create("Searchable choices", contents.GetById(BlockSite.FormPageKey)!.ParentId, BlockSite.PageAlias);
             page.SetValue(BlockSite.BodyAlias, blocks.ToJsonString());
@@ -56,6 +57,8 @@ public sealed class SearchSelectTests
         Assert.Equal(2, html.Split("data-app-search-select").Length - 1);
         Assert.Equal(2, html.Split("<option value=\"A,B\">A,B</option>").Length - 1);
         Assert.Contains("data-kind=\"csv\"", html);
+        Assert.Contains("data-max-options=\"50\"", html);
+        Assert.Contains("data-max-options=\"0\"", html);
         var form = new FormsClient(client, "", pageKey, formKey);
         Assert.True((await form.LoadAsync()).IsSuccess);
         Task<FormResponse> Create(string customer, string notes) => form.CreateAsync(new { customer, notes, region = "WEST", status = "NEW", amount = 1, orderDate = "2026-01-01" });
@@ -73,5 +76,32 @@ public sealed class SearchSelectTests
     {
         Assert.True(AppBlocksValidator.Compatible(AppBlockSchema.SearchSelectAlias, new("id", "Id", "number"), true));
         Assert.False(AppBlocksValidator.Compatible(AppBlockSchema.SearchSelectAlias, new("ids", "Ids", "number"), true, true));
+    }
+
+    [Fact]
+    public void Negative_max_options_is_rejected_by_validator()
+    {
+        var blocks = BlockPages.Empty();
+        var field = BlockPages.Add(blocks, AppBlockSchema.SearchSelectAlias, ("field", "customer"), (AppBlockField.MaxOptionsAlias, "-1"));
+        BlockPages.Layout(blocks).Add(BlockPages.FormBlock(blocks, "test.search", [field], []));
+        var resource = TestStubs.Stub<AppBlocks.Forms.IFormResource>((m, _) => m.Name switch {
+            "get_Alias" => "test.search",
+            "get_Fields" => (IReadOnlyList<AppBlocks.Forms.FormField>)[new("customer", "Customer", "text", Choices: [new("a", "A")])],
+            _ => null,
+        });
+        var validator = new AppBlocksValidator(new AppBlocks.Forms.FormResourceRegistry([resource], []));
+        Assert.Contains(validator.Validate(blocks.ToJsonString()), e => e.Contains("maximum visible choices", StringComparison.OrdinalIgnoreCase));
+        BlockPages.SetValue(blocks["contentData"]!.AsArray().Single(b => b!["key"]!.GetValue<string>() == field["contentKey"]!.GetValue<string>())!, AppBlockField.MaxOptionsAlias, "0");
+        Assert.Empty(validator.Validate(blocks.ToJsonString()));
+    }
+
+    [Fact]
+    public void Prepended_vendor_stylesheet_renders_ahead_of_runtime_css()
+    {
+        var assets = new AppPageAssets();
+        assets.AddStylesheet("/App_Plugins/ApplicationBlocks/runtime.css");
+        assets.PrependStylesheet("/App_Plugins/ApplicationBlocks/tom-select.css");
+        assets.PrependStylesheet("/App_Plugins/ApplicationBlocks/tom-select.css");
+        Assert.Equal(["/App_Plugins/ApplicationBlocks/tom-select.css", "/App_Plugins/ApplicationBlocks/runtime.css"], assets.Stylesheets);
     }
 }
