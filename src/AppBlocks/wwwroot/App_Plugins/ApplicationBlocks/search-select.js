@@ -24,11 +24,13 @@ export function mountSearchSelect(root) {
     const maxOptions = Number.isInteger(parsedMax) && parsedMax >= 0 ? (parsedMax === 0 ? null : parsedMax) : 50;
     // Tom Select indexes options on a plain object. Prefix keys so any database value can be selected.
     const optionKey = value => ":" + value;
+    const normalizeLabel = text => text.trim().toLowerCase();
     const suggestedKeys = new Map();
     for (const option of select.options) {
         option.value = optionKey(option.value);
         // An exact, unambiguous label typed on blur should save the same key as clicking the suggestion.
-        suggestedKeys.set(option.text, suggestedKeys.has(option.text) ? null : option.value);
+        const label = normalizeLabel(option.text);
+        suggestedKeys.set(label, suggestedKeys.has(label) ? null : option.value);
     }
     select.selectedIndex = -1;
     const picker = new TomSelect(select, {
@@ -36,8 +38,10 @@ export function mountSearchSelect(root) {
         plugins: { remove_button: { title: t("removeChoice") } },
         create: freeText && function (input) {
             if (field.readOnly || field.matches(":disabled")) return false;
-            const key = optionKey(input);
-            return this.options[suggestedKeys.get(input)] ?? this.options[key] ?? { value: key, text: input };
+            const text = input.trim();
+            if (!text) return false;
+            const key = optionKey(text);
+            return this.options[suggestedKeys.get(normalizeLabel(text))] ?? this.options[key] ?? { value: key, text };
         },
         createFilter: input => !!input.trim(),
         createOnBlur: freeText,
@@ -45,12 +49,17 @@ export function mountSearchSelect(root) {
         delimiter: "", // Treat pasted text, including commas, as a search.
         persist: false,
         render: {
-            no_results: ({ input }, escape) => freeText && input ? null : `<div class="no-results">${escape(t("noMatchingChoices"))}</div>`,
-            option_create: ({ input }, escape) => suggestedKeys.get(input) ? null
-                : `<div class="create" role="option" id="${escape(select.id)}-create">${escape(t("useTypedChoice", { value: input }))}</div>`,
+            no_results: ({ input }, escape) => freeText && input.trim() ? null : `<div class="no-results">${escape(t("noMatchingChoices"))}</div>`,
+            option_create: ({ input }, escape) => {
+                const text = input.trim();
+                if (!text || suggestedKeys.get(normalizeLabel(text))) return null;
+                return `<div class="create" role="option" id="${escape(select.id)}-create">${escape(t("useTypedChoice", { value: text }))}</div>`;
+            },
         },
     });
     const control = picker.control_input;
+    const maxLength = Number(select.dataset.maxLength);
+    if (!multiple && freeText && Number.isInteger(maxLength) && maxLength > 0) control.maxLength = maxLength;
     select.setAttribute("aria-hidden", "true");
     const describedBy = select.getAttribute("aria-describedby");
     if (describedBy) control.setAttribute("aria-describedby", describedBy);

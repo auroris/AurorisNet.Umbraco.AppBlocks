@@ -239,6 +239,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
                             <input type="hidden" id="@id" name="@key" data-field="@key" data-kind="@kind" data-readonly="@readOnly.ToString().ToLowerInvariant()" data-label="@label" @defaultAttribute />
                             <select id="@labelTarget" multiple="@multiple" disabled="@(readOnly || locked)" aria-describedby="@id-help @id-error"
                                 data-allow-free-text="@freeText.ToString().ToLowerInvariant()" data-max-options="@(AppBlockField.MaxOptions(block) ?? 0)"
+                                data-max-length="@field.MaxLength"
                                 data-placeholder="@(placeholder ?? (freeText ? Text["searchOrEnter", "Search or enter a value"] : Text["searchChoices", "Search choices"]))">
                                 @foreach (var choice in choices.Where(c => multiple ? ShuttleValue.IsItemValue(c.Value) : !string.IsNullOrWhiteSpace(c.Value)).DistinctBy(c => c.Value, StringComparer.Ordinal))
                                 { <option value="@choice.Value">@choice.Label</option> }
