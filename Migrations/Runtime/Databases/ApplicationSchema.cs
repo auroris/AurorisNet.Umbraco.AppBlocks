@@ -23,6 +23,7 @@ public sealed class ApplicationSchema
 
     private readonly Func<string, IEnumerable<(string Name, Func<byte[]> Read)>> files;
     private readonly List<Step> steps = [];
+    private readonly List<ApplicationSchema> dependencies = [];
 
     private ApplicationSchema(string id, string name, Func<string, IEnumerable<(string Name, Func<byte[]> Read)>> files)
     {
@@ -74,6 +75,19 @@ public sealed class ApplicationSchema
     }
 
     internal IReadOnlyList<Step> Steps => steps;
+    internal IReadOnlyList<ApplicationSchema> Dependencies => dependencies;
+
+    /// <summary>
+    /// Declares that <paramref name="dependency"/> must be ensured on the same connection before this schema runs; returns this schema.
+    /// Dependencies are ensured in declaration order; cycles are safely ignored.
+    /// </summary>
+    public ApplicationSchema DependsOn(ApplicationSchema dependency)
+    {
+        ArgumentNullException.ThrowIfNull(dependency);
+        if (ReferenceEquals(dependency, this)) throw new ArgumentException("A schema cannot depend on itself.", nameof(dependency));
+        if (!dependencies.Contains(dependency)) dependencies.Add(dependency);
+        return this;
+    }
 
     /// <summary>
     /// Scripts in <c>&lt;root&gt;/&lt;dialect&gt;/*.sql</c>, and run-once scripts in <c>&lt;root&gt;/&lt;dialect&gt;/migrations/*.sql</c>;

@@ -1,38 +1,26 @@
 # AppBlocks Interactive Reports
 
-`AurorisNet.Umbraco.AppBlocks.InteractiveReports` adds an **Interactive Report** block to [AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks) on Umbraco. An editor picks a table or writes a SELECT, and readers search, filter, sort, chart, save views and download the result.
+Adds an **Interactive Report** block to [AppBlocks](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks) on Umbraco 18 so editors can pick a table or `SELECT` query and users can search, filter, sort, chart, save views, and export results.
+
+**Companion package:** Automatically pulls in `AurorisNet.Umbraco.AppBlocks`.
 
 ## Install
-
-The package depends on `AurorisNet.Umbraco.AppBlocks`, which NuGet installs with it. It is an alpha and is not on nuget.org yet. The [repository README](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks#install) describes how to reference it until it is.
 
 ```powershell
 dotnet add package AurorisNet.Umbraco.AppBlocks.InteractiveReports --version 0.1.0-alpha.1
 ```
 
-The package registers itself through an Umbraco composer. When the site restarts, it installs the report element type and data types beside AppBlocks' own.
+Auto-registers via a composer and installs the **Interactive Report** element type. Allow it on your Block Grid or Block List, add it to a page, and choose a table or SQL query.
 
-## Use
-
-1. Add **Interactive Report** to the allowed blocks of a Block Grid or Block List.
-2. Add the block to a page and choose **Table** or **SQL query**. Tables come from the connections under **Settings → AppBlocks → Connections**.
-3. Configure the block's starting view.
-
-**A report on a page without Public Access is public, export included.** Protect the page when its rows are not for everyone.
+> **Security:** A report on a page without Public Access is publicly readable and exportable. Protect the page if its rows are not public.
 
 ## Settings
 
-| Setting | Default | What it does |
+| Setting | Default | Effect |
 |---|---|---|
-| `AppBlocks:ReportAdministratorGroups` | none | Backoffice User Group aliases that grant report administration, beside `admin` and `interactiveReportsAdministrator` |
-| `AppBlocks:IncludeBackOfficeReports` | `false` | Turns on the optional backoffice reports |
-| `AppBlocks:InteractiveReports:PaperSizes` | `A4`, `Letter`, `Legal` | The paper sizes the Print dialog offers |
-| `InteractiveReport:SavedReports:Connection` | `AppBlocksDb` | The connection that stores saved views |
+| `AppBlocks:ReportAdministratorGroups` | none | Extra backoffice user group aliases granted report admin rights (besides `admin` and `interactiveReportsAdministrator`). |
+| `AppBlocks:IncludeBackOfficeReports` | `false` | Enables optional built-in backoffice reports. |
+| `AppBlocks:InteractiveReports:PaperSizes` | `A4`, `Letter`, `Legal` | Paper sizes offered in the Print dialog. |
+| `InteractiveReport:SavedReports:Connection` | `AppBlocksDb` | Database connection storing saved views. |
 
-## Documentation
-
-The [Interactive Reports guide](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/interactive-reports.md) covers report access, links to form pages, saved views, downloads, printing and administration. The [repository README](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks#readme) lists the other guides.
-
-## License
-
-[MIT](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/LICENSE)
+See the [Interactive Reports guide](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/docs/interactive-reports.md) and [MIT License](https://github.com/auroris/AurorisNet.Umbraco.AppBlocks/blob/main/LICENSE).

@@ -42,6 +42,16 @@ public sealed class PaperReportTemplates(IRuntimeState runtime, IContentTypeServ
         return missing.Count == 0 ? null : [.. current, .. missing];
     }
 
+    /// <summary>
+    /// Prefers templates whose Razor markup references <see cref="PaperReportModel"/> when any installed template does,
+    /// keeping site page layouts out of the paper report template picker while still working when templates have no model markup.
+    /// </summary>
+    internal static IReadOnlyList<ITemplate> PaperReportCandidates(IReadOnlyCollection<ITemplate> installed)
+    {
+        var matching = installed.Where(template => template.Content?.Contains(nameof(PaperReportModel), StringComparison.Ordinal) == true).ToArray();
+        return matching.Length > 0 ? matching : installed.ToArray();
+    }
+
     private async Task SynchronizeAsync()
     {
         if (runtime.Level != RuntimeLevel.Run || !AllowsAllTemplates(configuration)) return;
@@ -49,7 +59,7 @@ public sealed class PaperReportTemplates(IRuntimeState runtime, IContentTypeServ
         {
             // Before the first boot's schema installation has created the type there is nothing to keep.
             if (contentTypes.Get(PaperReportDefinition.Alias) is not { } type) return;
-            var installed = (await templates.GetAllAsync(Array.Empty<string>())).ToList();
+            var installed = PaperReportCandidates((await templates.GetAllAsync(Array.Empty<string>())).ToList());
             if (WithAllInstalled(type.AllowedTemplates ?? [], installed) is not { } allowed) return;
             type.AllowedTemplates = allowed;
             var result = await contentTypes.UpdateAsync(type, Constants.Security.SuperUserKey);

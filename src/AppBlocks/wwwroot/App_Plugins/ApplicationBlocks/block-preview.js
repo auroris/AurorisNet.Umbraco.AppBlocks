@@ -20,8 +20,10 @@ export const previewStylesheets = [new URL("runtime.css", import.meta.url).pathn
 // CSS text added after the stylesheets and the preview's own rules. A site's appEntryPoint adds preview-only
 // overrides here, such as showing every panel of a component that the page reveals with script.
 export const previewStyles = [];
-// A companion's blocks can also occur inside the Forms container's nested grid: content type key -> (content, settings) => markup.
+// A companion's blocks can also occur inside the Forms container's nested grid: content type key OR alias -> (content, settings) => markup.
 export const nestedBlockPreviews = new Map();
+// Maps element content type key (lowercase GUID) -> element alias, populated from AppBlocks.BlockTypeAliases.
+export const nestedBlockAliases = new Map();
 function columnsPerArea(alias) {
     switch (alias) {
         case "appColumns": case "appFormColumns": return 6;
@@ -59,14 +61,15 @@ export class BlockPreview extends UmbLitElement {
         const render = (entries, columns = 12) => entries.map(entry => {
             const data = grid.contentData?.find(item => item.key === entry.contentKey);
             const type = appBlockTypes.find(type => type.key === data?.contentTypeKey);
-            const companion = nestedBlockPreviews.get(data?.contentTypeKey);
+            const alias = type?.alias ?? (typeof data?.contentTypeKey === "string" ? nestedBlockAliases.get(data.contentTypeKey.toLowerCase()) : undefined);
+            const companion = nestedBlockPreviews.get(data?.contentTypeKey) ?? (alias ? nestedBlockPreviews.get(alias) : undefined);
             const settings = values(grid.settingsData?.find(item => item.key === entry.settingsKey), this.culture);
             const areas = entry.areas ?? [];
-            const areaColumns = columnsPerArea(type?.alias);
+            const areaColumns = columnsPerArea(alias);
             const split = areaColumns === 6 ? ({ "4/8": "1fr 2fr", "8/4": "2fr 1fr" }[settings.split] ?? "1fr 1fr") : `repeat(${Math.max(1, areas.length)},minmax(0,1fr))`;
             const children = areas.length ? `<div style="display:grid;grid-template-columns:${split};gap:10px">${areas.map(area => `<div class="preview-nested-grid" style="grid-template-columns:repeat(${areaColumns},minmax(0,1fr))">${render(area.items ?? [], areaColumns)}</div>`).join("")}</div>` : "";
             const content = values(data, this.culture);
-            const body = companion ? companion(content, settings) : this.renderContent(type?.alias, content, settings);
+            const body = companion ? companion(content, settings) : this.renderContent(alias, content, settings);
             return `<section class="preview-nested" style="grid-column:span ${Math.max(1, Math.min(columns, entry.columnSpan || columns))}">${body}${children}</section>`;
         }).join("");
         return items.length ? `<div class="preview-nested-grid">${render(items)}</div>` : "";

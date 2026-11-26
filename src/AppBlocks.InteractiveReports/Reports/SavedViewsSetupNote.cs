@@ -11,10 +11,13 @@ namespace AppBlocks.InteractiveReports.Reports;
 /// </summary>
 public static class SavedViewsSetupNote
 {
-    /// <summary>Under the engine's reserved names, so it can never hide a report: <c>__</c> is not an alias anyone can give one.</summary>
+    /// <summary>Default route under the engine's reserved names, so it can never hide a report: <c>__</c> is not an alias anyone can give one.</summary>
     public const string Route = InteractiveReportsSite.ReportsRoute + "/__saved-views-setup";
 
-    internal static void MapSavedViewsSetupNote(this IEndpointRouteBuilder endpoints) => endpoints.MapGet(Route, async (HttpContext http, CancellationToken ct) => {
+    /// <summary>Route under the configured <see cref="AppBlocksRoutes.Root"/>.</summary>
+    public static string RouteFor(IConfiguration? configuration) => InteractiveReportsSite.ReportsRouteFor(configuration) + "/__saved-views-setup";
+
+    internal static void MapSavedViewsSetupNote(this IEndpointRouteBuilder endpoints) => endpoints.MapGet(RouteFor(endpoints.ServiceProvider.GetService<IConfiguration>()), async (HttpContext http, CancellationToken ct) => {
         http.KeepOutOfCaches();
         var savedViews = http.RequestServices.GetService<SavedViewStore>();
         return savedViews is null || await savedViews.ReadyAsync(ct)

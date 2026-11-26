@@ -32,8 +32,9 @@ internal sealed class DefaultDocumentPresentationProvider(IConfiguration configu
 }
 
 /// <summary>Stable URL contract shared by forms and optional report companions.</summary>
-public sealed class DocumentLinks : IAppDocumentLinks
+public sealed class DocumentLinks(IConfiguration? configuration = null) : IAppDocumentLinks
 {
     public const string Route = "/api/paper-reports/{key:guid}";
-    public string Url(Guid documentKey, PathString pathBase) => pathBase + "/api/paper-reports/" + documentKey;
+    public static string RouteFor(IConfiguration? configuration) => AppBlocksRoutes.Under(configuration, "paper-reports/{key:guid}");
+    public string Url(Guid documentKey, PathString pathBase) => pathBase + AppBlocksRoutes.Under(configuration, "paper-reports/" + documentKey);
 }

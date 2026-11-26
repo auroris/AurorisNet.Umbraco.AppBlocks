@@ -237,14 +237,7 @@ public sealed class ConnectionCatalog(IConfiguration configuration, IWebHostEnvi
             using var check = Create(provider, Expand(value)); // Validates syntax without writing to the database.
             entries.RemoveAll(c => c.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase));
             entries.Add(new(request.Name, provider, protector.Protect(value), Guid.NewGuid().ToString("N")));
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            var temporary = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(entries), ct);
-                File.Move(temporary, FilePath, overwrite: true);
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); SavedFile.Invalidate(); }
+            await SavedFile.WriteAsync(JsonSerializer.Serialize(entries), ct);
         }
         finally { gate.Release(); }
     }

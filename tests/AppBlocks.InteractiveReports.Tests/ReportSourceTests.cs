@@ -64,6 +64,9 @@ public sealed class ReportSourceTests
     [InlineData("{}")]
     [InlineData("[]")]
     [InlineData("a-published-source-alias")]
+    [InlineData("{\"kind\":\"dataSource\",\"source\":\"\"}")]
+    [InlineData("{\"kind\":\"dataSource\",\"connection\":\"Business\",\"source\":\"missing\"}")]
+    [InlineData("{\"kind\":\"dataSource\",\"source\":\"missing\"}")]
     public void Invalid_sources_are_rejected(string selection)
     {
         using var site = new Fixture();

@@ -6,9 +6,9 @@ using Umbraco.Cms.Api.Management.Routing;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Web.Common.Authorization;
 
-namespace AppBlocks.InteractiveReports.Reports;
+namespace AppBlocks.Management;
 
-/// <summary>The backoffice user groups, by alias and name, that a report block's group pickers offer to an editor of content.</summary>
+/// <summary>The backoffice user groups, by alias and name, that the User Group Picker offers to an editor of content.</summary>
 [ApiVersion("1.0")]
 [VersionedApiBackOfficeRoute("appblocks")]
 [ApiExplorerSettings(GroupName = "AppBlocks")]
@@ -16,6 +16,7 @@ namespace AppBlocks.InteractiveReports.Reports;
 public sealed class ReportUserGroupsController(IUserGroupService userGroups) : ManagementApiControllerBase
 {
     [HttpGet("report-user-groups")]
+    [HttpGet("user-groups")]
     public async Task<IActionResult> Groups()
     {
         Response.Headers.CacheControl = "no-store";

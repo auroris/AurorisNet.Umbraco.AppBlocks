@@ -141,6 +141,73 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     });
 
     /// <summary>
+    /// Deletes every attachment link belonging to (<paramref name="resource"/>, <paramref name="recordKey"/>) and any attachment rows
+    /// that are no longer referenced by any link, opening the store's own connection and transaction.
+    /// </summary>
+    public Task<AttachmentPurge> PurgeOwnerAsync(string resource, string recordKey, CancellationToken ct = default) => GuardAsync(write: true, async () =>
+    {
+        await using var connection = await OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        var purge = await PurgeOwnerAsync(connection, transaction, resource, recordKey, ct);
+        await transaction.CommitAsync(ct);
+        return purge;
+    });
+
+    /// <summary>
+    /// Deletes every attachment link belonging to (<paramref name="resource"/>, <paramref name="recordKey"/>) and any attachment rows
+    /// that are no longer referenced by any link, using the caller's open connection and transaction.
+    /// Neither connection nor transaction is disposed or committed here, so record deletion and attachment cleanup commit together.
+    /// </summary>
+    public static Task<AttachmentPurge> PurgeOwnerAsync(DbConnection connection, DbTransaction? transaction,
+        string resource, string recordKey, CancellationToken ct = default)
+        => PurgeOwnerAsync(connection, transaction, [(resource, recordKey)], ct);
+
+    /// <summary>
+    /// Deletes every attachment link belonging to any of <paramref name="resources"/> for <paramref name="recordKey"/> and any
+    /// now-unreferenced attachment rows, using the caller's open connection and transaction.
+    /// </summary>
+    public static Task<AttachmentPurge> PurgeOwnerAsync(DbConnection connection, DbTransaction? transaction,
+        IEnumerable<string> resources, string recordKey, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(resources);
+        return PurgeOwnerAsync(connection, transaction, resources.Select(resource => (resource, recordKey)), ct);
+    }
+
+    /// <summary>
+    /// Deletes every attachment link belonging to any of <paramref name="owners"/> and any attachment rows that are no longer
+    /// referenced by any link, using the caller's open connection and transaction.
+    /// </summary>
+    public static async Task<AttachmentPurge> PurgeOwnerAsync(DbConnection connection, DbTransaction? transaction,
+        IEnumerable<(string Resource, string RecordKey)> owners, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(owners);
+        var deletedLinks = 0;
+        foreach (var (resource, recordKey) in owners)
+        {
+            if (string.IsNullOrWhiteSpace(resource) || string.IsNullOrWhiteSpace(recordKey)) continue;
+            await using var deleteLinks = Command(connection, transaction, """
+                DELETE FROM APP_ATTACHMENT_LINK
+                WHERE OWNER_ALIAS = @alias AND OWNER_KEY = @key
+                """, ("@alias", resource), ("@key", recordKey));
+            deletedLinks += await deleteLinks.ExecuteNonQueryAsync(ct);
+        }
+        if (deletedLinks == 0) return new AttachmentPurge(0, 0, 0);
+        long bytes;
+        await using (var sum = Command(connection, transaction, """
+            SELECT COALESCE(SUM(SIZE), 0) FROM APP_ATTACHMENT a
+            WHERE NOT EXISTS (SELECT 1 FROM APP_ATTACHMENT_LINK l WHERE l.ATTACHMENT_ID = a.ATTACHMENT_ID)
+            """))
+            bytes = Convert.ToInt64(await sum.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        await using var deleteFiles = Command(connection, transaction, """
+            DELETE FROM APP_ATTACHMENT
+            WHERE NOT EXISTS (SELECT 1 FROM APP_ATTACHMENT_LINK l WHERE l.ATTACHMENT_ID = APP_ATTACHMENT.ATTACHMENT_ID)
+            """);
+        var deletedFiles = await deleteFiles.ExecuteNonQueryAsync(ct);
+        return new AttachmentPurge(deletedLinks, deletedFiles, bytes);
+    }
+
+    /// <summary>
     /// Gives the pending owner's live files to <paramref name="owner"/>, the record its form has saved, and returns how many moved.
     /// The files keep their ids, so a list the runtime holds stays valid.
     /// </summary>

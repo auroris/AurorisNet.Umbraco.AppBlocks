@@ -27,6 +27,8 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
     public bool IsVisible(BlockGridItem item) => !InvisibleBlocks.Contains(item.ContentKey);
     public FormRelationship? Relationship { get; init; }
     public bool ViewOnly => Interface.Value<bool>("viewOnly");
+    /// <summary>When true and a return page is configured, creating a new record redirects to the return page with the created record's key parameter.</summary>
+    public bool ReturnWithKey => Interface.Value<bool>("returnWithKey") && Interface.Value<IPublishedContent>("returnPage") is not null;
     public string KeyParameter => ReadKeyParameter(Interface, Relationship is not null);
     public static string ReadKeyParameter(IPublishedElement? formInterface, bool detail = false)
         => formInterface?.Value<string>("keyParameter") is { Length: > 0 } key ? key : detail ? "detailId" : "id";

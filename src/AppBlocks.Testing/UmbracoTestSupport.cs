@@ -49,7 +49,7 @@ public static class UmbracoTestSupport
     /// <summary>
     /// Umbraco caches the backoffice path in a static field the first time any site asks for it, so
     /// in a test process that hosts sites under different virtual paths, later sites inherit the
-    /// first one's. A root site that inherits <c>/wing/umbraco</c> does not recognize its own
+    /// first one's. A root site that inherits <c>/portal/umbraco</c> does not recognize its own
     /// backoffice requests and never registers the backoffice's OpenID Connect client, which the
     /// token sign-in needs. A deployed site runs one host per process and is not affected.
     /// </summary>

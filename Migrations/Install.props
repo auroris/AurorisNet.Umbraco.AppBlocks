@@ -1,22 +1,25 @@
 <Project>
   <PropertyGroup>
-    <_CurrentInstallDirectory>$([System.IO.Directory]::GetDirectories('$(MSBuildThisFileDirectory)', '*-Current'))</_CurrentInstallDirectory>
-    <InstallSnapshot Condition="'$(AppBlocksInstallSnapshot)' != ''">$(AppBlocksInstallSnapshot)</InstallSnapshot>
+    <MigrationsDirectory Condition="'$(MigrationsDirectory)' == ''">$(MSBuildThisFileDirectory)</MigrationsDirectory>
+    <_MigrationsDir>$([MSBuild]::EnsureTrailingSlash('$(MigrationsDirectory)'))</_MigrationsDir>
+    <MigrationsComponent Condition="'$(MigrationsComponent)' == ''">$(MSBuildProjectName)</MigrationsComponent>
+    <_CurrentInstallDirectory>$([System.IO.Directory]::GetDirectories('$(_MigrationsDir)', '*-Current'))</_CurrentInstallDirectory>
+    <InstallSnapshot Condition="'$(InstallSnapshot)' == '' and '$(AppBlocksInstallSnapshot)' != ''">$(AppBlocksInstallSnapshot)</InstallSnapshot>
     <InstallSnapshot Condition="'$(InstallSnapshot)' == ''">$([System.IO.Path]::GetFileName('$(_CurrentInstallDirectory)'))</InstallSnapshot>
-    <InstallRoot>$(MSBuildThisFileDirectory)$(InstallSnapshot)/</InstallRoot>
+    <InstallRoot>$(_MigrationsDir)$(InstallSnapshot)/</InstallRoot>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(InstallRoot)$(MSBuildProjectName)/**/*.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)*-*/$(MSBuildProjectName)/**/*.cs"
-             Exclude="$(MSBuildThisFileDirectory)*-Base/**/*;$(MSBuildThisFileDirectory)*-Current/**/*"
+    <Compile Include="$(InstallRoot)$(MigrationsComponent)/**/*.cs" />
+    <Compile Include="$(_MigrationsDir)*-*/$(MigrationsComponent)/**/*.cs"
+             Exclude="$(_MigrationsDir)*-Base/**/*;$(_MigrationsDir)*-Current/**/*"
              Condition="$(InstallSnapshot.EndsWith('-Current'))" />
-    <_CurrentInstallDirectories Include="$([System.IO.Directory]::GetDirectories('$(MSBuildThisFileDirectory)', '*-Current'))" />
-    <_MigrationFolder Include="$([System.IO.Directory]::GetDirectories('$(MSBuildThisFileDirectory)', '*-*'))" />
+    <_CurrentInstallDirectories Include="$([System.IO.Directory]::GetDirectories('$(_MigrationsDir)', '*-Current'))" />
+    <_MigrationFolder Include="$([System.IO.Directory]::GetDirectories('$(_MigrationsDir)', '*-*'))" />
     <AssemblyMetadata Include="MigrationFolders" Value="@(_MigrationFolder->'%(Filename)%(Extension)', '|')" />
     <AssemblyMetadata Include="InstallSnapshot" Value="$(InstallSnapshot)" />
   </ItemGroup>
   <Target Name="CheckMigrationSnapshot" BeforeTargets="PrepareForBuild">
-    <Error Condition="@(_CurrentInstallDirectories->Count()) != 1" Text="Migrations must contain exactly one *-Current folder under $(MSBuildThisFileDirectory)." />
+    <Error Condition="@(_CurrentInstallDirectories->Count()) != 1" Text="Migrations must contain exactly one *-Current folder under $(_MigrationsDir)." />
     <Error Condition="!Exists('$(InstallRoot)')" Text="Missing install snapshot $(InstallRoot)." />
   </Target>
 </Project>

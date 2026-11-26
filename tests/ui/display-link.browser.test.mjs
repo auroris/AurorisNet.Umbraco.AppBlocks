@@ -58,17 +58,17 @@ const address = locator => locator.getAttribute('href');
 
 test('a template fills its fields from the record, escaped, and a mail address keeps its @', async () => {
     const { page, errors, link } = await mount({
-        values: { email: 'jane.o\'neil+rdao@example.org', reference: 'DOA 2026/0042 & more', customerId: 'a/b?c#d', notes: null },
+        values: { email: 'jane.o\'neil+ops@example.org', reference: 'REQ 2026/0042 & more', customerId: 'a/b?c#d', notes: null },
         links: [['email', 'Email the requester', 'mailto:{email}?subject=Request%20{reference}&amp;body=See%20{ reference }'], ['customerId', 'Customer', '../customer/?id={customerId}&amp;from={nowhere}&amp;as={constructor}']],
     });
-    assert.equal(await link('email').textContent(), 'jane.o\'neil+rdao@example.org');
-    assert.equal(await address(link('email')), 'mailto:jane.o\'neil+rdao@example.org?subject=Request%20DOA%202026%2F0042%20%26%20more&body=See%20DOA%202026%2F0042%20%26%20more');
+    assert.equal(await link('email').textContent(), 'jane.o\'neil+ops@example.org');
+    assert.equal(await address(link('email')), 'mailto:jane.o\'neil+ops@example.org?subject=Request%20REQ%202026%2F0042%20%26%20more&body=See%20REQ%202026%2F0042%20%26%20more');
     // A value stays the one part of the address it was written into, and a name the record lacks leaves nothing, even
     // one every object answers to.
     assert.equal(await address(link('customerId')), '../customer/?id=a%2Fb%3Fc%23d&from=&as=');
     assert.equal(await link('customerId').textContent(), 'a/b?c#d');
     // The link is named by its label and its value, and the keyboard reaches it.
-    assert.equal(await page.getByRole('link', { name: 'Email the requester jane.o\'neil+rdao@example.org' }).count(), 1);
+    assert.equal(await page.getByRole('link', { name: 'Email the requester jane.o\'neil+ops@example.org' }).count(), 1);
     await link('email').focus();
     assert.equal(await page.evaluate(() => document.activeElement.dataset.displayLink), 'email');
     assert.deepEqual(errors, []);
@@ -101,7 +101,7 @@ test('a value that completes a script address is refused, and an empty value lin
     assert.equal(await script.link('scheme').textContent(), 'javascript');
     await script.page.close();
 
-    const empty = await mount({ values: { email: null, reference: 'DOA-1' }, links: [['email', 'Email', 'mailto:{email}?subject={reference}']] });
+    const empty = await mount({ values: { email: null, reference: 'REQ-1' }, links: [['email', 'Email', 'mailto:{email}?subject={reference}']] });
     assert.equal(await address(empty.link('email')), null);
     assert.equal(await empty.link('email').textContent(), '');
     // The empty link keeps the height of a line, so the fields beside it stay level.
@@ -111,16 +111,16 @@ test('a value that completes a script address is refused, and an empty value lin
 
 test('the link follows the record after a save, is never submitted, and takes the site\'s path base', async () => {
     const { page, errors, posted, link } = await mount({
-        base: '/intranet', values: { customerId: '7', reference: 'DOA-1', notes: 'First' },
+        base: '/intranet', values: { customerId: '7', reference: 'REQ-1', notes: 'First' },
         links: [['customerId', 'Customer', '/customers/?id={customerId}&amp;ref={reference}']],
     });
-    assert.equal(await address(link('customerId')), '/intranet/customers/?id=7&ref=DOA-1');
+    assert.equal(await address(link('customerId')), '/intranet/customers/?id=7&ref=REQ-1');
     await page.locator('#notes').fill('Second');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('status').getByText('Saved.', { exact: true }).waitFor();
     // Only the editable field goes up; the displayed value and the hidden read-only one stay the server's.
     assert.deepEqual(posted[0].values, { notes: 'Second' });
-    assert.equal(await address(link('customerId')), '/intranet/customers/?id=7&ref=DOA-1');
+    assert.equal(await address(link('customerId')), '/intranet/customers/?id=7&ref=REQ-1');
     assert.deepEqual(errors, []);
     await page.close();
 });

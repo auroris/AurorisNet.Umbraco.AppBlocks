@@ -2,6 +2,7 @@
 @using AppBlocks.Blocks
 @model AppBlockView
 @inject IVariationContextAccessor VariationContext
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     var item = Model.Block;
     var block = item.Content;
@@ -39,10 +40,10 @@ else
         @{ var targets = ReportFormTarget.Resolve(block, Model.Page, culture);
            var relationship = targets.Open?.Relationship ?? targets.Create?.Relationship; }
         <template data-parent-parameter="@(relationship?.ParentPage?.Key == Model.Page.Key ? relationship.ParentParameter : null)" data-app-report data-state-key="@(Model.MemberId):@name:@culture" data-print-url="@printUrl" data-anonymous="@(Model.Anonymous ? "true" : null)"
-            data-setup-note="@(savedViewsOff ? Context.Request.PathBase + AppBlocks.InteractiveReports.Reports.SavedViewsSetupNote.Route : null)"
+            data-setup-note="@(savedViewsOff ? Context.Request.PathBase + AppBlocks.InteractiveReports.Reports.SavedViewsSetupNote.RouteFor(Configuration) : null)"
             data-print-key-column="@Text("keyColumn")" data-print-key-parameter="@(Text("keyParameter") ?? "id")">
             <interactive-report report="@name" report-title="@(heading ?? "Report")"
-                api-base="@(Context.Request.PathBase.ToString() + "/api/reports" + apiQuery)" download-base="@(Context.Request.PathBase.ToString() + "/api/download" + apiQuery)"
+                api-base="@(Context.Request.PathBase.ToString() + AppBlocks.InteractiveReports.Reports.InteractiveReportsSite.ReportsRouteFor(Configuration) + apiQuery)" download-base="@(Context.Request.PathBase.ToString() + AppBlocks.InteractiveReports.Reports.InteractiveReportsSite.DownloadRouteFor(Configuration) + apiQuery)"
                 initial-page-size="@(block.Value<int?>("pageSize") is > 0 and var size ? size : (int?)null)"
                 controls="@(string.IsNullOrWhiteSpace(controls) ? null : controls)" empty-message="@(block.Value<string>("emptyMessage"))"></interactive-report>
         </template>

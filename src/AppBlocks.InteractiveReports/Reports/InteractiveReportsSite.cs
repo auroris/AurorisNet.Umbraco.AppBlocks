@@ -13,11 +13,17 @@ namespace AppBlocks.InteractiveReports.Reports;
 /// <summary>Registers Interactive Reports with the site's databases and Umbraco-backed authorization.</summary>
 public static class InteractiveReportsSite
 {
-    /// <summary>Route prefix of the JSON client: the REST API, the viewer and administration pages, and the packaged assets.</summary>
+    /// <summary>Default route prefix of the JSON client: the REST API, the viewer and administration pages, and the packaged assets.</summary>
     public const string ReportsRoute = "/api/reports";
 
-    /// <summary>Route prefix of the file-download client.</summary>
+    /// <summary>Default route prefix of the file-download client.</summary>
     public const string DownloadRoute = "/api/download";
+
+    /// <summary>Route prefix of the JSON client under <see cref="AppBlocksRoutes.Root"/>, defaulting to <see cref="ReportsRoute"/>.</summary>
+    public static string ReportsRouteFor(IConfiguration? configuration) => AppBlocksRoutes.Under(configuration, "reports");
+
+    /// <summary>Route prefix of the file-download client under <see cref="AppBlocksRoutes.Root"/>, defaulting to <see cref="DownloadRoute"/>.</summary>
+    public static string DownloadRouteFor(IConfiguration? configuration) => AppBlocksRoutes.Under(configuration, "download");
 
     /// <summary>Backoffice report routes always use the backoffice identity, even when a member is also signed in.</summary>
     public const string BackOfficeReportsRoute = "/umbraco/reports";
@@ -27,7 +33,6 @@ public static class InteractiveReportsSite
     private const string BuiltInReportsResource = "AppBlocks.InteractiveReports.Reports.umbraco-reports.json";
 
     private static readonly PathString[] BackOfficeReportPaths = [BackOfficeReportsRoute, BackOfficeDownloadRoute];
-    private static readonly PathString[] ReportPaths = [ReportsRoute, DownloadRoute, ..BackOfficeReportPaths];
 
     /// <summary>
     /// Registers the package: Umbraco's own database as <see cref="ConnectionCatalog.UmbracoConnection"/>, opened as AppBlocks
@@ -108,8 +113,10 @@ public static class InteractiveReportsSite
     /// </summary>
     public static IApplicationBuilder UseInteractiveReportsSite(this IApplicationBuilder app)
     {
+        var configuration = app.ApplicationServices.GetService<IConfiguration>();
+        PathString[] reportPaths = [ReportsRouteFor(configuration), DownloadRouteFor(configuration), .. BackOfficeReportPaths];
         app.UseWhen(
-            context => ReportPaths.Any(path => context.Request.Path.StartsWithSegments(path)),
+            context => reportPaths.Any(path => context.Request.Path.StartsWithSegments(path)),
             branch => branch.Use(async (context, next) =>
             {
                 var backOffice = BackOfficeReportPaths.Any(path => context.Request.Path.StartsWithSegments(path));

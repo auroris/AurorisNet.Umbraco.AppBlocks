@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -113,6 +114,75 @@ public static partial class ApplicationDatabase
     /// <summary>The schema folder name for a connection, by its type (<see cref="DatabaseKinds.Of"/> and <see cref="DatabaseKinds.SchemaFolder"/>).</summary>
     public static string Dialect(DbConnection connection) => DatabaseKinds.Of(connection).SchemaFolder();
 
+    /// <summary>
+    /// Creates a command on <paramref name="connection"/> with <paramref name="sql"/> and named <paramref name="parameters"/>
+    /// bound using AppBlocks' cross-database conventions (UTC <c>yyyy-MM-dd HH:mm:ss.fff</c> on SQLite, <see cref="DbType.DateTime2"/>
+    /// on SQL Server, and <see cref="DBNull.Value"/> for nulls). Parameter names may include or omit a leading <c>@</c> or <c>:</c>.
+    /// </summary>
+    public static DbCommand CreateCommand(DbConnection connection, string sql, params (string Name, object? Value)[] parameters)
+        => CreateCommand(connection, null, sql, parameters);
+
+    /// <summary>
+    /// Creates a command on <paramref name="connection"/> inside <paramref name="transaction"/> with <paramref name="sql"/> and named
+    /// <paramref name="parameters"/> bound using AppBlocks' cross-database conventions.
+    /// </summary>
+    public static DbCommand CreateCommand(DbConnection connection, DbTransaction? transaction, string sql, params (string Name, object? Value)[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters) AddParameter(command, name, value);
+        return command;
+    }
+
+    /// <summary>
+    /// Adds a named parameter to <paramref name="command"/> using AppBlocks' cross-database conventions:
+    /// <see cref="DateTime"/> values format as UTC <c>yyyy-MM-dd HH:mm:ss.fff</c> on SQLite and bind as <see cref="DbType.DateTime2"/>
+    /// on SQL Server; <see cref="DateTimeOffset"/> formats as UTC <c>yyyy-MM-dd HH:mm:ss.fff</c> on SQLite; <see cref="DateOnly"/>
+    /// formats as <c>yyyy-MM-dd</c> on SQLite; <c>null</c> binds as <see cref="DBNull.Value"/>.
+    /// </summary>
+    public static DbParameter AddParameter(DbCommand command, string name, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var kind = command.Connection is { } connection && DatabaseKinds.TryOf(connection, out var detected) ? detected : (DatabaseDialect?)null;
+        var isOracle = kind is DatabaseDialect.Oracle or DatabaseDialect.Oracle11g;
+        var parameter = command.CreateParameter();
+        var bare = name.TrimStart('@', ':');
+        parameter.ParameterName = isOracle ? bare : name.StartsWith('@') ? name : "@" + bare;
+        if (value is null or DBNull)
+        {
+            parameter.Value = DBNull.Value;
+        }
+        else if (kind == DatabaseDialect.Sqlite)
+        {
+            parameter.Value = value switch
+            {
+                DateTime dt => (dt.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(dt, DateTimeKind.Utc) : dt.ToUniversalTime())
+                    .ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
+                DateTimeOffset dto => dto.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
+                DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                _ => value,
+            };
+        }
+        else if (kind == DatabaseDialect.SqlServer)
+        {
+            parameter.Value = value;
+            if (value is DateTime) parameter.DbType = DbType.DateTime2;
+            else if (value is byte[]) { parameter.DbType = DbType.Binary; parameter.Size = -1; }
+        }
+        else
+        {
+            parameter.Value = value;
+            if (isOracle && value is DateTime) parameter.DbType = DbType.DateTime;
+            else if (isOracle && value is byte[] && parameter.GetType().GetProperty("OracleDbType") is { CanWrite: true } type && type.PropertyType.IsEnum)
+                type.SetValue(parameter, Enum.Parse(type.PropertyType, "Blob"));
+        }
+        command.Parameters.Add(parameter);
+        return parameter;
+    }
+
     private static DbConnection Create(IServiceProvider provider, string name, string? defaultFile, bool forUse)
     {
         // A catalog has already answered for a configured or saved string by the time this runs; a builder with no catalog behind it still has the configuration.
@@ -142,9 +212,15 @@ public static partial class ApplicationDatabase
     /// complete when it returns, so <see cref="Ensure"/> never blocks on asynchronous work. Returns the number of
     /// scripts run, or null when this process had already ensured the schema.
     /// </summary>
-    private static async Task<int?> EnsureOnceAsync(DbConnection connection, ApplicationSchema schema, bool sync, CancellationToken ct)
+    private static async Task<int?> EnsureOnceAsync(DbConnection connection, ApplicationSchema schema, bool sync, CancellationToken ct, HashSet<string>? visiting = null)
     {
         if (connection.State != ConnectionState.Open) throw new InvalidOperationException("A schema is ensured on an open connection.");
+        foreach (var dependency in schema.Dependencies)
+        {
+            visiting ??= new HashSet<string>(StringComparer.Ordinal) { schema.Id };
+            if (!visiting.Add(dependency.Id)) continue;
+            await EnsureOnceAsync(connection, dependency, sync, ct, visiting);
+        }
         // Read after the open, which is when SqlClient drops a password the string does not persist.
         var memo = Ensured.GetOrAdd((connection.ConnectionString, schema.Id), _ => new Memo());
         if (memo.Done) return null;

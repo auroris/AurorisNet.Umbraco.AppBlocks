@@ -1,3 +1,4 @@
+using AppBlocks.Authentication;
 using AppBlocks.DataSources;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models.PublishedContent;

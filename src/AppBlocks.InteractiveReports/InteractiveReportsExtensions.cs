@@ -104,10 +104,13 @@ public static class InteractiveReportsExtensions
 
     public static void MapAppBlocksInteractiveReports(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapInteractiveReportJson(InteractiveReportsSite.ReportsRoute);
-        endpoints.MapReportPrinting(InteractiveReportsSite.ReportsRoute);
+        var configuration = endpoints.ServiceProvider.GetService<IConfiguration>();
+        var reportsRoute = InteractiveReportsSite.ReportsRouteFor(configuration);
+        var downloadRoute = InteractiveReportsSite.DownloadRouteFor(configuration);
+        endpoints.MapInteractiveReportJson(reportsRoute);
+        endpoints.MapReportPrinting(reportsRoute);
         endpoints.MapSavedViewsSetupNote();
-        endpoints.MapInteractiveReportFileDownload(InteractiveReportsSite.DownloadRoute);
+        endpoints.MapInteractiveReportFileDownload(downloadRoute);
         endpoints.MapInteractiveReportJson(InteractiveReportsSite.BackOfficeReportsRoute);
         endpoints.MapInteractiveReportFileDownload(InteractiveReportsSite.BackOfficeDownloadRoute);
     }

@@ -46,8 +46,16 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
         var allowSystem = configuration.GetValue("AppBlocks:AllowSystemConnectionsInReportBlocks", false);
         return ReportBlockSource.Read(key, selection, name =>
             (allowSystem || !AppBlocks.Connections.ConnectionCatalog.IsSystemConnection(name))
-            && managed?.List().Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true, errors);
+            && managed?.List().Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true, errors,
+            alias =>
+            {
+                if (sources is null || data is null) return null;
+                sources.LoadAsync().GetAwaiter().GetResult();
+                return data.ResolveSource(alias);
+            });
     }
+
+    internal Task EnsureSourcesLoadedAsync() => sources?.LoadAsync() ?? Task.CompletedTask;
 
     /// <summary>Whether access requires an account, the source binds the caller, or its schema cannot be read to tell.</summary>
     public bool RequiresSignedInReader(DataSourceDefinition source) => !DataSourceQueries.CanRead(source, DataSourceUser.Anonymous)
