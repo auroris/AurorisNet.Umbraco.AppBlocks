@@ -63,13 +63,14 @@ async function mount(body, answer, { head = '', lang = 'en', base = '', timezone
 }
 const runtime = base => `<script type="module" src="${base}/App_Plugins/ApplicationBlocks/runtime.js"></script>`;
 
-test('searchable selects filter by label and save scalar and ordered CSV values', async () => {
-    const picker = (name, multiple, maxOptions) => `<div class="app-form-field"><label for="${name}-picker">${name}</label>
+const picker = (name, multiple, maxOptions, freeText = false) => `<div class="app-form-field"><label for="${name}-picker">${name}</label>
         <div data-app-search-select class="app-search-select" data-required="true">
             <input type="hidden" id="${name}" data-field="${name}" data-kind="${multiple ? 'csv' : 'text'}">
-            <select id="${name}-picker" ${multiple ? 'multiple' : ''} ${maxOptions !== undefined ? `data-max-options="${maxOptions}"` : ''} aria-describedby="${name}-help">
+            <select id="${name}-picker" ${multiple ? 'multiple' : ''} data-allow-free-text="${freeText}" ${maxOptions !== undefined ? `data-max-options="${maxOptions}"` : ''} aria-describedby="${name}-help">
               <option value="a,b">North East</option><option value="hasOwnProperty">West</option><option value="say &quot;yes&quot;">South</option>
             </select></div><small id="${name}-help">Choose a region</small></div>`;
+
+test('searchable selects filter by label and save scalar and ordered CSV values', async () => {
     const { page, requests, errors } = await mount(form(picker('Primary', false, 2) + picker('Regions', true, 0)) + runtime(''),
         ({ method, body }) => formAnswer(method === 'GET' ? record('1', { Primary: '', Regions: 'Retired' })
             : { ...record('1', body.values), readOnlyFields: ['Regions'] }));
@@ -108,6 +109,65 @@ test('searchable selects filter by label and save scalar and ordered CSV values'
         assert.deepEqual(requests.at(-1).body.formData, {});
         assert.equal(await page.locator('.app-search-select .item').count(), 4);
         assert.ok(await regions.isDisabled());
+        assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+});
+
+test('free-text selects commit typed entries, keep suggested keys, and reload mixed CSV values', async () => {
+    let current = record(null, { Primary: 'Initial custom unit', Regions: '' });
+    const { page, requests, errors } = await mount(form(picker('Primary', false, 50, true) + picker('Regions', true, 50, true)) + runtime(''),
+        ({ method, body }) => {
+            if (method !== 'GET') current = record('1', body.values);
+            return formAnswer(current);
+        });
+    try {
+        const primary = page.getByRole('combobox', { name: 'Primary' });
+        const regions = page.getByRole('combobox', { name: 'Regions' });
+        const choices = page.getByRole('listbox', { name: 'Regions' });
+        await page.locator('.item').filter({ hasText: 'Initial custom unit' }).waitFor();
+        await regions.fill('North East');
+        await choices.getByRole('option', { name: 'North East', exact: true }).click();
+        const custom = 'New, "West" <tag>';
+        await regions.fill(custom);
+        await choices.getByRole('option', { name: `Use “${custom}”` }).waitFor();
+        await regions.press('Enter');
+        await regions.press('Escape');
+        await page.getByText('Primary', { exact: true }).click();
+        await primary.fill('__proto__');
+        await page.locator('[data-save]').click();
+        await page.getByText('Saved.', { exact: true }).waitFor();
+        assert.deepEqual(requests.at(-1).body.values, { title: null, Primary: '__proto__', Regions: '"a,b","New, ""West"" <tag>"' });
+        await page.reload();
+        await page.locator('.item').filter({ hasText: '__proto__' }).waitFor();
+        assert.equal(await page.locator('.item').filter({ hasText: custom }).count(), 1);
+        assert.equal(await page.locator('.item tag').count(), 0);
+        await page.getByText('Primary', { exact: true }).click();
+        await primary.fill('West');
+        await primary.press('Tab');
+        assert.equal(await page.locator('#Primary').inputValue(), 'hasOwnProperty');
+        assert.deepEqual(errors, []);
+    } finally { await page.close(); }
+});
+
+test('a directory can prefill an unlisted unit and lock or unlock the visible free-text control', async () => {
+    const { page, errors } = await mount(form(picker('Unit', false, 50, true)) + runtime(''), () => formAnswer(record(null, { Unit: '' })));
+    try {
+        const combo = page.getByRole('combobox', { name: 'Unit' });
+        await combo.waitFor();
+        const field = page.locator('[data-field="Unit"]');
+        await field.evaluate(input => {
+            input.value = '401 Sqn';
+            input.readOnly = true;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await page.locator('.item').filter({ hasText: '401 Sqn' }).waitFor();
+        assert.equal(await combo.isEditable(), false);
+        await page.locator('.item [role=button]').click({ force: true });
+        assert.equal(await field.inputValue(), '401 Sqn');
+        await field.evaluate(input => { input.readOnly = false; });
+        assert.ok(await combo.isEditable());
+        await field.evaluate(input => { input.value = ''; input.dispatchEvent(new Event('change', { bubbles: true })); });
+        assert.equal(await page.locator('.item').count(), 0);
         assert.deepEqual(errors, []);
     } finally { await page.close(); }
 });

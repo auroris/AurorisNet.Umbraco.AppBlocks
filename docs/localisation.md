@@ -135,6 +135,8 @@ The browser runtime formats dates, times and file sizes for the page's language,
 | `no` | No |
 | `currentValue` | {value} (current value) |
 | `noMatchingChoices` | No matching choices |
+| `useTypedChoice` | Use “{value}” |
+| `enterOrSelect` | Enter or select a value. |
 | `removeChoice` | Remove selection |
 | `chooseAvailable` | Select an available choice. |
 | `requestFailed` | The request could not be completed. |
@@ -241,6 +243,7 @@ The browser runtime formats dates, times and file sizes for the page's language,
 | `print` | Print |
 | `selectValue` | Select a value |
 | `searchChoices` | Search choices |
+| `searchOrEnter` | Search or enter a value |
 | `choicesUnavailable` | The choices for this field are not available. Try reloading the page. |
 | `chooseColorFor` | Choose a color for {label} |
 | `clearColorFor` | Clear color for {label} |

@@ -44,7 +44,13 @@ export function fieldPreview(alias, content) {
     switch (type) {
         case "textarea": input = `<textarea disabled rows="3" placeholder="${placeholder}">${value}</textarea>`; break;
         case "select": input = `<select disabled><option>${placeholder || "Select a value"}</option></select>`; break;
-        case "search": input = `<input disabled type="search" placeholder="${placeholder || ([true, 1, "true", "1"].includes(content.allowMultiple) ? "Search and select values" : "Search and select a value")}" value="${value}">`; break;
+        case "search": {
+            const enabled = value => [true, 1, "true", "1"].includes(value);
+            const hint = enabled(content.allowFreeText) ? "Search or enter a value"
+                : enabled(content.allowMultiple) ? "Search and select values" : "Search and select a value";
+            input = `<input disabled type="search" placeholder="${placeholder || hint}" value="${value}">`;
+            break;
+        }
         case "shuttle": input = `<div class="preview-columns"><div><label>Available</label><select disabled size="3"><option>Choices from the configured list</option></select></div><div>${button("Add →")}${button("← Remove")}</div><div><label>Selected</label><select disabled size="3"><option>${value}</option></select></div></div>`; break;
         case "display": input = `<output>${value || "Value from the record"}</output>`; break;
         default: input = `<input disabled type="${type}" placeholder="${placeholder}" value="${value}" ${type === "checkbox" && [true, 1, "true", "1"].includes(content.defaultValue) ? "checked" : ""}>`;

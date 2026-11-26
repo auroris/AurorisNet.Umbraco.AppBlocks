@@ -24,6 +24,7 @@ public sealed class ListOfValuesService(PublishedDataCatalog catalog, DataSource
         if (input.ValueKind != JsonValueKind.Object) return errors;
         foreach (var block in form.Fields.Where(block => AppBlockField.UsesChoices(block.Content.ContentType.Alias)))
         {
+            if (AppBlockField.AllowsFreeText(block.Content)) continue;
             var selection = block.Content.Value<string>("listOfValues");
             var field = block.Content.Value<string>("field")!;
             if (string.IsNullOrWhiteSpace(selection) || !input.TryGetProperty(field, out var value) || value.ValueKind == JsonValueKind.Null || value.ToString().Length == 0) continue;

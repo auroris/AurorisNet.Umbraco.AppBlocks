@@ -9,8 +9,10 @@ namespace AppBlocks.Tests;
 [Collection("Standalone Umbraco")]
 public sealed class SearchSelectTests
 {
-    [Fact]
-    public async Task Published_single_column_list_supplies_and_validates_both_selection_modes()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Published_single_column_list_supplies_and_validates_both_selection_modes(bool freeText)
     {
         await using var site = await BlockSite.StartAsync();
         using (var connection = site.OpenDatabase())
@@ -40,9 +42,14 @@ public sealed class SearchSelectTests
             {
                 block["contentTypeKey"] = AppBlockSchema.Key(AppBlockSchema.SearchSelectAlias).ToString();
                 BlockPages.SetValue(block, "listOfValues", "items");
+                if (freeText) BlockPages.SetValue(block, AppBlockField.FreeTextAlias, "1");
             }
             BlockPages.SetValue(many, AppBlockField.MultipleAlias, "1");
             BlockPages.SetValue(many, AppBlockField.MaxOptionsAlias, "0");
+            // Region gets its suggestions from the resource rather than the published list.
+            var region = BlockPages.Blocks(blocks, "appSelect").Single(b => BlockPages.Value(b, "field")!.ToString() == "region");
+            region["contentTypeKey"] = AppBlockSchema.Key(AppBlockSchema.SearchSelectAlias).ToString();
+            if (freeText) BlockPages.SetValue(region, AppBlockField.FreeTextAlias, "1");
             formKey = Guid.Parse(BlockPages.Blocks(blocks, "appForm").Single()["key"]!.ToString());
             var page = contents.Create("Searchable choices", contents.GetById(BlockSite.FormPageKey)!.ParentId, BlockSite.PageAlias);
             page.SetValue(BlockSite.BodyAlias, blocks.ToJsonString());
@@ -54,21 +61,32 @@ public sealed class SearchSelectTests
         await site.WaitForPublishedAsync(pageKey);
         using var client = await site.SignInMemberAsync(site.CreateMember("search-member", "search@example.test", "Search member"));
         var html = await client.GetStringAsync("/searchable-choices/");
-        Assert.Equal(2, html.Split("data-app-search-select").Length - 1);
+        Assert.Equal(3, html.Split("data-app-search-select").Length - 1);
+        Assert.Equal(3, html.Split($"data-allow-free-text=\"{freeText.ToString().ToLowerInvariant()}\"").Length - 1);
         Assert.Equal(2, html.Split("<option value=\"A,B\">A,B</option>").Length - 1);
         Assert.Contains("data-kind=\"csv\"", html);
         Assert.Contains("data-max-options=\"50\"", html);
         Assert.Contains("data-max-options=\"0\"", html);
         var form = new FormsClient(client, "", pageKey, formKey);
         Assert.True((await form.LoadAsync()).IsSuccess);
-        Task<FormResponse> Create(string customer, string notes) => form.CreateAsync(new { customer, notes, region = "WEST", status = "NEW", amount = 1, orderDate = "2026-01-01" });
+        Task<FormResponse> Create(string customer, string notes, string region = "WEST") => form.CreateAsync(new { customer, notes, region, status = "NEW", amount = 1, orderDate = "2026-01-01" });
         const string csv = "Oil,\"A,B\"";
         var created = await Create(csv, "A,B");
         Assert.True(created.IsSuccess, created.Body.ToString());
         Assert.Equal(csv, (await form.LoadAsync(created.RecordKey)).Values.GetProperty("customer").GetString());
-        foreach (var invalid in new[] { "Oil,Oil", "Oil,Missing", "Oil,", "" })
+        foreach (var invalid in new[] { "Oil,Oil", "Oil,", "", new string('a', 201) })
             Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Create(invalid, "A,B")).Response.StatusCode);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await Create(csv, "Oil,Bearing")).Response.StatusCode);
+        const string mixed = "Oil,\"401 Sqn, West\"";
+        foreach (var result in new[] { await Create(mixed, "A,B"), await Create(csv, "New note"), await Create(csv, "A,B", "New region") })
+        {
+            Assert.Equal(freeText ? HttpStatusCode.OK : HttpStatusCode.UnprocessableEntity, result.Response.StatusCode);
+        }
+        if (freeText)
+        {
+            var updated = await form.UpdateAsync(created.RecordKey!, created.RecordChecksum, new { customer = mixed });
+            Assert.True(updated.IsSuccess, updated.Body.ToString());
+            Assert.Equal(mixed, (await form.LoadAsync(created.RecordKey)).Values.GetProperty("customer").GetString());
+        }
     }
 
     [Fact]
@@ -76,6 +94,8 @@ public sealed class SearchSelectTests
     {
         Assert.True(AppBlocksValidator.Compatible(AppBlockSchema.SearchSelectAlias, new("id", "Id", "number"), true));
         Assert.False(AppBlocksValidator.Compatible(AppBlockSchema.SearchSelectAlias, new("ids", "Ids", "number"), true, true));
+        Assert.False(AppBlocksValidator.Compatible(AppBlockSchema.SearchSelectAlias, new("ids", "Ids", "number"), true, true, true));
+        Assert.True(AppBlocksValidator.Compatible(AppBlockSchema.SearchSelectAlias, new("unit", "Unit", "text"), false, false, true));
     }
 
     [Fact]

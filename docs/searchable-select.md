@@ -19,4 +19,20 @@ By default the form stores one value exactly as selected, including any commas. 
 
 Turn on **Allow multiple values** and bind to a text field to save the selection in order. The field uses the same one-line CSV format as [Shuttle](shuttle.md). Selecting `North, East` and `West` stores `"North, East",West`. Clearing all selections stores an empty string. The field's maximum length applies to the whole stored value.
 
-The server checks submitted selections against the available choices. When a published list retires a value, an existing record can keep or remove it. Defaults use a single value or CSV according to the field's setting.
+By default the server checks submitted selections against the available choices. When a published list retires a value, an existing record can keep or remove it. Defaults use a single value or CSV according to the field's setting.
+
+## Allow free text
+
+Turn on **Allow free text** (`allowFreeText`) to let visitors enter their own values. They can select a suggestion, choose **Use “…”** for their entry, or leave the field to accept the typed text. Selecting a suggestion saves its configured value. A custom entry is saved on the form record. If the suggestions query reads that same column, the new value can appear the next time the list loads.
+
+Free text works with one value or with **Allow multiple values**. A multi-select can mix suggested and typed entries in the same CSV field. Suggestions are optional. Required fields, maximum length, numeric ranges and the destination's validation still apply. For a SQL-backed form, use **List of values** for suggestions and leave the destination column's fixed `choices` restriction empty to accept custom entries.
+
+To prefill a single-value field from another control, set the bound input and dispatch a change. The picker updates its label even when the value is outside the suggestions.
+
+```js
+const unit = form.querySelector('[data-field="unit"]');
+unit.value = "401 Sqn";
+unit.dispatchEvent(new Event("change", { bubbles: true }));
+```
+
+The visible control follows the bound input's `readOnly` and `disabled` properties.

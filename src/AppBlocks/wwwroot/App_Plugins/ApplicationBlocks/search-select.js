@@ -18,39 +18,66 @@ export function mountSearchSelect(root) {
     const field = root.querySelector("[data-field]");
     const select = root.querySelector("select");
     const multiple = select.multiple;
+    const freeText = select.dataset.allowFreeText === "true";
     const rawMax = select.dataset.maxOptions;
     const parsedMax = rawMax === undefined || rawMax === "" ? 50 : Number(rawMax);
     const maxOptions = Number.isInteger(parsedMax) && parsedMax >= 0 ? (parsedMax === 0 ? null : parsedMax) : 50;
     // Tom Select indexes options on a plain object. Prefix keys so any database value can be selected.
     const optionKey = value => ":" + value;
-    for (const option of select.options) option.value = optionKey(option.value);
+    const suggestedKeys = new Map();
+    for (const option of select.options) {
+        option.value = optionKey(option.value);
+        // An exact, unambiguous label typed on blur should save the same key as clicking the suggestion.
+        suggestedKeys.set(option.text, suggestedKeys.has(option.text) ? null : option.value);
+    }
     select.selectedIndex = -1;
     const picker = new TomSelect(select, {
         placeholder: select.dataset.placeholder,
         plugins: { remove_button: { title: t("removeChoice") } },
-        create: false,
+        create: freeText && function (input) {
+            if (field.readOnly || field.matches(":disabled")) return false;
+            const key = optionKey(input);
+            return this.options[suggestedKeys.get(input)] ?? this.options[key] ?? { value: key, text: input };
+        },
+        createFilter: input => !!input.trim(),
+        createOnBlur: freeText,
         maxOptions,
         delimiter: "", // Treat pasted text, including commas, as a search.
         persist: false,
-        render: { no_results: (_, escape) => `<div class="no-results">${escape(t("noMatchingChoices"))}</div>` },
+        render: {
+            no_results: ({ input }, escape) => freeText && input ? null : `<div class="no-results">${escape(t("noMatchingChoices"))}</div>`,
+            option_create: ({ input }, escape) => suggestedKeys.get(input) ? null
+                : `<div class="create" role="option" id="${escape(select.id)}-create">${escape(t("useTypedChoice", { value: input }))}</div>`,
+        },
     });
     const control = picker.control_input;
     select.setAttribute("aria-hidden", "true");
     const describedBy = select.getAttribute("aria-describedby");
     if (describedBy) control.setAttribute("aria-describedby", describedBy);
     let problem = "";
+    let displayedValue;
 
-    function refresh() {
+    function syncLock() {
         if (field.disabled !== picker.isDisabled) {
             if (field.disabled) picker.disable();
             else picker.enable();
         }
+        if (field.readOnly !== picker.isReadOnly) {
+            if (field.readOnly) picker.close();
+            picker.setReadOnly(field.readOnly);
+        }
+    }
+    function refresh() {
+        syncLock();
         const required = root.dataset.required === "true";
         control.setAttribute("aria-required", String(required));
-        control.setCustomValidity(problem || (required && !picker.items.length ? t(multiple ? "shuttleRequired" : "chooseAvailable") : ""));
+        const requiredMessage = freeText ? "enterOrSelect" : multiple ? "shuttleRequired" : "chooseAvailable";
+        control.setCustomValidity(problem || (required && !picker.items.length ? t(requiredMessage) : ""));
     }
-    function display(record) {
+    function displayValue(stored) {
+        displayedValue = field.value;
         picker.clear(true);
+        picker.setTextboxValue("");
         problem = "";
         try {
             const values = multiple ? parseShuttleValue(field.value) : field.value ? [field.value] : [];
@@ -58,9 +85,8 @@ export function mountSearchSelect(root) {
             for (const value of values) {
                 const key = optionKey(value);
                 if (!Object.hasOwn(picker.options, key)) {
-                    if (!record.key) { problem = t("chooseAvailable"); continue; }
-                    // Only this record can keep a retired value. Removing it also removes the temporary option.
-                    picker.addOption({ value: key, text: t("currentValue", { value }) }, true);
+                    if (!freeText && !stored) { problem = t("chooseAvailable"); continue; }
+                    picker.addOption({ value: key, text: freeText ? value : t("currentValue", { value }) }, true);
                 }
                 selected.push(key);
             }
@@ -68,13 +94,28 @@ export function mountSearchSelect(root) {
         } catch (error) { problem = error.message; }
         refresh();
     }
+    function fieldChanged() {
+        if (field.value !== displayedValue) displayValue(false);
+        else syncLock();
+    }
+    field.addEventListener("change", fieldChanged);
+    const locks = new MutationObserver(syncLock);
+    locks.observe(field, { attributes: true, attributeFilter: ["readonly", "disabled"] });
     picker.on("change", () => {
         const values = picker.items.map(key => key.slice(1));
         problem = "";
         field.value = multiple ? shuttleCsv(values) : values[0] ?? "";
+        displayedValue = field.value;
         refresh();
         field.dispatchEvent(new Event("input", { bubbles: true }));
         field.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    return { control, display, refresh, dispose: () => picker.destroy() };
+    return {
+        control, display: record => displayValue(!!record.key), refresh,
+        dispose() {
+            locks.disconnect();
+            field.removeEventListener("change", fieldChanged);
+            picker.destroy();
+        },
+    };
 }

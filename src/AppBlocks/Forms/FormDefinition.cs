@@ -89,7 +89,7 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
         var bindings = fields.Select(f => f.Content.Value<string>("field") ?? "").ToArray();
         if (bindings.Distinct(StringComparer.Ordinal).Count() != bindings.Length || bindings.Any(binding => !resource.Fields.Any(f => f.Key == binding))) return null;
         if (fields.Any(f => !AppBlocksValidator.Compatible(f.Content.ContentType.Alias, resource.Fields.First(r => r.Key == f.Content.Value<string>("field")),
-            !string.IsNullOrWhiteSpace(f.Content.Value<string>("listOfValues")), AppBlockField.StoresMultipleValues(f.Content)))) return null;
+            !string.IsNullOrWhiteSpace(f.Content.Value<string>("listOfValues")), AppBlockField.StoresMultipleValues(f.Content), AppBlockField.AllowsFreeText(f.Content)))) return null;
         var selected = fields.Where(f => AppBlockField.UsesChoices(f.Content.ContentType.Alias)).Select(f => f.Content.Value<string>("listOfValues")).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
         if (selected.Length > 0 && definitions is not null) await definitions.LoadAsync();
         var lists = selected.Select(s => definitions?.FindList(s)).ToArray();
@@ -154,10 +154,11 @@ public sealed record FormDefinition(IPublishedContent Page, BlockGridItem Block,
             if (value.ValueKind == JsonValueKind.String && field.MaxLength is { } max && value.GetString()!.Length > max) errors[field.Key] = [$"Use at most {max} characters."];
             if (field.Kind == "number" && Number(value, out var numeric)
                 && (field.Minimum is { } min && numeric < min || field.Maximum is { } upper && numeric > upper)) errors[field.Key] = ["The number is outside the allowed range."];
+            if (field.Choices is null || AppBlockField.AllowsFreeText(block.Content)) continue;
             if (multiple) {
-                if (field.Choices is not null && selected.Any(item => !field.Choices.Any(choice => choice.Value == item))) errors[field.Key] = ["Select available choices."];
+                if (selected.Any(item => !field.Choices.Any(choice => choice.Value == item))) errors[field.Key] = ["Select available choices."];
             }
-            else if (field.Choices is not null && (value.ValueKind != JsonValueKind.String || !field.Choices.Any(choice => choice.Value == value.GetString()))) errors[field.Key] = ["Select an available choice."];
+            else if (value.ValueKind != JsonValueKind.String || !field.Choices.Any(choice => choice.Value == value.GetString())) errors[field.Key] = ["Select an available choice."];
         }
         if (creating) {
             foreach (var field in Resource.Fields.Where(f => !f.HasServerDefault && !f.ReadOnly && !IsFieldReadOnly(f.Key)))

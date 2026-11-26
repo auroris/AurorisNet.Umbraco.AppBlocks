@@ -261,7 +261,8 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                     warnings?.Add($"The default of '{binding}': {undeclared}");
                 var field = resource.Fields.FirstOrDefault(f => f.Key == binding);
                 if (field is null) errors.Add($"'{binding}' is not a field of {resource.Alias}.");
-                else if (!Compatible(alias, field, Text(child, "listOfValues").Length > 0, Flag(child, AppBlockField.MultipleAlias))) errors.Add($"The block for '{binding}' does not match its {field.Kind} type.");
+                else if (!Compatible(alias, field, Text(child, "listOfValues").Length > 0, Flag(child, AppBlockField.MultipleAlias), Flag(child, AppBlockField.FreeTextAlias)))
+                    errors.Add($"The block for '{binding}' does not match its {field.Kind} type.");
                 if (definitions is not null && AppBlockField.UsesChoices(alias) && Text(child, "listOfValues") is { Length: > 0 } selected && definitions.FindList(selected) is null)
                     errors.Add($"Select a published list of values for '{binding}'.");
                 if (alias == AppBlockSchema.SearchSelectAlias && Text(child, AppBlockField.MaxOptionsAlias).Trim() is { Length: > 0 } maxOptions
@@ -452,8 +453,12 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         errors.AddRange(ScheduleValidation.Validate(settings, schedules is null || definitions is null ? null : schedules.Schema, Text(block, ScheduleSettings.ColumnsAlias), scheduleOptions?.Value));
     }
 
-    internal static bool Compatible(string alias, FormField field, bool hasListOfValues, bool multiple)
-        => Compatible(alias == AppBlockSchema.SearchSelectAlias && multiple ? AppBlockSchema.ShuttleAlias : alias, field, hasListOfValues);
+    internal static bool Compatible(string alias, FormField field, bool hasListOfValues, bool multiple, bool allowFreeText = false)
+    {
+        if (alias == AppBlockSchema.SearchSelectAlias && allowFreeText)
+            return field.Kind == "text" || !multiple && field.Kind == "number";
+        return Compatible(alias == AppBlockSchema.SearchSelectAlias && multiple ? AppBlockSchema.ShuttleAlias : alias, field, hasListOfValues);
+    }
 
     public static bool Compatible(string alias, FormField field, bool hasListOfValues = false) => alias == "appDisplay" || alias switch {
         "appText" or "appTextArea" or AppBlockSchema.ColorAlias => field.Kind == "text",

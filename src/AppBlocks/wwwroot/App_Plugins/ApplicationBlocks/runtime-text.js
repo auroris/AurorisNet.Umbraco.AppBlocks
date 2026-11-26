@@ -40,6 +40,8 @@ const strings = {
     no: "No",
     currentValue: "{value} (current value)",
     noMatchingChoices: "No matching choices",
+    useTypedChoice: "Use “{value}”",
+    enterOrSelect: "Enter or select a value.",
     removeChoice: "Remove selection",
     chooseAvailable: "Select an available choice.",
     requestFailed: "The request could not be completed.",

@@ -16,9 +16,11 @@ public static class AppBlockField
     public const string WidthAlias = "width";
     public const string PlaceholderAlias = "placeholder";
     public const string MultipleAlias = "allowMultiple";
+    public const string FreeTextAlias = "allowFreeText";
     public const string MaxOptionsAlias = "maxOptions";
     public const int DefaultMaxOptions = 50;
     public static bool UsesChoices(string alias) => alias is "appSelect" or AppBlockSchema.SearchSelectAlias or AppBlockSchema.ShuttleAlias;
+    public static bool AllowsFreeText(IPublishedElement block) => block.ContentType.Alias == AppBlockSchema.SearchSelectAlias && block.Value<bool>(FreeTextAlias);
     public static bool StoresMultipleValues(IPublishedElement block) => block.ContentType.Alias == AppBlockSchema.ShuttleAlias
         || block.ContentType.Alias == AppBlockSchema.SearchSelectAlias && block.Value<bool>(MultipleAlias);
 
