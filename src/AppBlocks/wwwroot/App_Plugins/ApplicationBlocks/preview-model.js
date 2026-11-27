@@ -80,6 +80,11 @@ export function renderAppBlock(alias, content = {}, settings = {}, nested = () =
         case "appFormInterface": return `<dl><dt>Form class</dt><dd>${escape(content.resource || "Not selected")}</dd><dt>Record key parameter</dt><dd>${escape(content.keyParameter || "id")}</dd><dt>Mode</dt><dd>${content.viewOnly ? "View only" : "Edit"}</dd></dl>`;
         case "appFormsContainer": return nested(content.forms) || note("Add forms to this container.");
         case "appActions": return `<div class="app-form-actions">${button(content.saveLabel || "Save")}${button(content.cancelLabel || "Cancel")}${button(content.deleteLabel || "Delete")}</div>`;
+        case "appEmailLink": {
+            const label = content.label || "Send email";
+            const summary = [content.to && `To: ${content.to}`, content.subject && `Subject: ${content.subject}`].filter(Boolean).join(" · ");
+            return `<div class="app-form-field"><label>${escape(label)}</label><div>${button(content.linkText || content.to || label)}</div><small>${escape(content.helpText)}</small></div>` + (summary ? note(summary) : note("Set a To address or template, such as {email}."));
+        }
         case "appAttachments": return title + help + `<div class="preview-dropzone">${button("Choose files")}${note(content.allowedTypes || "Attachments")}</div>` + table(["File", "Purpose", "Size"], "Files appear for the selected record.");
         case "appTabular": return title + help + table(String(content.fields || "").split(/[,\n]/).map(s => s.trim()).filter(Boolean), content.emptyMessage || "Rows from the configured data source") + (content.hideAdd ? "" : button(content.addLabel || "Add row")) + button(content.saveLabel || "Save");
         case "appSchedule": return title + help + `<div class="preview-timeline"><div>Resources</div><div>Timeline · ${escape(content.daysBefore ?? 7)} days before / ${escape(content.daysAfter ?? 14)} days after</div><div>Scheduled resource</div><div><span class="preview-bar">Scheduled item</span></div></div>` + note(`Authoring example · rows: ${content.rowsSource || "not selected"} · bars: ${content.barsSource || "not selected"}`);

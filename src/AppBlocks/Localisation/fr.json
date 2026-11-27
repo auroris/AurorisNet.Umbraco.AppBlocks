@@ -139,6 +139,7 @@
   "cancel": "Annuler",
   "delete": "Supprimer",
   "print": "Imprimer",
+  "sendEmail": "Envoyer un courriel",
   "selectValue": "Sélectionnez une valeur",
   "choicesUnavailable": "Les choix de ce champ ne sont pas disponibles. Essayez de recharger la page.",
   "chooseColorFor": "Choisir une couleur pour {label}",

@@ -1,6 +1,6 @@
 import { ApiError, errorText, request } from "./data-api.js";
 import { t } from "./runtime-text.js";
-import { blank, truthy, newSubmissionKey, signInNotice, signInNeeded, endpointUrl, toLocalInput, fromLocalInput, plain, recordAddress, retiredOption, otherControls } from "./runtime-controls.js";
+import { blank, truthy, newSubmissionKey, signInNotice, signInNeeded, endpointUrl, toLocalInput, fromLocalInput, plain, recordAddress, buildMailto, retiredOption, otherControls } from "./runtime-controls.js";
 import { mountFieldRules } from "./field-rules.js";
 import { mountAntiSpam } from "./anti-spam.js";
 import { mountShuttle, mountColor } from "./field-controls.js";
@@ -27,6 +27,21 @@ export function mountForm(form, panel) {
     let state;
     let busy = false;
     let submissionKey = newSubmissionKey();
+    const emailLinks = [...form.querySelectorAll("[data-email-link]")];
+    function updateEmailLinks(record) {
+        if (!emailLinks.length || !record) return;
+        const current = { ...record.values };
+        for (const field of fields) current[field.dataset.field] = field.type === "checkbox" ? field.checked : field.value;
+        for (const link of emailLinks) {
+            const { href, text } = buildMailto({
+                to: link.dataset.to, cc: link.dataset.cc, bcc: link.dataset.bcc,
+                subject: link.dataset.subject, body: link.dataset.body,
+                linkText: link.dataset.linkText, emptyText: link.dataset.emptyText,
+            }, current);
+            link.textContent = text;
+            if (href) link.setAttribute("href", href); else link.removeAttribute("href");
+        }
+    }
     const antiSpam = [...form.querySelectorAll("[data-app-antispam]")].map(root => mountAntiSpam(root, form));
     // A hidden field has no message element of its own.
     const errorOf = field => form.querySelector(`#${CSS.escape(field.id)}-error`);
@@ -81,6 +96,7 @@ export function mountForm(form, panel) {
             link.textContent = shown;
             if (address) link.setAttribute("href", address); else link.removeAttribute("href");
         }
+        updateEmailLinks(record);
         for (const button of form.querySelectorAll("[data-save]")) button.hidden = !(record.key ? record.capabilities.update : record.capabilities.create);
         for (const button of form.querySelectorAll("[data-delete]")) button.hidden = !record.key || !record.capabilities.delete;
         for (const link of form.querySelectorAll("[data-print]")) {
@@ -236,6 +252,11 @@ export function mountForm(form, panel) {
             if (panel) form.dataset.panelQuery = url.search;
             else history.replaceState(null, "", url);
         }
+    }
+    if (emailLinks.length) {
+        const refreshMail = () => { if (state?.record) updateEmailLinks(state.record); };
+        form.addEventListener("input", refreshMail);
+        form.addEventListener("change", refreshMail);
     }
     form.addEventListener("submit", event => { event.preventDefault(); submit(); });
     form.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => submit(true)));

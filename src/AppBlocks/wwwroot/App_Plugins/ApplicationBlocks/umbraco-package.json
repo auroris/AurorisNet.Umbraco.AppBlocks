@@ -226,6 +226,14 @@
     },
     {
       "type": "blockEditorCustomView",
+      "alias": "AppBlocks.Preview.appEmailLink",
+      "name": "Email link preview",
+      "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
+      "forContentTypeAlias": "appEmailLink",
+      "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "blockEditorCustomView",
       "alias": "AppBlocks.Preview.appFieldset",
       "name": "Fieldset preview",
       "element": "/App_Plugins/ApplicationBlocks/block-preview.js",

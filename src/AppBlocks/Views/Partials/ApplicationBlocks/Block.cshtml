@@ -160,6 +160,21 @@ else if (alias == AppBlockSchema.AntiSpamAlias && Model.Form is not null)
 {
     @await Html.PartialAsync("~/Views/Partials/ApplicationBlocks/AntiSpam.cshtml", Model)
 }
+else if (alias == AppBlockSchema.EmailLinkAlias && Model.Form is not null)
+{
+    var id = "email-" + item.ContentKey.ToString("N");
+    var label = Property("label") ?? Text["sendEmail", "Send email"];
+    var help = Property("helpText");
+    <div class="app-form-field">
+        <label id="@id-label">@label</label>
+        <a id="@id-link" class="app-email-link" data-email-link
+            data-to="@Property("to")" data-cc="@Property("cc")" data-bcc="@Property("bcc")"
+            data-subject="@Property("subject")" data-body="@Property("body")"
+            data-link-text="@Property("linkText")" data-empty-text="@Property("emptyText")"
+            aria-labelledby="@id-label @id-link" aria-describedby="@id-help"></a>
+        <small id="@id-help">@help</small>
+    </div>
+}
 else if (alias == "appActions" && Model.Form is not null)
 {
     var destination = Model.Form.ReturnUrl(Context.Request.PathBase);

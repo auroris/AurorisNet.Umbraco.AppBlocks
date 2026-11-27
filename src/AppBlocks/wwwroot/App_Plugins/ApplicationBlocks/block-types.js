@@ -56,6 +56,11 @@ export const appBlockTypes = [
     "name": "Display value"
   },
   {
+    "alias": "appEmailLink",
+    "key": "65ec6c3c-f330-fdfa-4e9a-63b3c500e814",
+    "name": "Email link"
+  },
+  {
     "alias": "appFieldCondition",
     "key": "ef6200cb-540c-ab5a-e31f-fe04c2f8d10b",
     "name": "Field condition"

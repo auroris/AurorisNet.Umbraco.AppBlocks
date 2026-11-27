@@ -78,6 +78,53 @@ export function recordAddress(template, values) {
     const link = safeAddress(whole ? plain(valueOf(values, whole[1].trim())) : text.replace(/\{([^{}]*)\}/g, (_, name) => escaped(plain(valueOf(values, name.trim())))));
     return link?.startsWith("/") ? pathBase + link : link;
 }
+// A templated mailto: address from an Email link block: fills {field} placeholders from the record (and live edits),
+// omits body lines whose placeholders are all empty, strips line breaks from headers, and deduplicates recipients.
+export function buildMailto(templates, values) {
+    const token = /\{([^{}]*)\}/g;
+    const textOf = value => typeof value === "boolean" ? (value ? t("yes") : t("no")) : plain(value);
+    const inline = template => (template ?? "").replace(token, (_, name) => textOf(valueOf(values, name.trim()))).replace(/[\r\n]+/g, " ").trim();
+    const addresses = (raw, seen) => {
+        const list = [];
+        for (const part of raw.split(/[,;]+/)) {
+            const address = part.replace(/[\r\n]+/g, "").trim();
+            if (!address) continue;
+            const key = address.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            list.push(address);
+        }
+        return list;
+    };
+    const seen = new Set();
+    const to = addresses(inline(templates.to), seen);
+    if (!to.length) return { href: null, text: inline(templates.emptyText) };
+    const cc = addresses(inline(templates.cc), seen);
+    const bcc = addresses(inline(templates.bcc), seen);
+    const subject = inline(templates.subject);
+    const bodyLines = [];
+    for (const line of (templates.body ?? "").replace(/\r\n?/g, "\n").split("\n")) {
+        const matches = [...line.matchAll(token)];
+        if (matches.length && matches.every(match => !textOf(valueOf(values, match[1].trim())))) continue;
+        bodyLines.push(line.replace(token, (_, name) => textOf(valueOf(values, name.trim()))).trimEnd());
+    }
+    const collapsed = [];
+    for (const line of bodyLines) {
+        const empty = !line.trim();
+        if (empty && (!collapsed.length || collapsed.at(-1) === "")) continue;
+        collapsed.push(empty ? "" : line);
+    }
+    while (collapsed.length && collapsed.at(-1) === "") collapsed.pop();
+    const body = collapsed.join("\r\n");
+    const encodeRecipient = value => encodeURIComponent(value).replace(/%40/gi, "@").replace(/%2B/gi, "+");
+    const params = [];
+    if (cc.length) params.push("cc=" + cc.map(encodeRecipient).join(","));
+    if (bcc.length) params.push("bcc=" + bcc.map(encodeRecipient).join(","));
+    if (subject) params.push("subject=" + encodeURIComponent(subject));
+    if (body) params.push("body=" + encodeURIComponent(body));
+    const href = "mailto:" + to.map(encodeRecipient).join(",") + (params.length ? "?" + params.join("&") : "");
+    return { href, text: inline(templates.linkText) || to.join(", ") };
+}
 // A stored value no longer among the choices stays visible and selected as it is, so saving another field leaves it alone.
 export function retiredOption(choices, value) {
     if (blank(value) || [...choices].some(choice => choice.value === String(value))) return null;

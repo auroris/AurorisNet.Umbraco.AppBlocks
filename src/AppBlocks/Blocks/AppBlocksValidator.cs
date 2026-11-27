@@ -31,7 +31,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
     : INotificationAsyncHandler<ContentPublishingNotification>
 {
     private static readonly string[] Aliases = ["appForm", "appFormInterface", "appFieldset", "appActions", AppBlockSchema.AttachmentsAlias, AppBlockSchema.AntiSpamAlias,
-        AppBlockSchema.ScheduleAlias, AppBlockSchema.TabularAlias, ..AppBlockSchema.LayoutAliases, ..AppBlockSchema.ContentAliases, ..AppBlockSchema.FieldAliases];
+        AppBlockSchema.EmailLinkAlias, AppBlockSchema.ScheduleAlias, AppBlockSchema.TabularAlias, ..AppBlockSchema.LayoutAliases, ..AppBlockSchema.ContentAliases, ..AppBlockSchema.FieldAliases];
     /// <summary>Loads the published reference data before synchronous authored-value validation.</summary>
     public async Task LoadAsync()
     {
@@ -143,6 +143,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 else if (alias == AppBlockSchema.ScheduleAlias) Schedule(block, errors);
                 else if (alias == AppBlockSchema.TabularAlias) Tabular(block, null, errors);
                 else if (alias == AppBlockSchema.AntiSpamAlias) errors.Add("Place the Anti-spam block inside the form it protects.");
+                else if (alias == AppBlockSchema.EmailLinkAlias) errors.Add("Place the Email link block inside a form.");
                 else if (alias == "appActions" || AppBlockSchema.FieldAliases.Contains(alias)) errors.Add("Fields and form actions must be placed inside a form.");
                 Locate(start, errors.Count, locations, target);
                 var child = 0;
@@ -232,6 +233,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         if (resource is SqlDataSource { Problem: { } problem }) { errors.Add($"The data source {resource.Alias} is not available: {problem}"); return; }
         var fields = new Dictionary<string, (BlockItemData Block, BlockLocation Location)>(StringComparer.Ordinal);
         var links = new List<(string Binding, string Template, BlockLocation Target)>();
+        var emailLinks = new List<(BlockItemData Block, BlockLocation Target)>();
         var duplicates = new Dictionary<string, List<BlockLocation>>(StringComparer.Ordinal);
         var actionBlocks = new List<BlockLocation>();
         var pickers = new List<(AccountPickerSettings Settings, BlockLocation Location)>();
@@ -246,6 +248,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             if (depth > 0 && (alias == "appForm" || Plugin(alias)?.CanNestInForm == false)) errors.Add("Forms and reports cannot be nested inside a form.");
             if (alias == "appActions") actionBlocks.Add(target);
             if (alias == AppBlockSchema.AntiSpamAlias) { checkBlocks.Add(target); AntiSpam(child, errors, warnings); }
+            else if (alias == AppBlockSchema.EmailLinkAlias) emailLinks.Add((child, target));
             else if (alias == AppBlockSchema.AttachmentsAlias) Attachments(child, resource, errors);
             else if (alias == AppBlockSchema.ScheduleAlias) Schedule(child, errors);
             else if (alias == AppBlockSchema.TabularAlias) Tabular(child, resource, errors);
@@ -318,6 +321,17 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
             if (AppBlockField.LinkProblem(template) is { } unsafeLink) errors.Add($"The link template of '{binding}' is not one a page may link to. {unsafeLink}");
             foreach (var name in AppBlockField.LinkFields(template).Where(name => !fields.ContainsKey(name)))
                 errors.Add($"The link template of '{binding}' names {{{name}}}, which is not a field on this form. Add a field block for it; it may be hidden.");
+            Locate(start, errors.Count, locations, target);
+        }
+        foreach (var (emailBlock, target) in emailLinks) {
+            var start = errors.Count;
+            if (string.IsNullOrWhiteSpace(Text(emailBlock, "to")))
+                errors.Add("Enter a To address or template for the Email link block.");
+            var referenced = new[] { "to", "cc", "bcc", "subject", "body", "linkText" }
+                .SelectMany(property => AppBlockField.LinkFields(Text(emailBlock, property)))
+                .Distinct(StringComparer.Ordinal);
+            foreach (var name in referenced.Where(name => !fields.ContainsKey(name)))
+                errors.Add($"The Email link template names {{{name}}}, which is not a field on this form. Add a field block for it; it may be hidden.");
             Locate(start, errors.Count, locations, target);
         }
         // A form that edits some fields of existing records is a real use, so a required field it does not edit is a warning: the form
