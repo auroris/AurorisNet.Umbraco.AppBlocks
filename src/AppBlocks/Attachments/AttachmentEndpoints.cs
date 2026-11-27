@@ -244,7 +244,9 @@ public static class AttachmentEndpoints
     /// record's list. The caller must be able to add files to the record, as for an upload to it, which an
     /// <see cref="IAddOnlyAttachmentOwner"/> may allow a caller it does not let write; the files they reach are
     /// only their own, since the pending owner carries their account. When none are theirs but someone else has files pending
-    /// under the same submission key, the adoption is refused rather than answered as if there were nothing to adopt. A resource
+    /// under the same submission key, the adoption is refused rather than answered as if there were nothing to adopt. One that would
+    /// take the record past <see cref="AttachmentSettings.MaxFilesPerOwner"/> or <see cref="AttachmentSettings.MaxTotalBytesPerOwner"/>
+    /// is refused before anything moves, as an upload past them is. A resource
     /// that is an <see cref="ISubmittedAttachmentOwner"/> adopted the files itself when it created the record, so for it the
     /// adoption only asks it to confirm the submission and answers with the list.
     /// </summary>
@@ -274,6 +276,23 @@ public static class AttachmentEndpoints
         try { await http.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(http); }
         catch (AntiforgeryValidationException) { return Results.BadRequest(); }
         var pending = AttachmentOwner.Pending(scope.Owner!.Alias, submissionKey, scope.User!);
+        // The record's limits hold for adopted files as for uploaded ones, or files sent under several submissions would pass them.
+        var attachmentSettings = http.RequestServices.GetService<IOptions<AttachmentSettings>>()?.Value ?? new AttachmentSettings();
+        if (attachmentSettings.MaxFilesPerOwner > 0 || attachmentSettings.MaxTotalBytesPerOwner > 0)
+        {
+            var incoming = await Run(() => store.ListAsync(pending, ct));
+            if (incoming.Problem is not null) return incoming.Problem;
+            if (incoming.Value!.Count > 0)
+            {
+                var existing = await Run(() => store.ListAsync(scope.Owner, ct));
+                if (existing.Problem is not null) return existing.Problem;
+                if (attachmentSettings.MaxFilesPerOwner > 0 && existing.Value!.Count + incoming.Value.Count > attachmentSettings.MaxFilesPerOwner)
+                    return Results.Problem($"Adding these files would take this record past the maximum of {attachmentSettings.MaxFilesPerOwner} files.", statusCode: 422);
+                if (attachmentSettings.MaxTotalBytesPerOwner > 0
+                    && existing.Value!.Sum(item => item.Size) + incoming.Value.Sum(item => item.Size) > attachmentSettings.MaxTotalBytesPerOwner)
+                    return Results.Problem("Adding these files would exceed the total file size allowed for this record.", statusCode: 413);
+            }
+        }
         var adopted = await Run(() => store.AdoptAsync(pending, scope.Owner, AttachmentAccess.Actor(scope.User!), ct));
         if (adopted.Problem is not null) return adopted.Problem;
         if (adopted.Value == 0)
@@ -318,7 +337,17 @@ public static class AttachmentEndpoints
 
     private static IResult Refusal(AttachmentScope scope) => Results.Problem(scope.Problem, statusCode: scope.Status);
 
-    private static string TooLarge(AttachmentLimits limits) => $"The file is larger than the {limits.MaxFileSize / (1024 * 1024)} MB this block accepts.";
+    private static string TooLarge(AttachmentLimits limits) => $"The file is larger than the {Size(limits.MaxFileSize)} this block accepts.";
+
+    /// <summary>A limit in the largest unit it is at least one of, rounded down to a tenth so it never reads as more than it is.</summary>
+    internal static string Size(long bytes) => bytes switch {
+        >= 1024 * 1024 => Tenths(bytes / (1024d * 1024)) + " MB",
+        >= 1024 => Tenths(bytes / 1024d) + " KB",
+        1 => "1 byte",
+        _ => bytes.ToString(CultureInfo.InvariantCulture) + " bytes",
+    };
+
+    private static string Tenths(double value) => (Math.Floor(value * 10) / 10).ToString("0.#", CultureInfo.InvariantCulture);
 
     /// <summary>What a caller is told who may not make a change: someone who may add hears that the files already there stay as they are.</summary>
     private static string NoChange(AttachmentScope scope) => scope.CanAdd

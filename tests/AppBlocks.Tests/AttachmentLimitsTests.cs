@@ -22,4 +22,14 @@ public sealed class AttachmentLimitsTests
         var settings = new AttachmentSettings { AllowedExtensions = AttachmentLimits.Parse(configured).ToList() };
         Assert.Equal(accepted, AttachmentLimits.For(null, chosen, settings).Accepts(file));
     }
+
+    [Theory]
+    [InlineData(10L * 1024 * 1024, "10 MB")]
+    [InlineData(1536L * 1024, "1.5 MB")]
+    [InlineData(1024L * 1024 - 1, "1023.9 KB")]
+    [InlineData(500L * 1024, "500 KB")]
+    [InlineData(1023L, "1023 bytes")]
+    [InlineData(1L, "1 byte")]
+    public void A_size_limit_is_told_in_a_unit_that_keeps_it_true(long bytes, string told)
+        => Assert.Equal(told, AttachmentEndpoints.Size(bytes));
 }

@@ -78,17 +78,17 @@ export function mountAccountPicker(box, {
         changed(boundName);
     }, listen);
     window.addEventListener("pagehide", close, { signal: lifetime.signal });
-    window.addEventListener("message", async event => {
-        if (event.origin !== location.origin || !popup || event.source !== popup || event.data?.type !== selectionMessage) return;
+    // A key chosen in the picker's own popup, or named by the page through app-form:select-account, is selected only
+    // as the endpoint answers for it, with the checks it applies to who may be selected.
+    async function select(selectedKey, fromPopup) {
         if (!editable()) { close(); return; }
-        const selectedKey = event.data.key;
         if (typeof selectedKey !== "string" || !selectedKey) return;
         const current = ++generation; pending?.abort(); pending = new AbortController();
         status.textContent = t("pickerChecking");
         try {
             // The popup's label and attributes are never used as canonical values.
             const selected = await request(withQuery(endpoint, { [keyParameter]: selectedKey }), { signal: pending.signal });
-            if (current !== generation || !editable() || !popup || popup.closed) return;
+            if (current !== generation || !editable() || fromPopup && (!popup || popup.closed)) return;
             const person = selected.person;
             if (!person || keyOf(person) !== selectedKey || typeof person.displayName !== "string") throw new Error("Invalid selection");
             const attributes = Object.fromEntries(Object.entries(person.attributes || {}).map(([key, value]) => [key.toLowerCase(), value]));
@@ -112,7 +112,18 @@ export function mountAccountPicker(box, {
             status.textContent = t("pickerUnavailable");
             status.classList.add("app-picker-error");
         }
-    }, { signal: lifetime.signal });
+    }
+    window.addEventListener("message", event => {
+        if (event.origin !== location.origin || !popup || event.source !== popup || event.data?.type !== selectionMessage) return;
+        select(event.data.key, true);
+    }, listen);
+    // A page selects an account by naming only its key, on the identity field this picker fills. The picker takes the
+    // event whether or not it can act now, so a page can tell a field with a picker from one without. It does nothing
+    // while the picker could not be used by hand.
+    identity.addEventListener("app-form:select-account", event => {
+        event.preventDefault();
+        select(event.detail?.key, false);
+    }, listen);
     for (const [, key] of mappings) field(key).addEventListener("change", () => {
         if (!field(key).readOnly) field(key).value = normalize(key, field(key).value);
     });

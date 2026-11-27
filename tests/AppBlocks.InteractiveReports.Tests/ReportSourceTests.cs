@@ -126,7 +126,9 @@ public sealed class ReportSourceTests
         Assert.NotNull(authorization);
         var definition = await store.Find(name);
         Assert.NotNull(definition);
-        Assert.Equal(ReportAdministratorRequirement.Policy, definition.Authorization?.Policy);
+        // Only an AppBlocks administrator may create a preview, so only one may read it; a report administrator is not enough.
+        Assert.Equal(AppBlocks.Authentication.AppBlocksAuthorization.AdministratorPolicy, definition.Authorization?.Policy);
+        Assert.Equal(AppBlocks.Authentication.AppBlocksAuthorization.AdministratorPolicy, authorization.Authorization?.Policy);
         Assert.Equal(name, definition.SourceName);
         Assert.Equal("reader", bindings.Get(Assert.Single(definition.ContextParams!).Value.Claim!));
         Assert.Null(report.Definition.SourceName); // Binding never mutates the shared preview.

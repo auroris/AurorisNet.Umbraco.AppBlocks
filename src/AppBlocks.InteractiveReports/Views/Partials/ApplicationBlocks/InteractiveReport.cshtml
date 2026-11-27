@@ -19,7 +19,7 @@
     // is a question the browser asks when the page has loaded (see reports.js), so the answer is never part of a page a cache could keep.
     // A source that binds the signed-in person has nothing to show someone with no account, on any page, and a site's policy may refuse them anyway.
     var signIn = !Model.Admitted || Model.Anonymous && Context.RequestServices.GetRequiredService<AppBlocks.InteractiveReports.DataSources.PublishedReportCatalog>() is var catalog
-        && (catalog.ResolveBlockSource(block.Key, block.Value<string>("dataSource", culture: apiQuery.Length > 0 ? culture : null) ?? "", new List<string>()) is not { } source || catalog.RequiresSignedInReader(source)
+        && (await catalog.ResolveBlockSourceAsync(block.Key, block.Value<string>("dataSource", culture: apiQuery.Length > 0 ? culture : null) ?? "", new List<string>()) is not { } source || catalog.RequiresSignedInReader(source)
             || !await Context.RequestServices.GetRequiredService<AppBlocks.InteractiveReports.Reports.IReportAccessPolicy>().AuthorizeAsync(new InteractiveReport.AspNetCore.InteractiveReportAuthorizationRequest {
                 User = Context.User, Action = InteractiveReport.AspNetCore.InteractiveReportAction.ViewReport, RequestServices = Context.RequestServices,
                 Resource = new() { ReportName = ReportBlocks.Name(Model.Page.Key, item.ContentKey) },

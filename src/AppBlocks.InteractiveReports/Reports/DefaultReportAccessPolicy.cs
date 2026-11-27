@@ -58,22 +58,29 @@ public sealed class DefaultReportAccessPolicy(ApplicationAccessPolicy access, IO
         var name = request.Resource.SourceReportName ?? request.Resource.ReportName;
         if (request.Action is InteractiveReportAction.ViewReport or InteractiveReportAction.Query or InteractiveReportAction.Export
             or InteractiveReportAction.ListSavedReports or InteractiveReportAction.CreateSavedReport)
-        {
-            if (admin) return true;
-            if (name.StartsWith("__", StringComparison.Ordinal)) return false;
-            await definitions.LoadAsync();
-            if (definitions.Reports.TryGetValue(name, out var report) && report.Authorization?.Policy == ReportAdministratorRequirement.Policy) return false;
-            // A report definition node set to Specific groups admits the Members of the groups it picks; the rest admit anyone signed in.
-            return definitions.ReportNodes.GetValueOrDefault(name)?.MemberGroups is not { } picked
-                || memberGroups is not null && users is not null && await DataSourceQueries.ResolveReaderAsync(users, request.User, cancellationToken) is { IsAnonymous: false } reader
-                    && (await MemberGroupNamesAsync(memberGroups, picked)).Any(reader.IsInMemberGroup);
-        }
+            return admin || await MayReadAsync(request.User, name, cancellationToken);
+        // A saved view shows the report's rows, so someone who may no longer read the report, such as a Member removed from its
+        // groups, keeps no way into it through their own views or the shared ones.
         return request.Action switch
         {
-            InteractiveReportAction.ReadSavedReport => admin || owner || saved is { IsGlobal: true } or { IsDefault: true },
-            InteractiveReportAction.UpdateSavedReport or InteractiveReportAction.DeleteSavedReport => admin || owner,
+            InteractiveReportAction.ReadSavedReport => admin || (owner || saved is { IsGlobal: true } or { IsDefault: true }) && await MayReadAsync(request.User, name, cancellationToken),
+            InteractiveReportAction.UpdateSavedReport or InteractiveReportAction.DeleteSavedReport => admin || owner && await MayReadAsync(request.User, name, cancellationToken),
             _ => admin,
         };
+    }
+
+    /// <summary>
+    /// Whether a signed-in account that is not a report administrator may read the report: never one of the engine's own (<c>__</c>) or
+    /// one kept for administrators, only by its Members for a report definition node set to Specific groups, and otherwise yes.
+    /// </summary>
+    private async Task<bool> MayReadAsync(ClaimsPrincipal user, string name, CancellationToken cancellationToken)
+    {
+        if (name.StartsWith("__", StringComparison.Ordinal)) return false;
+        await definitions.LoadAsync();
+        if (definitions.Reports.TryGetValue(name, out var report) && report.Authorization?.Policy == ReportAdministratorRequirement.Policy) return false;
+        return definitions.ReportNodes.GetValueOrDefault(name)?.MemberGroups is not { } picked
+            || memberGroups is not null && users is not null && await DataSourceQueries.ResolveReaderAsync(users, user, cancellationToken) is { IsAnonymous: false } reader
+                && (await MemberGroupNamesAsync(memberGroups, picked)).Any(reader.IsInMemberGroup);
     }
 
     /// <summary>

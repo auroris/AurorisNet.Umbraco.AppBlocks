@@ -26,8 +26,9 @@ public sealed record BlockGridAllowance(
 
 /// <summary>
 /// Published once at startup after AppBlocks has ensured its schema definitions, applied Block Grid/List allowances,
-/// and run any pending content upgrades. Downstream startup handlers can subscribe to this notification instead of
-/// racing <see cref="UmbracoApplicationStartedNotification"/>.
+/// and run any pending content upgrades: from AppBlocks' <see cref="UmbracoApplicationStartedNotification"/> pass, which on a
+/// boot that installs or upgrades comes after Umbraco's migrations. Downstream startup handlers can subscribe to this
+/// notification instead of racing <see cref="UmbracoApplicationStartedNotification"/>.
 /// </summary>
 public sealed class AppBlocksReadyNotification : INotification;
 
@@ -50,8 +51,9 @@ public sealed class BlockGridAllowances(AppBlocksBuilder builder, IRuntimeState 
     public Task HandleAsync(UmbracoApplicationStartedNotification notification, CancellationToken ct)
         => runtime.Level == RuntimeLevel.Run ? InstallAndApplyAsync(ct, upgradeContent: true, publishReady: true) : Task.CompletedTask;
 
+    // Not ready yet: the content upgrades have not run. Umbraco starts the application after its migrations, and that pass publishes.
     public Task HandleAsync(MigrationPlansExecutedNotification notification, CancellationToken ct)
-        => InstallAndApplyAsync(ct, upgradeContent: false, publishReady: true);
+        => InstallAndApplyAsync(ct, upgradeContent: false, publishReady: false);
 
     /// <summary>
     /// Installs the definitions that are missing and applies every registration now. For a host that changes Block Grid/List data types at a
@@ -66,7 +68,7 @@ public sealed class BlockGridAllowances(AppBlocksBuilder builder, IRuntimeState 
         await installer.EnsureAsync(ct);
         await ApplyAsync(AllAllowances(), ct);
         if (upgradeContent) await installer.UpgradeContentAsync(ct);
-        if (publishReady && events is not null && Interlocked.Exchange(ref builder.ReadyPublished, 1) == 0)
+        if (publishReady && upgradeContent && events is not null && Interlocked.Exchange(ref builder.ReadyPublished, 1) == 0)
             await events.PublishAsync(new AppBlocksReadyNotification(), ct);
     }
 

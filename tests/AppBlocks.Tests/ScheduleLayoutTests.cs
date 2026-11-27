@@ -48,8 +48,32 @@ public sealed class ScheduleLayoutTests
         // The dates shown reach the sources as :PARAM.from and :PARAM.to, beside the page's own parameters.
         var bound = defaults.Parameters(Query(("id", "4")));
         Assert.Equal(("2026-10-27", "2026-11-02", "4"), (bound["from"], bound["TO"], bound["id"]));
-        Assert.Equal((new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 9)), (defaults.Shift(1).From, defaults.Shift(1).To));
-        Assert.Equal(new DateOnly(2026, 10, 20), defaults.Shift(-1).From);
+        Assert.Equal((new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 9)), (defaults.Shift(1)!.From, defaults.Shift(1)!.To));
+        Assert.Equal(new DateOnly(2026, 10, 20), defaults.Shift(-1)!.From);
+    }
+
+    [Theory]
+    [InlineData("0001-01-01", null, ScheduleScale.Days)]
+    [InlineData("0001-01-01", "9999-12-31", ScheduleScale.Hours)]
+    [InlineData("9999-12-31", null, ScheduleScale.Days)]
+    [InlineData("9999-12-31", "9999-12-31", ScheduleScale.Hours)]
+    [InlineData("9999-12-20", "9999-12-31", ScheduleScale.Days)]
+    public void A_window_at_either_end_of_the_calendar_lays_out_and_offers_only_the_windows_that_exist(string from, string? to, ScheduleScale scale)
+    {
+        var window = ScheduleWindow.Resolve(Settings with { Scale = scale }, to is null ? Query(("from", from)) : Query(("from", from), ("to", to)), Now);
+        Assert.True(window.End > window.Start);
+        Assert.Null(window.TodayColumn);
+        var layout = ScheduleLayout.Build(window, Result([("KEY", "key"), ("LABEL", "label"), ("GROUP", "group")], Row(("KEY", "1"), ("LABEL", "Room"), ("GROUP", null))),
+            Result([("KEY", "key"), ("ROW", "row"), ("START", "start"), ("END", "end"), ("LABEL", "label"), ("KIND", "kind"), ("LINK", "link")],
+                Bar(1, "1", "2026-10-29", null, "Today onward", "Stay", null)));
+        Assert.Equal(window.Columns, layout.Columns.Count);
+        // The window before or after is offered only where the calendar has it, and then joins this one.
+        var earlier = window.Shift(-1);
+        var later = window.Shift(1);
+        Assert.Equal(from.StartsWith("0001", StringComparison.Ordinal), earlier is null);
+        Assert.Equal(from.StartsWith("9999", StringComparison.Ordinal), later is null);
+        if (earlier is not null) Assert.Equal(window.Start, earlier.End);
+        if (later is not null) Assert.Equal(window.End, later.Start);
     }
 
     [Fact]

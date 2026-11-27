@@ -12,9 +12,9 @@ public sealed class PublishedReportValidator(PublishedReportCatalog catalog, IBa
     {
         var nodes = notification.PublishedEntities.Where(n => n.ContentType.Alias == PublishedReportCatalog.ReportAlias).ToArray();
         if (nodes.Length == 0) return;
-        if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+        if (nodes.Select(node => access.Refusal(security, node, "Only AppBlocks administrators may publish report definitions.")).FirstOrDefault(r => r is not null) is { } refusal)
         {
-            notification.CancelOperation(new EventMessage("Report definition", "Only AppBlocks administrators may publish report definitions.", EventMessageType.Error));
+            notification.CancelOperation(new EventMessage("Report definition", refusal, EventMessageType.Error));
             return;
         }
         await catalog.LoadAsync();

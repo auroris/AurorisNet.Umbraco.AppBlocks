@@ -171,6 +171,58 @@ public sealed class AttachmentStoreTests
         finally { File.Delete(file); Directory.Delete(root); }
     }
 
+    [Fact]
+    public async Task Owners_match_exactly_so_files_under_a_reused_alias_reach_no_one_until_migrated()
+    {
+        var file = Path.Combine(Directory.CreateTempSubdirectory("attachments-owner-").FullName, "attachments.db");
+        var connectionString = new SqliteConnection($"Data Source={file};Pooling=False").ConnectionString;
+        var store = Store(connectionString, text => new SqliteConnection(text));
+        // Source A filed a file for its record 2 while its alias was orders.lines; A was then renamed, and source B took the alias.
+        var first = new AttachmentOwner(AppBlocks.Blocks.AppBlockValues.Udi(Guid.NewGuid()), "2");
+        var second = new AttachmentOwner(AppBlocks.Blocks.AppBlockValues.Udi(Guid.NewGuid()), "2");
+        var old = await store.AddAsync(new("orders.lines", "2"), Upload("a.pdf", "application/pdf", "source A"), null, null, null, "member:1", default);
+        foreach (var owner in new[] { first, second })
+        {
+            Assert.Empty(await store.ListAsync(owner, default));
+            Assert.Null(await store.ReadAsync(owner, old.Id, default));
+            Assert.Null(await store.RenameAsync(owner, old.Id, "taken.pdf", "member:2", default));
+            Assert.False(await store.RemoveAsync(owner, old.Id, "member:2", default));
+        }
+
+        // The host moves the rows to the owner they belong to, which then reaches them, and B still does not.
+        Assert.Equal(1, await store.MigrateOwnerAsync("orders.lines", first.Alias, default));
+        Assert.Empty(await store.ListAsync(new("orders.lines", "2"), default));
+        Assert.Equal(old.Id, Assert.Single(await store.ListAsync(first, default)).Id);
+        Assert.Equal("source A", Encoding.UTF8.GetString((await store.ReadAsync(first, old.Id, default))!.Bytes));
+        Assert.Equal("a-renamed.pdf", (await store.RenameAsync(first, old.Id, "a-renamed.pdf", "member:1", default))!.FileName);
+        Assert.Empty(await store.ListAsync(second, default));
+        Assert.Null(await store.ReadAsync(second, old.Id, default));
+        Assert.True(await store.RemoveAsync(first, old.Id, "member:1", default));
+        Assert.Empty(await store.ListAsync(first, default));
+    }
+
+    [Fact]
+    public async Task A_rename_leaves_the_owner_columns_out_of_its_update_on_sqlite()
+    {
+        var file = Path.Combine(Directory.CreateTempSubdirectory("attachments-trigger-").FullName, "attachments.db");
+        var connectionString = new SqliteConnection($"Data Source={file};Pooling=False").ConnectionString;
+        var store = Store(connectionString, text => new SqliteConnection(text));
+        var invoice = await store.AddAsync(Order, Upload("invoice.pdf", "application/pdf", "invoice"), null, null, null, "member:1", default);
+        // As a host's owner-change triggers do, this one fires on any update that names OWNER_ALIAS, whether or not its value changes.
+        await using (var connection = new SqliteConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var create = connection.CreateCommand();
+            create.CommandText = "CREATE TRIGGER TEST_OWNER_CHANGE BEFORE UPDATE OF OWNER_ALIAS ON APP_ATTACHMENT_LINK BEGIN SELECT RAISE(ABORT, 'owner changed'); END";
+            await create.ExecuteNonQueryAsync();
+        }
+        var renamed = await store.RenameAsync(Order, invoice.Id, "invoice-renamed.pdf", "member:3", default);
+        Assert.Equal(("invoice-renamed.pdf", "member:3"), (renamed!.FileName, renamed.UpdatedBy));
+        Assert.Equal("invoice-renamed.pdf", (await store.ReadAsync(Order, invoice.Id, default))!.FileName);
+        // The trigger is live: a real owner change still meets it.
+        Assert.Contains("owner changed", (await Assert.ThrowsAsync<AttachmentStoreException>(() => store.MigrateOwnerAsync(Order.Alias, "elsewhere", default))).Message);
+    }
+
     private static AttachmentStore Store(string connectionString, Func<string, DbConnection> open, int pendingLifetimeHours = 24)
     {
         var configuration = new ConfigurationBuilder().Build();

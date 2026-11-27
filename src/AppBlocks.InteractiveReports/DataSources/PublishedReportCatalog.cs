@@ -43,6 +43,18 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
     public Guid? ReportOwner(string alias) { _ = Reports; return reportOwners.TryGetValue(alias.Trim(), out var key) ? key : null; }
     public DataSourceDefinition? SourceForReport(string name) => ReportNodes.GetValueOrDefault(name)?.DataSource;
 
+    /// <summary>A block's source, with the published data sources loaded first when it selects one, so no request waits on a thread.</summary>
+    public async Task<DataSourceDefinition?> ResolveBlockSourceAsync(Guid key, string selection, ICollection<string> errors)
+    {
+        if (ReportBlockSource.IsPublishedDataSource(selection)) await EnsureSourcesLoadedAsync();
+        return ResolveBlockSource(key, selection, errors);
+    }
+
+    /// <summary>
+    /// A block's source, for a caller that cannot await, which is a report block's publish check (<see cref="AppBlocks.Blocks.IAppBlockPlugin.Validate"/>):
+    /// the validator has loaded the data sources before it asks, so the load below is already complete. Every other caller uses
+    /// <see cref="ResolveBlockSourceAsync"/>; were the sources not loaded, this would block the thread until they are.
+    /// </summary>
     public DataSourceDefinition? ResolveBlockSource(Guid key, string selection, ICollection<string> errors)
     {
         var allowSystem = configuration.GetValue("AppBlocks:AllowSystemConnectionsInReportBlocks", false);
@@ -63,7 +75,14 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
     public bool RequiresSignedInReader(DataSourceDefinition source) => !DataSourceQueries.CanRead(source, DataSourceUser.Anonymous)
         || QueryOf(source).Query is not { BindsUser: false };
 
-    /// <summary>Builds a report from a block-owned table or SQL query.</summary>
+    /// <summary>Builds a report from a block's source, with the published data sources loaded first when it selects one.</summary>
+    public async Task<PublishedReport?> ReadBlockReportAsync(Guid key, Func<string, object?> value, ICollection<string> errors)
+    {
+        if (ReportBlockSource.IsPublishedDataSource(Text(value, "dataSource"))) await EnsureSourcesLoadedAsync();
+        return ReadBlockReport(key, value, errors);
+    }
+
+    /// <summary>Builds a report from a block-owned table or SQL query; see <see cref="ResolveBlockSource"/> for when a caller may use it.</summary>
     public PublishedReport? ReadBlockReport(Guid key, Func<string, object?> value, ICollection<string> errors)
     {
         var selection = Text(value, "dataSource");

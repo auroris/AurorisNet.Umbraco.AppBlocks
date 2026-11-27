@@ -210,9 +210,9 @@ public sealed class ApiEndpointValidator(ApiEndpointCatalog catalog, IMemberGrou
     {
         var nodes = notification.PublishedEntities.Where(n => n.ContentType.Alias == ApiEndpointCatalog.Alias).ToArray();
         if (nodes.Length == 0) return;
-        if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+        if (nodes.Select(node => access.Refusal(security, node, "Only AppBlocks administrators may publish API endpoints.")).FirstOrDefault(r => r is not null) is { } refusal)
         {
-            notification.CancelOperation(new EventMessage("API endpoint", "Only AppBlocks administrators may publish API endpoints.", EventMessageType.Error));
+            notification.CancelOperation(new EventMessage("API endpoint", refusal, EventMessageType.Error));
             return;
         }
         await catalog.LoadAsync();

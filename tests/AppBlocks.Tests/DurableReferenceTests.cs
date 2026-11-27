@@ -74,12 +74,21 @@ public sealed class DurableReferenceTests
         var files = services.GetRequiredService<AttachmentStore>();
         Assert.Equal("before.txt", Assert.Single(await files.ListAsync(AttachmentOwner.ForResource(selected, "1"), ct)).FileName);
         Assert.Empty(await files.ListAsync(AttachmentOwner.ForResource(other, "1"), ct));
-        // Existing SQL data source attachments stored under a pre-upgrade alias remain accessible and can be migrated to the UDI.
-        var legacyFile = await files.AddAsync(new("orders.lines", "2"), new("legacy.txt", "text/plain", [2]), null, null, null, "tester", ct);
-        Assert.Equal("legacy.txt", Assert.Single(await files.ListAsync(AttachmentOwner.ForResource(other, "2"), ct)).FileName);
-        Assert.Equal(1, await files.MigrateOwnerAsync("orders.lines", AttachmentOwner.ResourceId(other), ct));
-        Assert.Equal("legacy.txt", Assert.Single(await files.ListAsync(new(AttachmentOwner.ResourceId(other), "2"), ct)).FileName);
-        Assert.NotNull(await files.ReadAsync(new(AttachmentOwner.ResourceId(other), "2"), legacyFile.Id, ct));
+        // A file the first source stored under its old alias, which the replacement now has, reaches neither source until a host
+        // moves it to the source it belongs to; the replacement's record with the same key never sees it.
+        Assert.Equal(AttachmentOwner.ResourceId(other), AttachmentOwner.ForResource(other, "2").Alias);
+        var earlier = await files.AddAsync(new("orders.lines", "2"), new("earlier.txt", "text/plain", [2]), null, null, null, "tester", ct);
+        foreach (var record in new[] { AttachmentOwner.ForResource(selected, "2"), AttachmentOwner.ForResource(other, "2") })
+        {
+            Assert.Empty(await files.ListAsync(record, ct));
+            Assert.Null(await files.ReadAsync(record, earlier.Id, ct));
+            Assert.Null(await files.RenameAsync(record, earlier.Id, "taken.txt", "tester", ct));
+            Assert.False(await files.RemoveAsync(record, earlier.Id, "tester", ct));
+        }
+        Assert.Equal(1, await files.MigrateOwnerAsync("orders.lines", AttachmentOwner.ResourceId(selected), ct));
+        Assert.Equal("earlier.txt", Assert.Single(await files.ListAsync(AttachmentOwner.ForResource(selected, "2"), ct)).FileName);
+        Assert.NotNull(await files.ReadAsync(AttachmentOwner.ForResource(selected, "2"), earlier.Id, ct));
+        Assert.Empty(await files.ListAsync(AttachmentOwner.ForResource(other, "2"), ct));
         var schedules = services.GetRequiredService<AppBlocks.Schedules.ScheduleSources>();
         await schedules.LoadAsync();
         Assert.Equal("lines.renamed", schedules.Resolve(AppBlockValues.Udi(sourceKey))!.Alias);

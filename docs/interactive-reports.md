@@ -20,7 +20,7 @@ Install the package. Its composer registers it, and at startup it installs the r
 
 The source and the starting view are saved on the block. Connection credentials stay in AppBlocks' configuration.
 
-An administrator can preview an unpublished source to configure its view. A preview is private to its creator and expires after ten minutes.
+An AppBlocks administrator (`AppBlocks.Administrator`, see [Site integration](site-integration.md)) can preview an unpublished source to configure its view, as only they may publish one. A report administrator who is not an AppBlocks administrator cannot. A preview is private to its creator, who must still be an AppBlocks administrator to read it, and expires after ten minutes.
 
 ## Who may see a report
 

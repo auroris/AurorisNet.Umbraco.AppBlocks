@@ -70,3 +70,94 @@ test("a key-only picker in a side panel resolves a saved name, replaces it and c
     await expect(page.locator("dialog")).toBeHidden();
     assert.equal(saved, null);
 });
+
+// A page names a key with app-form:select-account on the picker's key field; the runtime mounts the form and the picker.
+async function selectionPage(t, { update = true, readOnlyFields = [], lookup } = {}) {
+    const browser = await chromium.launch({ headless: true, ...(existsSync(chromium.executablePath()) ? {} :
+        { executablePath: process.env.BROWSER_PATH || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" }) });
+    t.after(() => browser.close());
+    const page = await browser.newPage(), errors = [], lookups = [];
+    page.on("pageerror", error => errors.push(error.message));
+    t.after(() => assert.deepEqual(errors, []));
+    const people = {
+        "k-1": { key: "k-1", displayName: "Avery", attributes: { mail: "avery@example.invalid", employeeNumber: "a 111" } },
+        "k-2": { key: "k-2", displayName: "Blake", attributes: { mail: "blake@example.invalid", employeeNumber: "b 222" } },
+    };
+    const form = "/site/custom/forms/page/form", picker = "/site/custom/account-picker/page/picker";
+    const settings = JSON.stringify({ identityField: "account", nameField: "name", fieldMappings: { employeeNumber: "number" },
+        prefillMappings: { mail: "email" }, fallbackFields: { number: "mirror" }, compactUpperFields: ["number"], allowManualEntry: true });
+    await page.route("**/*", async route => {
+        const url = new URL(route.request().url());
+        const asset = await runtimeAsset(url.pathname);
+        if (asset) return route.fulfill(asset);
+        if (url.pathname === picker) {
+            const key = url.searchParams.get("key");
+            lookups.push(key);
+            const answer = lookup ? lookup(key) : { person: people[key] };
+            return route.fulfill({ status: answer.status ?? 200, json: answer });
+        }
+        if (url.pathname.startsWith(form)) return route.fulfill({ json: { definitionVersion: "1", antiforgeryToken: "token",
+            record: { key: "1", checksum: "1", values: { email: readOnlyFields.length ? "filed@example.invalid" : null }, readOnlyFields, capabilities: { update } } } });
+        if (url.pathname !== "/site/form") return route.abort();
+        return route.fulfill({ contentType: "text/html", body: `<!doctype html><html lang="en"><body>
+            <form data-app-form data-api="${form}" data-key-parameter="id"><div class="app-form-message"></div><div class="app-form-errors" hidden></div>
+            <fieldset class="app-form-body" disabled>
+            <label>Name <input data-field="name"></label><input type="hidden" data-field="account">
+            <div data-app-account-picker data-endpoint="${picker}" data-settings='${settings}'>
+            <button type="button" data-find>Find account</button><button type="button" data-manual hidden>Enter manually</button><span data-status></span></div>
+            <label>Email <input data-field="email"></label><label>Number <input data-field="number"></label><input type="hidden" data-field="mirror">
+            <button type="submit" data-save>Save</button></fieldset></form>
+            <script type="module" src="/site/App_Plugins/ApplicationBlocks/runtime.js"></script></body></html>` });
+    });
+    await page.goto("http://picker.test/site/form?id=1");
+    await expect(page.locator(".app-form-body")).toBeEnabled();
+    const select = key => page.evaluate(key => !document.querySelector('[data-field="account"]').dispatchEvent(
+        new CustomEvent("app-form:select-account", { cancelable: true, detail: { key } })), key);
+    const values = () => page.evaluate(() => ["account", "name", "email", "number", "mirror"].map(key =>
+        document.querySelector(`[data-field="${key}"]`).value));
+    return { page, select, values, lookups, status: page.locator("[data-status]") };
+}
+
+test("app-form:select-account selects and locks like a choice in the search window, and replaces an earlier one", async t => {
+    const { page, select, values, lookups, status } = await selectionPage(t);
+    assert.equal(await select("k-1"), true);
+    await expect(status).toHaveText("Avery selected.");
+    assert.deepEqual(await values(), ["k-1", "Avery", "avery@example.invalid", "A111", "A111"]);
+    await expect(page.getByLabel("Name")).not.toBeEditable();
+    await expect(page.getByLabel("Number")).not.toBeEditable();
+    await expect(page.getByText("Enter manually")).toBeVisible();
+    assert.equal(await select("k-2"), true);
+    await expect(status).toHaveText("Blake selected.");
+    assert.deepEqual(await values(), ["k-2", "Blake", "blake@example.invalid", "B222", "B222"]);
+    // Only the key travels; the lookup supplies everything else.
+    assert.deepEqual(lookups, ["k-1", "k-2"]);
+    await page.getByText("Enter manually").click();
+    await expect(page.getByLabel("Name")).toBeEditable();
+    assert.equal((await values())[0], "");
+});
+
+test("app-form:select-account does nothing on a read-only form and fills a disabled mapped field as a search-window choice does", async t => {
+    const viewOnly = await selectionPage(t, { update: false });
+    assert.equal(await viewOnly.select("k-1"), true, "the picker still owns its field");
+    await viewOnly.page.waitForTimeout(100);
+    assert.deepEqual(await viewOnly.values(), ["", "", "", "", ""]);
+    assert.deepEqual(viewOnly.lookups, []);
+
+    // A page may disable a mapped field only for now, such as a collapsed section, so the picker fills it either way.
+    const filed = await selectionPage(t, { readOnlyFields: ["email"] });
+    await filed.select("k-1");
+    await expect(filed.status).toHaveText("Avery selected.");
+    assert.deepEqual(await filed.values(), ["k-1", "Avery", "avery@example.invalid", "A111", "A111"]);
+});
+
+test("a refused app-form:select-account lookup changes nothing and says so", async t => {
+    const { page, select, values, status } = await selectionPage(t, { lookup: key => key === "k-1"
+        ? { person: { key: "k-1", displayName: "Avery", attributes: { mail: "avery@example.invalid", employeeNumber: "a 111" } } }
+        : { status: 422, title: "Not selectable" } });
+    await select("k-1");
+    await expect(status).toHaveText("Avery selected.");
+    await select("k-2");
+    await expect(status).toHaveText("This selection could not be validated. Try again.");
+    await expect(page.locator("[data-status].app-picker-error")).toBeVisible();
+    assert.deepEqual(await values(), ["k-1", "Avery", "avery@example.invalid", "A111", "A111"]);
+});

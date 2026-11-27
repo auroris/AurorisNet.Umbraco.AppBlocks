@@ -233,7 +233,9 @@ public sealed partial class SqlDataSource
         var from = plan.From(parameters, binder.Value);
         var match = new[] { (link.Column, parameters.Add(ToDatabase(plan, link, value))) };
         var restriction = plan.Restriction?.Render(parameters, binder.Value);
-        await using var command = parameters.Command(connection, transaction, plan.Dialect.Select(from, plan.ReadColumns, match, restriction, maximumRows + 1));
+        // One row past the limit says there are more; a limit of int.MaxValue has no row past it, and its + 1 would wrap.
+        await using var command = parameters.Command(connection, transaction, plan.Dialect.Select(from, plan.ReadColumns, match, restriction,
+            maximumRows == int.MaxValue ? maximumRows : maximumRows + 1));
         await using var reader = await command.ExecuteReaderAsync(ct);
         var rows = new List<Row>();
         while (await reader.ReadAsync(ct))

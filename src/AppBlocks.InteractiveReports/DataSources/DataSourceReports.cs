@@ -87,7 +87,7 @@ public sealed class DataSourceReportAccess(PublishedReportCatalog catalog, DataS
         {
             if (content is null || await ReportBlocks.ResolveAsync(content, alias) is not { } instance) return RowRestriction.Deny;
             var selection = instance.Block.Content.Value<string>("dataSource", culture: instance.Culture) ?? "";
-            source = catalog.ResolveBlockSource(instance.Block.Content.Key, selection, new List<string>());
+            source = await catalog.ResolveBlockSourceAsync(instance.Block.Content.Key, selection, new List<string>());
             if (source is null) return RowRestriction.Deny;
         }
         else { await catalog.LoadAsync(); source = catalog.SourceForReport(alias); }

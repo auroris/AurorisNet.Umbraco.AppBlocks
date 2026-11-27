@@ -12,6 +12,18 @@ AppBlocks checks each new or changed selection against the published picker and 
 
 The picker follows the [Visibility, Security and Read Only](business-rules.md#block-visibility-and-security) conditions of its form. A locked picker locks every field it writes. When Security omits the picker or one of those fields for a visitor, the other fields it writes are read only for that visitor.
 
+## Selecting an account from a page script
+
+A page script can select an account by its key, for example to offer a "Use my details" button. Dispatch `app-form:select-account` on the key field the picker fills, with the key as the only detail:
+
+```js
+const handled = !keyField.dispatchEvent(new CustomEvent("app-form:select-account", { cancelable: true, detail: { key } }));
+```
+
+The picker looks the key up through its own endpoint, as for a choice in its search window, so the same checks decide who may be selected. Then it fills the name and every mapped field, locks them, and shows its status line. A lookup that is refused or fails changes no field and shows the picker's usual message. A selection replaces any earlier one. While the picker could not be used by hand (a read-only or view-only form, or a key or name field that is read only), the event does nothing.
+
+The picker cancels the event whenever it owns that field, so `handled` tells a field with a picker from one without. The event carries no name or attribute values, and the picker ignores anything other than `key`. Mapped fields are filled exactly as for a choice in the search window, including one that is currently disabled.
+
 On an existing site, add the picker to the **Form fields** block group if the site's grid does not already offer it. The package supplies the updated grid on a fresh install or when the package definitions are reinstalled.
 
 ## Adding another account source

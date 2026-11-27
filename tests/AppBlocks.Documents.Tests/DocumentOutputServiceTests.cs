@@ -156,6 +156,21 @@ public sealed class DocumentOutputServiceTests
         Assert.Equal(0, factory.Calls);
     }
 
+    [Fact]
+    public async Task A_pdf_key_saved_under_lost_data_protection_keys_opens_the_html_document()
+    {
+        using var site = new DocumentSettingsTests.SettingsSite(new());
+        await site.Store.SaveConfigurationAsync(new(null, "PDF", "https://pdf.example/", ApiKey: "secret-key"));
+        // The same settings file read with another key ring, as after the site's Data Protection keys are lost.
+        var otherKeyRing = new DocumentSettingsStore(site.Configuration, new DocumentSettingsTests.TestEnvironment { ContentRootPath = site.Root },
+            new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+        var factory = new Factory(_ => throw new Exception("No render call expected."));
+        using var result = await new DocumentOutputService(factory, NullLogger<DocumentOutputService>.Instance, otherKeyRing)
+            .RenderDefaultPdfAsync(new() { Html = "<h1>Report</h1>", FileName = "report.pdf" }, default);
+        Assert.Equal(DocumentOutputKind.Html, result.Output);
+        Assert.Equal(0, factory.Calls);
+    }
+
     private static DocumentOutputService Service(DocumentSettingsTests.SettingsSite site, Factory factory)
         => new(factory, NullLogger<DocumentOutputService>.Instance, site.Store);
     private static HttpResponseMessage Json(string body, HttpStatusCode status = HttpStatusCode.OK)

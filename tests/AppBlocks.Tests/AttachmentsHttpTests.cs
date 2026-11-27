@@ -306,6 +306,48 @@ public sealed class AttachmentsHttpTests
     }
 
     [Fact]
+    public async Task An_adoption_that_would_take_the_record_past_its_limits_moves_nothing()
+    {
+        await using var site = await BlockSite.BootAsync(configure: builder =>
+            builder.Services.AddSingleton<IFormResource>(new FilesResource("files.limited", requireMember: false)));
+        await site.PublishAsync();
+        var (page, block, _) = await PublishFilesFormAsync(site, "Limited files", "files.limited", insideForm: true);
+        var settings = site.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AppBlocks.Attachments.AttachmentSettings>>().Value;
+        settings.MaxFilesPerOwner = 2;
+        using var anonymous = site.CreateClient();
+        async Task<PendingFiles> SendAsync(params string[] texts)
+        {
+            var pending = new PendingFiles(anonymous, $"{site.PathBase}/api/attachments/{page}/{block}/new/{Guid.NewGuid()}");
+            Assert.Equal(HttpStatusCode.OK, (await pending.ListAsync()).Status);
+            foreach (var (text, index) in texts.Select((text, index) => (text, index)))
+                Assert.Equal(HttpStatusCode.Created, (await pending.UploadAsync($"file-{index}.pdf", text)).Status);
+            return pending;
+        }
+
+        // Each submission is within the limit on its own; the second would take the record to three files.
+        var (status, adopted) = await (await SendAsync("one", "two")).AdoptAsync("1");
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(2, adopted.GetProperty("items").GetArrayLength());
+        var third = await SendAsync("three");
+        var (refused, problem) = await third.AdoptAsync("1");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused);
+        Assert.Contains("maximum of 2 files", problem.GetProperty("detail").GetString());
+        Assert.Single((await third.ListAsync()).Body.GetProperty("items").EnumerateArray());
+
+        // The total size is checked the same way: the record holds 6 bytes, and the pending file 5 more.
+        settings.MaxFilesPerOwner = 0;
+        settings.MaxTotalBytesPerOwner = 10;
+        (refused, problem) = await third.AdoptAsync("1");
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, refused);
+        Assert.Contains("total file size", problem.GetProperty("detail").GetString());
+        Assert.Single((await third.ListAsync()).Body.GetProperty("items").EnumerateArray());
+        settings.MaxTotalBytesPerOwner = 11;
+        (status, adopted) = await third.AdoptAsync("1");
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(3, adopted.GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
     public async Task A_class_that_adopts_files_as_it_creates_the_record_only_confirms_the_submission_afterwards()
     {
         var ledger = new SubmissionLedger();

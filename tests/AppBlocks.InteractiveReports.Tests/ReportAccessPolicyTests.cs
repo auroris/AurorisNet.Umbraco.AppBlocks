@@ -114,7 +114,6 @@ public sealed class ReportAccessPolicyTests
             _ => throw new NotImplementedException(method.Name),
         });
         var users = Stub<IUserService>((method, _) => method.Name == "GetAsync" ? Task.FromResult<IUser?>(user) : throw new NotImplementedException());
-        // A reserved report name keeps the published catalogue out of this test; it only governs reading the report itself.
         var policy = new DefaultReportAccessPolicy(new AppBlocks.Authentication.ApplicationAccessPolicy(users), Options.Create(new AppBlocksOptions()), null!, Monitor());
         var member = new ClaimsIdentity([new(ClaimTypes.NameIdentifier, MemberId)], IdentityConstants.ApplicationScheme);
         var backOffice = new ClaimsIdentity([new(ClaimTypes.NameIdentifier, BackOfficeKey)], Constants.Security.BackOfficeAuthenticationType);
@@ -124,14 +123,23 @@ public sealed class ReportAccessPolicyTests
         var saved = new InteractiveReport.Core.SavedReports.SavedReportMetadata(7, "__views", null, "Mine", savedBy switch {
             "member" => MemberId, "backoffice" => BackOfficeKey, "other member" => "43", _ => Guid.NewGuid().ToString(),
         }, IsGlobal: false, IsDefault: false, DateTime.UtcNow, InteractiveReport.Core.SavedReports.SavedReportOrigin.User);
-        foreach (var action in new[] { InteractiveReportAction.ReadSavedReport, InteractiveReportAction.UpdateSavedReport, InteractiveReportAction.DeleteSavedReport })
-        {
-            var request = new InteractiveReportAuthorizationRequest {
-                User = principal, Action = action, RequestServices = null!,
-                Resource = new InteractiveReportAuthorizationResource { ReportName = "__views", SavedReport = saved },
-            };
-            Assert.True(owner == await policy.AuthorizeAsync(request, default), $"{action} by {signedIn} on a view saved by {savedBy}");
-        }
+        // Ownership is the policy's own comparison; what the owner may then do also needs the report, which SavedViewAccessSiteTests reads.
+        Assert.Equal(owner, DefaultReportAccessPolicy.OwnerKey(principal) == saved.Owner);
+        await OwnersOfReservedReportsAreRefused(policy, principal, saved);
+    }
+
+    /// <summary>
+    /// The engine's own reports (<c>__</c>) are no non-administrator's to read, so their saved views are not either, even to their
+    /// owner; the shared ones no more than their own.
+    /// </summary>
+    private static async Task OwnersOfReservedReportsAreRefused(DefaultReportAccessPolicy policy, ClaimsPrincipal principal, InteractiveReport.Core.SavedReports.SavedReportMetadata saved)
+    {
+        foreach (var view in new[] { saved, saved with { IsGlobal = true }, saved with { IsDefault = true } })
+            foreach (var action in new[] { InteractiveReportAction.ReadSavedReport, InteractiveReportAction.UpdateSavedReport, InteractiveReportAction.DeleteSavedReport })
+                Assert.False(await policy.AuthorizeAsync(new InteractiveReportAuthorizationRequest {
+                    User = principal, Action = action, RequestServices = null!,
+                    Resource = new InteractiveReportAuthorizationResource { ReportName = "__views", SavedReport = view },
+                }, default), $"{action} on {view}");
     }
 
     [Fact]
@@ -151,11 +159,8 @@ public sealed class ReportAccessPolicyTests
         {
             var saved = new InteractiveReport.Core.SavedReports.SavedReportMetadata(7, "__views", null, "Mine", savedBy, IsGlobal: false, IsDefault: false,
                 DateTime.UtcNow, InteractiveReport.Core.SavedReports.SavedReportOrigin.User);
-            foreach (var action in new[] { InteractiveReportAction.UpdateSavedReport, InteractiveReportAction.DeleteSavedReport })
-                Assert.Equal(owner, await policy.AuthorizeAsync(new InteractiveReportAuthorizationRequest {
-                    User = member, Action = action, RequestServices = null!,
-                    Resource = new InteractiveReportAuthorizationResource { ReportName = "__views", SavedReport = saved },
-                }, default));
+            Assert.Equal(owner, DefaultReportAccessPolicy.OwnerKey(member, ClaimTypes.Email) == saved.Owner);
+            await OwnersOfReservedReportsAreRefused(policy, member, saved);
         }
     }
 

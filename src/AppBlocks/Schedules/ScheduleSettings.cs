@@ -92,7 +92,8 @@ public sealed record ScheduleWindow(DateOnly From, DateOnly To, ScheduleScale Sc
 
     /// <summary>
     /// Resolves the window for a request. A parameter that is not a date is ignored; an end before the start becomes the
-    /// start; a window longer than the scale allows is cut at its end, so an address can never ask for an unbounded table.
+    /// start; a window longer than the scale allows is cut at its end, so an address can never ask for an unbounded table;
+    /// a date after <see cref="LastDay"/> is pulled back to it.
     /// </summary>
     public static ScheduleWindow Resolve(ScheduleSettings settings, IReadOnlyDictionary<string, string>? parameters, DateTime now, ScheduleOptions? options = null)
     {
@@ -103,9 +104,11 @@ public sealed record ScheduleWindow(DateOnly From, DateOnly To, ScheduleScale Sc
         return Bounded(from, to, settings.Scale, now, options);
     }
 
-    /// <summary>A window over the dates given, with the end pulled back to the start and to the scale's limit as <see cref="Resolve"/> does.</summary>
+    /// <summary>A window over the dates given, with both pulled back to <see cref="LastDay"/> and the end to the start and to the scale's limit, as <see cref="Resolve"/> does.</summary>
     public static ScheduleWindow Bounded(DateOnly from, DateOnly to, ScheduleScale scale, DateTime now, ScheduleOptions? options = null)
     {
+        if (from > LastDay) from = LastDay;
+        if (to > LastDay) to = LastDay;
         if (to < from) to = from;
         options ??= ScheduleOptions.Default;
         var limit = Math.Max(1, scale == ScheduleScale.Hours ? options.MaxHourDays : options.MaxDays);
@@ -138,8 +141,16 @@ public sealed record ScheduleWindow(DateOnly From, DateOnly To, ScheduleScale Sc
     /// <summary>The column of the current day or hour, or null when today is outside the window.</summary>
     public int? TodayColumn => ColumnOf(Now) is var column && column >= 0 && column < Columns ? column : null;
 
-    /// <summary>The same length of time, moved by whole windows: -1 is the window before this one.</summary>
-    public ScheduleWindow Shift(int windows) => new(From.AddDays(windows * Days), To.AddDays(windows * Days), Scale, Now);
+    /// <summary>The last day a window can show: the calendar's last day has no next day for <see cref="End"/>.</summary>
+    public static readonly DateOnly LastDay = DateOnly.MaxValue.AddDays(-1);
+
+    /// <summary>The same length of time, moved by whole windows: -1 is the window before this one. Null when that runs off either end of the calendar.</summary>
+    public ScheduleWindow? Shift(int windows)
+    {
+        long by = (long)windows * Days, from = From.DayNumber + by, to = To.DayNumber + by;
+        return from < DateOnly.MinValue.DayNumber || to > LastDay.DayNumber ? null
+            : new(DateOnly.FromDayNumber((int)from), DateOnly.FromDayNumber((int)to), Scale, Now);
+    }
 
     /// <summary>Whether this window shows exactly the dates of another, whatever else they differ in.</summary>
     public bool SameDates(ScheduleWindow other) => From == other.From && To == other.To;

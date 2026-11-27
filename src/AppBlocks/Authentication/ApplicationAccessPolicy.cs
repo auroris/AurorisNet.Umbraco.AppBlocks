@@ -46,6 +46,9 @@ public sealed class ApplicationAccessPolicy(IUserService users, IOptions<Adminis
             || others.Any(alias => group.Alias.Equals(alias?.Trim(), StringComparison.OrdinalIgnoreCase)));
     }
 
+    /// <summary>The User with this id, whatever their standing, for a check that knows only a node's writer.</summary>
+    internal IUser? UserById(int id) => users.GetUserById(id);
+
     public async Task<bool> IsBackOfficeAdministratorAsync(ClaimsPrincipal principal)
         => IsBackOfficeAdministrator(await ActiveUserAsync(principal));
 

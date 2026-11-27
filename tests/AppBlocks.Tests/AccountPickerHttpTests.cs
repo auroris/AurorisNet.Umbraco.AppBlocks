@@ -106,6 +106,56 @@ public sealed class AccountPickerHttpTests
     }
 
     [Fact]
+    public async Task A_view_only_form_shows_the_stored_account_by_name_and_searches_nothing()
+    {
+        await using var site = await BlockSite.StartAsync();
+        var member = site.CreateMember("picker.viewer", "viewer@example.invalid", "Viewer Example");
+        var memberKey = member.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var content = BlockPages.Empty();
+        // The same key-only picker in a form that edits the record and in one that only shows it.
+        (Guid Form, Guid Picker) Add(bool viewOnly)
+        {
+            var picker = BlockPages.Add(content, UmbracoAccountPickerBlock.AliasName, ("identityField", "notes"), ("accountType", "Members"));
+            var form = BlockPages.FormBlock(content, "orders.lines", [picker, BlockPages.Add(content, "appText", ("field", "notes"))], []);
+            if (viewOnly)
+            {
+                var formBlock = content["contentData"]!.AsArray().Single(item => item!["key"]!.GetValue<string>() == form["contentKey"]!.GetValue<string>())!;
+                BlockPages.SetValue(BlockPages.Value(formBlock, "formInterface")!["contentData"]![0]!, "viewOnly", "1");
+            }
+            BlockPages.Layout(content).Add(form);
+            return (Guid.Parse(form["contentKey"]!.ToString()), Guid.Parse(picker["contentKey"]!.ToString()));
+        }
+        var editing = Add(viewOnly: false);
+        var viewing = Add(viewOnly: true);
+        using var scope = site.CreateScope();
+        var contents = scope.ServiceProvider.GetRequiredService<IContentService>();
+#pragma warning disable CS0618
+        var page = contents.GetById(BlockSite.FormPageKey)!;
+        page.SetValue(BlockSite.BodyAlias, content.ToJsonString());
+        Assert.True(contents.Save(page).Success);
+        var published = contents.Publish(page, ["*"]);
+        Assert.True(published.Success, string.Join(" ", published.EventMessages?.GetAll().Select(m => m.Message) ?? []));
+#pragma warning restore CS0618
+        using var client = await site.SignInMemberAsync(member);
+        var form = new FormsClient(client, "", page.Key, editing.Form);
+        var row = await form.LoadAsync("1");
+        Assert.True(row.IsSuccess, row.Body.ToString());
+        Assert.True((await form.UpdateAsync("1", row.RecordChecksum, new { notes = memberKey })).IsSuccess);
+
+        var url = $"/api/account-picker/{page.Key}/{viewing.Picker}";
+        var record = "&appPageQuery=" + Uri.EscapeDataString("?id=1");
+        using (var shown = await client.GetAsync(url + "?key=" + memberKey + record))
+        {
+            Assert.True(shown.IsSuccessStatusCode, await shown.Content.ReadAsStringAsync());
+            Assert.Equal(member.Name, (await shown.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("person").GetProperty("displayName").GetString());
+        }
+        // Only the record's own key is shown, and nobody searches from a form that only shows the record.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(url + "?key=999999" + record)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(url + "?s=Viewer" + record)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/account-picker/{page.Key}/{editing.Picker}?s=Viewer" + record)).StatusCode);
+    }
+
+    [Fact]
     public async Task A_picker_that_Security_omits_leaves_its_fields_read_only()
     {
         await using var site = await BlockSite.StartAsync();

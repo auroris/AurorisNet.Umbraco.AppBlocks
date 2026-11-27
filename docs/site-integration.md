@@ -358,6 +358,8 @@ Where the policy applies in AppBlocks itself:
 - The connection list, database types and business rules guide are open to every backoffice user. The table list requires `AppBlocks.Administrator`.
 - The data source and API endpoint **Test** actions require the policy, because they run the current SQL before it is saved or published. They also require Content section access and permission to update the node, or to create under the parent of a new node. An editor who is not an AppBlocks administrator sees a note in place of the Test button.
 - The Backing Classes editor requires the policy and Settings section access.
+- The Interactive Report block's **Configure view** preview requires the policy, since it runs the block's unpublished source.
+- Publishing a SQL data source, an API endpoint, a report definition, a list of values with its own SQL, or a page whose Interactive Report source changed takes the same rule. A publish with nobody signed in, such as a scheduled release, goes ahead only when the node was last saved by Umbraco's super user or by an AppBlocks administrator; otherwise an administrator must publish it.
 
 `GET /umbraco/management/api/v1/appblocks/administrator` answers `{ "allowed": true }` or `false` for the signed-in User. A companion's screen can use it to hide what only administrators may use.
 

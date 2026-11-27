@@ -7,6 +7,7 @@ using Umbraco.Cms.Core.Services;
 using Umbraco.Extensions;
 using AppBlocks.AntiSpam;
 using AppBlocks.AccountPickers;
+using AppBlocks.Authentication;
 using AppBlocks.Attachments;
 using AppBlocks.DataSources;
 using AppBlocks.Forms;
@@ -45,6 +46,7 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         if (!notification.PublishedEntities.Any(AppBlockSchema.HasBlocks)) return;
         await LoadAsync();
         foreach (var page in notification.PublishedEntities.Where(AppBlockSchema.HasBlocks)) {
+            var refusal = access.Refusal(security, page, "Only AppBlocks administrators may add or change Interactive Report data sources.");
             foreach (var property in page.Properties.Where(p => AppBlockSchema.IsBlockEditor(p.PropertyType.PropertyEditorAlias))) {
             IEnumerable<string?> cultures = [null];
             if (property.PropertyType.VariesByCulture()) cultures = page.AvailableCultures.Where(culture => notification.IsPublishingCulture(page, culture));
@@ -53,14 +55,15 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 if (string.IsNullOrWhiteSpace(json)) continue;
                 try {
                     var sets = BlockValueSets.Read(json, contentTypes);
-                    if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+                    if (refusal is not null)
                     {
-                        var publishedJson = page.GetValue(property.Alias, culture, published: true)?.ToString();
+                        // Umbraco has already copied the draft into the node's published values when it asks, so the live version is read from the store.
+                        var publishedJson = (contents?.GetById(page.Key) ?? page).GetValue(property.Alias, culture, published: true)?.ToString();
                         var publishedReports = ReportSources(publishedJson);
                         var draftReports = ReportSources(json);
                         if (draftReports.Any(entry => !publishedReports.TryGetValue(entry.Key, out var existing) || existing != entry.Value))
                         {
-                            notification.CancelOperation(new EventMessage("AppBlocks", $"{page.Name} · {property.Alias}: Only AppBlocks administrators may add or change Interactive Report data sources.", EventMessageType.Error));
+                            notification.CancelOperation(new EventMessage("AppBlocks", $"{page.Name} · {property.Alias}: {refusal}", EventMessageType.Error));
                             continue;
                         }
                     }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AppBlocks.InteractiveReports.Connections;
 using AppBlocks.Connections;
+using AppBlocks.Authentication;
 using AppBlocks.InteractiveReports.Reports;
 using InteractiveReport.AspNetCore;
 using InteractiveReport.Core.Definitions;
@@ -43,9 +44,10 @@ public sealed class AppReportDefinitionStore(
 
     public async ValueTask<ReportDefinitionAuthorization?> FindAuthorization(string name, CancellationToken ct = default)
     {
+        // A preview runs a source only an AppBlocks administrator may choose, so reading it asks the same of its owner, now.
         if (name.StartsWith(ReportSourcePreviews.Prefix, StringComparison.Ordinal))
             return previews?.Find(name, http?.HttpContext?.User) is null ? null
-                : new(name, new ReportAuthorization { Policy = ReportAdministratorRequirement.Policy });
+                : new(name, new ReportAuthorization { Policy = AppBlocksAuthorization.AdministratorPolicy });
         if (!ReportBlocks.ParseName(name, out _, out _))
         {
             await catalog.LoadAsync();
@@ -58,8 +60,7 @@ public sealed class AppReportDefinitionStore(
         if (await ReportBlocks.ResolveAsync(content, name) is not { } instance) return null;
         if (instance.Block.Content.Value<string>("dataSource", culture: instance.Culture) is { Length: > 0 } selection)
         {
-            if (ReportBlockSource.IsPublishedDataSource(selection)) await catalog.EnsureSourcesLoadedAsync();
-            return catalog.ResolveBlockSource(instance.Block.Content.Key, selection, new List<string>()) is { } source
+            return await catalog.ResolveBlockSourceAsync(instance.Block.Content.Key, selection, new List<string>()) is { } source
                 ? new(name, BlockAuthorization(instance.Page, source)) : null;
         }
         return null;
@@ -91,7 +92,7 @@ public sealed class AppReportDefinitionStore(
             var definition = Copy(preview.Definition);
             await bindings.BindAsync(definition, previewSource, ct);
             definition.SourceName = name;
-            definition.Authorization = new ReportAuthorization { Policy = ReportAdministratorRequirement.Policy };
+            definition.Authorization = new ReportAuthorization { Policy = AppBlocksAuthorization.AdministratorPolicy };
             return compiler.CompileManaged(name, definition, managed);
         }
         if (!ReportBlocks.ParseName(name, out var pageKey, out var blockKey))
@@ -105,9 +106,7 @@ public sealed class AppReportDefinitionStore(
         }
         if (await ReportBlocks.ResolveAsync(content, name) is not { } instance) return null;
         var block = instance.Block.Content;
-        if (ReportBlockSource.IsPublishedDataSource(block.Value<string>("dataSource", culture: instance.Culture)))
-            await catalog.EnsureSourcesLoadedAsync();
-        var authored = ReadBlock(block.Key, property => block.GetProperty(property)?.GetValue(instance.Culture));
+        var authored = await catalog.ReadBlockReportAsync(block.Key, property => block.GetProperty(property)?.GetValue(instance.Culture), new List<string>());
         if (authored?.DataSource is null) return null;
         var result = Copy(authored.Definition);
         var (openTarget, createTarget) = ReportFormTarget.Resolve(block, instance.Page, instance.Culture);
@@ -246,6 +245,5 @@ public sealed class AppReportDefinitionStore(
     /// <summary>A link label as the engine takes it: none rather than blank, as a cleared text box may store, so the engine's default applies.</summary>
     private static string? Label(IPublishedElement block, string alias) => block.Value<string>(alias) is { } label && !string.IsNullOrWhiteSpace(label) ? label : null;
 
-    private PublishedReport? ReadBlock(Guid key, Func<string, object?> value) => catalog.ReadBlockReport(key, value, new List<string>());
     private static ReportDefinition Copy(ReportDefinition source) => JsonSerializer.Deserialize<ReportDefinition>(JsonSerializer.Serialize(source, IrJson.Options), IrJson.Options)!;
 }

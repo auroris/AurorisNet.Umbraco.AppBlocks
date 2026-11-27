@@ -5,6 +5,7 @@ using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Services.Navigation;
 using Umbraco.Cms.Core.Strings;
 using Umbraco.Cms.Core.Web;
+using AppBlocks.Authentication;
 using AppBlocks.Forms;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -78,9 +79,9 @@ public sealed class DataSourcePublishValidator(DataSourceRuntime runtime, IMembe
     {
         var nodes = notification.PublishedEntities.Where(c => c.ContentType.Alias == DataSourceSchema.SqlAlias).ToArray();
         if (nodes.Length == 0) return;
-        if (security?.BackOfficeSecurity?.CurrentUser is { } current && access is not null && !access.IsBackOfficeAdministrator(current))
+        if (nodes.Select(node => access.Refusal(security, node, "Only AppBlocks administrators may publish SQL data sources.")).FirstOrDefault(r => r is not null) is { } refusal)
         {
-            notification.CancelOperation(new EventMessage("Data source", "Only AppBlocks administrators may publish SQL data sources.", EventMessageType.Error));
+            notification.CancelOperation(new EventMessage("Data source", refusal, EventMessageType.Error));
             return;
         }
         foreach (var content in nodes)

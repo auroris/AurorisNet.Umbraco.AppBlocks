@@ -41,7 +41,8 @@ public sealed class DocumentOutputService(IHttpClientFactory clients, ILogger<Do
             var destination = settings.DefaultPdf();
             return destination is null ? Html(request) : (DocumentFileResult)await SubmitAsync(destination, request, ct);
         }
-        catch (Exception error) when (Recoverable(error, ct))
+        // A saved API key that the site's Data Protection keys no longer read is the store's InvalidOperationException around the CryptographicException.
+        catch (Exception error) when (Recoverable(error, ct) || error is InvalidOperationException { InnerException: System.Security.Cryptography.CryptographicException })
         {
             logger.LogError(error, "The document PDF configuration could not be read; opening the HTML document instead.");
             return Html(request);

@@ -139,6 +139,56 @@ public sealed class ReportAdministrationSiteTests
         Assert.True(query.IsSuccessStatusCode, await query.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Only_an_AppBlocks_administrator_previews_a_report_source_or_reads_the_preview()
+    {
+        const string preview = "/umbraco/management/api/v1/appblocks/report-preview";
+        const string catalogue = "/umbraco/management/api/v1/application-blocks/catalogue";
+        await using var site = await PublicSite.StartAsync();
+        const string reportsEmail = "preview.reports@example.test", bothEmail = "preview.both@example.test";
+        Guid reportsKey = Guid.Empty, bothKey = Guid.Empty;
+        await site.WithServices(async services => {
+            var groups = services.GetRequiredService<IUserGroupService>();
+            var group = new UserGroup(services.GetRequiredService<IShortStringHelper>()) { Alias = ReportAdministratorGroup.Alias, Name = ReportAdministratorGroup.Name };
+            group.AddAllowedSection(Constants.Applications.Settings);
+            Assert.True((await groups.CreateAsync(group, Constants.Security.SuperUserKey, [])).Success);
+            var users = services.GetRequiredService<IUserService>();
+            reportsKey = await Create(users, reportsEmail, group.Key);
+            var both = await users.CreateAsync(Constants.Security.SuperUserKey, new UserCreateModel {
+                UserName = bothEmail, Email = bothEmail, Name = bothEmail, Kind = UserKind.Default, UserGroupKeys = new HashSet<Guid> { Constants.Security.AdminGroupKey, group.Key },
+            }, approveUser: true);
+            Assert.True(both.Success, both.Status.ToString());
+            bothKey = both.Result.CreatedUser!.Key;
+        });
+        await site.SetUserPassword(reportsKey);
+        await site.SetUserPassword(bothKey);
+        using var reportAdmin = await site.Administrator(reportsEmail);
+        using var administrator = await site.Administrator(bothEmail);
+        var selection = JsonSerializer.Serialize(new { kind = "table", connection = AppBlocks.Connections.ConnectionCatalog.ApplicationConnection, source = "PUBLIC_ROWS" });
+
+        // A report administrator manages saved views, but choosing what a report runs is an AppBlocks administrator's, as publishing it is.
+        Assert.False((await Json(reportAdmin, catalogue)).GetProperty("canPreview").GetBoolean());
+        using (var refused = await reportAdmin.PostAsJsonAsync(preview, new { dataSource = selection }))
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.True((await Json(administrator, catalogue)).GetProperty("canPreview").GetBoolean());
+        using var created = await administrator.PostAsJsonAsync(preview, new { dataSource = selection });
+        Assert.True(created.IsSuccessStatusCode, await created.Content.ReadAsStringAsync());
+        var name = JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync()).GetProperty("name").GetString();
+        await Json(administrator, Reports + "/" + name + "/schema");
+        Assert.False((await reportAdmin.GetAsync(Reports + "/" + name + "/schema")).IsSuccessStatusCode);
+
+        // Out of Administrators but still a report administrator, the creator can no longer read the preview they made.
+        await site.WithServices(services => {
+            var users = services.GetRequiredService<IUserService>();
+            var user = users.GetByUsername(bothEmail)!;
+            user.RemoveGroup(Constants.Security.AdminGroupAlias);
+            users.Save(user);
+            return Task.CompletedTask;
+        });
+        Assert.True((await Json(administrator, Management + "/access")).GetProperty("allowed").GetBoolean());
+        Assert.False((await administrator.GetAsync(Reports + "/" + name + "/schema")).IsSuccessStatusCode);
+    }
+
     private static JsonElement Row(JsonElement listing, long id) => listing.EnumerateArray().Single(row => row.GetProperty("id").GetString() == id.ToString());
     private static string DeleteUrl(JsonElement row) => $"{Management}/reports/{row.GetProperty("id").GetString()}?modifiedUtc={Uri.EscapeDataString(row.GetProperty("modifiedUtc").GetString()!)}";
 

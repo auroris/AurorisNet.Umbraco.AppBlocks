@@ -1429,6 +1429,30 @@ public sealed class DataSourceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_custom_update_binds_the_audit_fields_as_the_generated_update_writes_them()
+    {
+        var custom = Working(Tasks(("customStatements",
+            "-- update\nUPDATE TASKS SET TITLE = :FIELD.title, UPDATED_BY = :FIELD.updatedBy, UPDATED_AT = :FIELD.updatedAt WHERE TASK_ID = :FIELD.taskId")));
+        var task = (await custom.LoadAsync("1", Context(Owner), default)).Record!;
+        Assert.Equal(200, (await custom.UpdateAsync("1", Json(new { title = "Paint it" }), task.Checksum, Context(Owner), default)).Status);
+        var generated = Working(Tasks());
+        var other = (await generated.LoadAsync("3", Context(Owner), default)).Record!;
+        Assert.Equal(200, (await generated.UpdateAsync("3", Json(new { title = "Order more cones" }), other.Checksum, Context(Owner), default)).Status);
+        Assert.Equal("jsmith", Scalar("SELECT UPDATED_BY FROM TASKS WHERE TASK_ID = 1"));
+        Assert.NotNull(Scalar("SELECT UPDATED_AT FROM TASKS WHERE TASK_ID = 1"));
+        Assert.Equal(Scalar("SELECT UPDATED_AT FROM TASKS WHERE TASK_ID = 3"), Scalar("SELECT UPDATED_AT FROM TASKS WHERE TASK_ID = 1"));
+    }
+
+    [Fact]
+    public async Task A_row_limit_of_int_MaxValue_lists_the_rows()
+    {
+        var source = Working(Tasks());
+        var rows = await source.ListRowsAsync(new("projectId", "1"), Context(Owner), int.MaxValue, default);
+        Assert.Equal(200, rows.Status);
+        Assert.Single(rows.Rows!);
+    }
+
+    [Fact]
     public async Task Writes_go_through_a_view_or_an_undeclared_key_and_a_key_matching_several_rows_is_refused()
     {
         Execute("""

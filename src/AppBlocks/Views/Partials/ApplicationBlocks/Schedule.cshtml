@@ -177,9 +177,10 @@ else
                     </div>
                 </details>
                 <nav class="app-schedule-nav" aria-label="@Text["scheduleNavigation", "Schedule window"]">
-                    <a href="@Address(window.Shift(-1))" rel="prev">@Text["scheduleEarlier", "Earlier"]</a>
+                    @* At either end of the calendar there is no window further on, so its link is left out. *@
+                    @if (window.Shift(-1) is { } earlier) { <a href="@Address(earlier)" rel="prev">@Text["scheduleEarlier", "Earlier"]</a> }
                     <a href="@Address(null)">@Text["scheduleToday", "Today"]</a>
-                    <a href="@Address(window.Shift(1))" rel="next">@Text["scheduleLater", "Later"]</a>
+                    @if (window.Shift(1) is { } later) { <a href="@Address(later)" rel="next">@Text["scheduleLater", "Later"]</a> }
                 </nav>
             </div>
         </div>

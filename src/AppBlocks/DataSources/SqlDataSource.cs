@@ -248,8 +248,12 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
             if (changes.Length == 0) return FormResult.Ok(Record(plan, current, user));
             if (plan.UpdateStatement is { } statement)
             {
+                // The editor's statement binds the "updated" audit fields as the generated update writes them, not as stored.
+                var written = new Dictionary<PlanColumn, object?>(proposed);
+                if (plan.UpdatedBy is { } updatedBy) written[updatedBy] = Recorded(user, plan.Definition.AuditColumns.UpdatedByValue);
+                if (plan.UpdatedAt is { } updatedAt) written[updatedAt] = FieldValues.FromValue(now.DateTime, updatedAt.Kind, out _, plan.Definition.DateTimes);
                 var parameters = plan.Parameters();
-                await using var command = parameters.Command(connection, transaction, statement.Render(parameters, binder.With(proposed).Value));
+                await using var command = parameters.Command(connection, transaction, statement.Render(parameters, binder.With(written).Value));
                 await command.ExecuteNonQueryAsync(ct);
             }
             else if (!OneRow(plan, await UpdateRowAsync(plan, connection, transaction, keys, changes, user, now, binder, ct))) return FormResult.Conflict();
