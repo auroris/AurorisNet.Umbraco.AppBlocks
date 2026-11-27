@@ -87,8 +87,27 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
         if (string.IsNullOrWhiteSpace(json)) return result;
         foreach (var set in BlockValueSets.Read(json, contentTypes))
             foreach (var item in set.ContentData)
-                if (Alias(item) == "appReport") result[item.Key] = Text(item, "dataSource");
+                if (Alias(item) == "appReport") result[item.Key] = CanonicalReportSource(Text(item, "dataSource"));
         return result;
+    }
+
+    private static string CanonicalReportSource(string raw)
+    {
+        var trimmed = raw.Trim();
+        if (!trimmed.StartsWith('{')) return trimmed;
+        try
+        {
+            using var json = JsonDocument.Parse(trimmed);
+            var root = json.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("kind", out var kind) && kind.ValueKind == JsonValueKind.String
+                && kind.GetString()?.Trim() == "dataSource"
+                && root.TryGetProperty("source", out var source) && source.ValueKind == JsonValueKind.String
+                && AppBlockValues.DocumentKey(source.GetString()!.Trim()) is { } key)
+                return JsonSerializer.Serialize(new { kind = "dataSource", source = AppBlockValues.Udi(key) });
+        }
+        catch (JsonException) { }
+        return trimmed;
     }
 
     /// <summary>The errors publishing would report for one block value, as JSON; blank is an empty value and has none.</summary>

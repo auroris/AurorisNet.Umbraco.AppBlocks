@@ -68,11 +68,24 @@ public sealed class DurableReferenceTests
         var registry = services.GetRequiredService<FormResourceRegistry>();
         var selected = Assert.IsType<SqlDataSource>(await registry.FindAsync(AppBlockValues.Udi(sourceKey)));
         Assert.Equal("lines.renamed", selected.Alias);
+        Assert.Same(selected, registry.Find(sourceKey.ToString()));
         var other = Assert.IsType<SqlDataSource>(registry.Find("orders.lines"));
         Assert.Equal(replacementKey, other.Definition.Key);
         var files = services.GetRequiredService<AttachmentStore>();
-        Assert.Equal("before.txt", Assert.Single(await files.ListAsync(new(AttachmentOwner.ResourceId(selected), "1"), ct)).FileName);
-        Assert.Empty(await files.ListAsync(new(AttachmentOwner.ResourceId(other), "1"), ct));
+        Assert.Equal("before.txt", Assert.Single(await files.ListAsync(AttachmentOwner.ForResource(selected, "1"), ct)).FileName);
+        Assert.Empty(await files.ListAsync(AttachmentOwner.ForResource(other, "1"), ct));
+        // Existing SQL data source attachments stored under a pre-upgrade alias remain accessible and can be migrated to the UDI.
+        var legacyFile = await files.AddAsync(new("orders.lines", "2"), new("legacy.txt", "text/plain", [2]), null, null, null, "tester", ct);
+        Assert.Equal("legacy.txt", Assert.Single(await files.ListAsync(AttachmentOwner.ForResource(other, "2"), ct)).FileName);
+        Assert.Equal(1, await files.MigrateOwnerAsync("orders.lines", AttachmentOwner.ResourceId(other), ct));
+        Assert.Equal("legacy.txt", Assert.Single(await files.ListAsync(new(AttachmentOwner.ResourceId(other), "2"), ct)).FileName);
+        Assert.NotNull(await files.ReadAsync(new(AttachmentOwner.ResourceId(other), "2"), legacyFile.Id, ct));
+        var schedules = services.GetRequiredService<AppBlocks.Schedules.ScheduleSources>();
+        await schedules.LoadAsync();
+        Assert.Equal("lines.renamed", schedules.Resolve(AppBlockValues.Udi(sourceKey))!.Alias);
+        var controller = ActivatorUtilities.CreateInstance<AppBlocksController>(services);
+        var missingType = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(controller.PageProperties(Guid.NewGuid(), services.GetRequiredService<IContentTypeService>()));
+        Assert.Empty(Assert.IsAssignableFrom<System.Collections.IEnumerable>(missingType.Value));
         var data = services.GetRequiredService<PublishedDataCatalog>();
         await data.LoadAsync();
         Assert.Equal(sourceKey, data.ResolveSource(AppBlockValues.Udi(sourceKey))!.Key);

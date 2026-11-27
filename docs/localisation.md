@@ -241,6 +241,7 @@ The browser runtime formats dates, times and file sizes for the page's language,
 | `cancel` | Cancel |
 | `delete` | Delete |
 | `print` | Print |
+| `sendEmail` | Send email |
 | `selectValue` | Select a value |
 | `searchChoices` | Search choices |
 | `searchOrEnter` | Search or enter a value |

@@ -49,7 +49,7 @@ async function mount({ value = "", readonly = false, fail = false, form = false,
             return js(await readFile(existsSync(companion) ? companion : resolve(root, "src/AppBlocks/wwwroot", relative), "utf8"));
         }
         requests.push({ path, headers: route.request().headers() });
-        if (path.endsWith("/catalogue")) return json({ formClasses, resources: [{ alias: "content-node", dataSource: { name: "Old source", key: "8289c031-96e6-834e-c0df-40d38196eb8a" } }] });
+        if (path.endsWith("/catalogue")) return json({ formClasses, resources: [{ alias: "content-node", selection: "umb://document/8289c03196e6834ec0df40d38196eb8a", dataSource: { name: "Old source", key: "8289c031-96e6-834e-c0df-40d38196eb8a" } }] });
         if (path.endsWith("/connections")) return json([{ name: "AppBlocksDb" }, { name: "Business" }]);
         if (path.endsWith("/tables")) return url.searchParams.get("connection") === "Business"
             ? fail ? json({ detail: "Connection unavailable" }, 422) : json([{ name: "sales.Order.Items", value: '"sales"."Order.Items"' }])
@@ -94,7 +94,7 @@ test("a report selects a published document and reopens the same key", async () 
     await page.getByLabel("Source type").selectOption("dataSource");
     await page.getByLabel("SQL data source").selectOption({ label: "Old source (content-node)" });
     const saved = await page.evaluate(() => window.changes.at(-1));
-    assert.deepEqual(JSON.parse(saved), { kind: "dataSource", source: "8289c031-96e6-834e-c0df-40d38196eb8a" });
+    assert.deepEqual(JSON.parse(saved), { kind: "dataSource", source: "umb://document/8289c03196e6834ec0df40d38196eb8a" });
     assert.deepEqual(errors, []);
     await page.close();
     const reopened = await mount({ value: saved });
@@ -136,7 +136,7 @@ test("forms list registered C# classes and published data sources under their ow
     assert.deepEqual(errors, []); await page.close();
 });
 
-test("SQL data source picker reopens aliases and keys and saves new selections by key", async () => {
+test("SQL data source picker reopens aliases and keys and saves new selections by UDI", async () => {
     const { page, errors } = await mount({ form: true });
     await page.evaluate(async () => {
         await import("/sub/App_Plugins/ApplicationBlocks/data-source-picker.js");
@@ -148,18 +148,19 @@ test("SQL data source picker reopens aliases and keys and saves new selections b
     const picker = page.getByLabel("SQL data source");
     const label = "Old source (content-node)";
     const key = "8289c031-96e6-834e-c0df-40d38196eb8a";
+    const udi = "umb://document/8289c03196e6834ec0df40d38196eb8a";
     await picker.getByRole("option", { name: label, exact: true }).waitFor({ state: "attached" });
     assert.equal(await picker.locator("option:checked").textContent(), label);
-    assert.equal(await picker.inputValue(), key);
+    assert.equal(await picker.inputValue(), udi);
     assert.equal(await page.locator("app-data-source-picker").evaluate(editor => editor.value), "content-node");
     assert.deepEqual(await page.evaluate(() => window.changes), []);
 
     await page.locator("app-data-source-picker").evaluate((editor, value) => { editor.value = value; }, key);
     assert.equal(await picker.locator("option:checked").textContent(), label);
-    assert.equal(await picker.inputValue(), key);
+    assert.equal(await picker.inputValue(), udi);
     await picker.selectOption("");
     await picker.selectOption({ label });
-    assert.deepEqual(await page.evaluate(() => window.changes), ["", key]);
+    assert.deepEqual(await page.evaluate(() => window.changes), ["", udi]);
     assert.deepEqual(errors, []);
     await page.close();
 });

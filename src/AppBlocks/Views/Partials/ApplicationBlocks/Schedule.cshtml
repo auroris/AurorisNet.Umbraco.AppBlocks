@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Mvc.Rendering
 @using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.Extensions.Options
+@using Umbraco.Cms.Core.Models.PublishedContent
 @using AppBlocks.Blocks
 @using AppBlocks.Forms
 @using AppBlocks.Schedules
@@ -9,6 +10,7 @@
 @inject ScheduleQueries Queries
 @inject IOptions<ScheduleOptions> Limits
 @inject AppBlocksText Text
+@inject IVariationContextAccessor VariationContext
 @*
     Resources against time: the rows of one source down the side, the bars of another across a window of days or
     hours. The server lays the whole table out (Schedules/ScheduleLayout.cs): one cell per row and column, the bars
@@ -22,7 +24,7 @@
 *@
 @{
     var item = Model.Block;
-    var settings = ScheduleSettings.Read(item.Content);
+    var settings = ScheduleSettings.Read(item.Content, VariationContext.VariationContext?.Culture, Context.Request.PathBase);
     var limits = Limits.Value;
     var id = "schedule-" + item.ContentKey.ToString("N");
     var culture = CultureInfo.CurrentUICulture;

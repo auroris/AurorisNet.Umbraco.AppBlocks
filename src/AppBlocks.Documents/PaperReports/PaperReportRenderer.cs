@@ -24,7 +24,7 @@ public sealed class PaperReportRenderer(DataSourceCatalog sources, DataSourceQue
     {
         var definition = PaperReportDefinition.Read(alias => page.GetProperty(alias)?.GetValue());
         await sources.LoadAsync();
-        var source = sources.DataSources.FirstOrDefault(s => s.Definition.Key == definition.DataSourceKey)
+        var source = sources.FindByKey(definition.DataSourceKey)
             ?? throw new DataSourceException("The paper report's data source is not published.");
         var execution = new FormExecutionContext(http.User, page.Key, page.Key, page.UpdateDate.Ticks.ToString(CultureInfo.InvariantCulture));
         var person = await users.ResolveAsync(execution, ct) ?? throw new UnauthorizedAccessException();

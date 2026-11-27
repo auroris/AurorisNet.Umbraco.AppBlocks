@@ -58,7 +58,7 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         // A resource may let a caller it does not let write add files all the same.
         var add = write || !block.ReadOnly && !viewOnly && scope.Resource is IAddOnlyAttachmentOwner additions
             && await additions.MayAddAttachmentsAsync(scope.Record!, context, ct);
-        return new(200, null, block, scope.User, new AttachmentOwner(AttachmentOwner.ResourceId(scope.Resource!), scope.OwnerKey), write, CanAdd: add,
+        return new(200, null, block, scope.User, AttachmentOwner.ForResource(scope.Resource!, scope.OwnerKey), write, CanAdd: add,
             Resource: scope.Resource, Parameters: scope.Parameters);
     }
 

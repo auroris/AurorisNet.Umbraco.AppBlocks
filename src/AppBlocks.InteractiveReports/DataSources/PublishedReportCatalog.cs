@@ -28,6 +28,7 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
     public const string SpecificGroups = "Specific groups";
     internal const string RowRestrictionMarker = "{{RowRestriction}}";
     private Dictionary<string, PublishedReport>? nodes;
+    private Dictionary<Guid, PublishedReport>? nodesByKey;
     private Dictionary<string, ReportDefinition>? reports;
     private readonly HashSet<string> unavailableReports = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Guid> reportOwners = new(StringComparer.OrdinalIgnoreCase);
@@ -37,6 +38,7 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
     private Task? loading;
     public Task LoadAsync() => loading ??= LoadCoreAsync();
     public IReadOnlyDictionary<string, PublishedReport> ReportNodes => nodes ?? throw new InvalidOperationException("Call LoadAsync before reading reports.");
+    public PublishedReport? FindReportByKey(Guid key) { _ = ReportNodes; return nodesByKey?.GetValueOrDefault(key); }
     public bool IsUnavailableReport(string alias) { _ = Reports; return unavailableReports.Contains(alias); }
     public Guid? ReportOwner(string alias) { _ = Reports; return reportOwners.TryGetValue(alias.Trim(), out var key) ? key : null; }
     public DataSourceDefinition? SourceForReport(string name) => ReportNodes.GetValueOrDefault(name)?.DataSource;
@@ -193,15 +195,19 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
         await sources.LoadAsync();
         reports = new(configured.CurrentValue.Reports, StringComparer.OrdinalIgnoreCase);
         nodes = new(StringComparer.OrdinalIgnoreCase);
+        nodesByKey = [];
         using var reference = contexts.EnsureUmbracoContext();
         if (reference.UmbracoContext.Content is not { } cache) return;
         await foreach (var node in PublishedDefinitionNodes.OfType(cache, navigation, ReportAlias))
         {
             Func<string, object?> value = property => node.GetProperty(property)?.GetValue();
             var alias = Text(value, "alias");
-            if (!reportOwners.TryAdd(alias, node.Key)) { warnings.Hidden(node, alias); continue; }
+            var ownsAlias = reportOwners.TryAdd(alias, node.Key);
+            if (!ownsAlias) warnings.Hidden(node, alias);
             var selected = Text(value, "dataSource") is { Length: > 0 } selection ? data.ResolveSource(selection) : null;
             var report = runtime.Definition(node.Key, node.UpdateDate, () => Logged(node, errors => ReadReport(node.Key, node.Name, value, errors)), SourceVersion(selected));
+            if (report is not null) nodesByKey.TryAdd(report.Key, report);
+            if (!ownsAlias) continue;
             // An unavailable override cannot expose the configured seed's potentially broader dataset.
             if (report is null) { reports.Remove(alias); unavailableReports.Add(alias); }
             else if (nodes.TryAdd(report.Alias, report))

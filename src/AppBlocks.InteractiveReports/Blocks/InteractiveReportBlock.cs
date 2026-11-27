@@ -31,9 +31,18 @@ public sealed class InteractiveReportBlock(ReportDefinitionCompiler compiler,
         // Control names are Interactive Reports' feature tokens, as for a report definition node.
         if (Text(block, "controls").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Any(c => ReportFeatures.Canonical(c) is null)) errors.Add("The report contains an unknown control name.");
         var hasOpenTarget = Text(block, "formOnThisPage") is "1" or "True" or "true" || Text(block, "formPage").Length > 0;
+        var hasCreateTarget = hasOpenTarget || Text(block, "createFormPage").Length > 0;
+        if (Text(block, "openForm").Trim() is { Length: > 0 } openForm) {
+            if (!Guid.TryParse(openForm, out _)) errors.Add("Choose a valid Open form, or leave it empty.");
+            else if (!hasOpenTarget) errors.Add("Select a Form page or turn on Form on this page before choosing an Open form.");
+        }
+        if (Text(block, "createForm").Trim() is { Length: > 0 } createForm) {
+            if (!Guid.TryParse(createForm, out _)) errors.Add("Choose a valid Create form, or leave it empty.");
+            else if (!hasCreateTarget) errors.Add("Select a Form page, Create form page, or turn on Form on this page before choosing a Create form.");
+        }
         var keyColumn = Text(block, "keyColumn");
         var checkColumn = false;
-        if (hasOpenTarget || Text(block, "createFormPage").Length > 0) {
+        if (hasCreateTarget) {
             var open = ReportLinkRule.Read(ReportLinkRule.Open, alias => Text(block, alias));
             var create = ReportLinkRule.Read(ReportLinkRule.Create, alias => Text(block, alias));
             checkColumn = hasOpenTarget && open.Visibility != ReportLinkVisibility.Hidden;

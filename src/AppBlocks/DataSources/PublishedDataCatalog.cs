@@ -14,16 +14,21 @@ public sealed class PublishedDataCatalog(IUmbracoContextFactory contexts, IDocum
 {
     public const string ListAlias = "listOfValues";
     private Dictionary<string, ListOfValuesDefinition>? lists;
+    private Dictionary<Guid, ListOfValuesDefinition>? listsByKey;
     private readonly Dictionary<string, DataSourceRuntime.PlanEntry> plans = new(StringComparer.Ordinal);
     public IReadOnlyDictionary<string, ListOfValuesDefinition> Lists => lists ?? throw new InvalidOperationException("Call LoadAsync before reading lists of values.");
     private Task? loading;
     public Task LoadAsync() => loading ??= LoadCoreAsync();
-    public ListOfValuesDefinition? FindList(string? selection) => string.IsNullOrWhiteSpace(selection) ? null
-        : AppBlocks.Blocks.AppBlockValues.DocumentKey(selection) is { } key
-            ? Lists.Values.FirstOrDefault(list => list.Key == key) : Lists.GetValueOrDefault(selection);
+    public ListOfValuesDefinition? FindList(string? selection)
+    {
+        if (string.IsNullOrWhiteSpace(selection)) return null;
+        _ = Lists;
+        return AppBlocks.Blocks.AppBlockValues.DocumentKey(selection) is { } key
+            ? listsByKey?.GetValueOrDefault(key) : Lists.GetValueOrDefault(selection);
+    }
 
     public DataSourceDefinition? ResolveSource(string selection) => AppBlocks.Blocks.AppBlockValues.DocumentKey(selection) is { } key
-        ? sources.DataSources.FirstOrDefault(source => source.Definition.Key == key)?.Definition
+        ? sources.FindByKey(key)?.Definition
         : sources.DataSources.FirstOrDefault(source => source.Alias == selection)?.Definition;
 
     public ListOfValuesDefinition? ReadList(Guid key, string name, Func<string, object?> value, ICollection<string> errors)
@@ -96,13 +101,18 @@ public sealed class PublishedDataCatalog(IUmbracoContextFactory contexts, IDocum
     {
         await sources.LoadAsync();
         lists = new(StringComparer.OrdinalIgnoreCase);
+        listsByKey = [];
         using var reference = contexts.EnsureUmbracoContext();
         if (reference.UmbracoContext.Content is not { } cache) return;
         await foreach (var node in PublishedDefinitionNodes.OfType(cache, navigation, ListAlias))
         {
             Func<string, object?> value = property => node.GetProperty(property)?.GetValue();
             if (runtime.Definition(node.Key, node.UpdateDate, () => Logged(node, errors => ReadList(node.Key, node.Name, value, errors)),
-                SourceVersion(ListSource(node.Key, node.Name, value))) is { } list && !lists.TryAdd(list.Alias, list)) warnings.Hidden(node, list.Alias);
+                SourceVersion(ListSource(node.Key, node.Name, value))) is { } list)
+            {
+                listsByKey.TryAdd(list.Key, list);
+                if (!lists.TryAdd(list.Alias, list)) warnings.Hidden(node, list.Alias);
+            }
         }
     }
 

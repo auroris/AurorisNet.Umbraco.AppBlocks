@@ -48,11 +48,11 @@ public sealed record ScheduleSettings(string? Heading, string? Help, string Rows
     /// </summary>
     public const string OrientationColumn = "orientation";
 
-    public static ScheduleSettings Read(IPublishedElement block)
+    public static ScheduleSettings Read(IPublishedElement block, string? culture = null, PathString pathBase = default)
     {
         string? Text(string alias) => block.Value<string>(alias) is { } value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
         return Read(alias => alias switch {
-            LinkTemplateAlias => Blocks.BlockLinkTemplate.Read(block),
+            LinkTemplateAlias => Blocks.BlockLinkTemplate.Read(block, culture, pathBase),
             DaysBeforeAlias or DaysAfterAlias => block.Value<int?>(alias)?.ToString(CultureInfo.InvariantCulture),
             HideEmptyRowsAlias => block.Value<bool>(alias) ? "true" : "false",
             _ => Text(alias),

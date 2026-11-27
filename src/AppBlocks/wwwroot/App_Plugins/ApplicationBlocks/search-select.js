@@ -44,7 +44,6 @@ export function mountSearchSelect(root) {
             return this.options[suggestedKeys.get(normalizeLabel(text))] ?? this.options[key] ?? { value: key, text };
         },
         createFilter: input => !!input.trim(),
-        createOnBlur: freeText,
         maxOptions,
         delimiter: "", // Treat pasted text, including commas, as a search.
         persist: false,
@@ -58,6 +57,12 @@ export function mountSearchSelect(root) {
         },
     });
     const control = picker.control_input;
+    // Tom Select defers focus when a label opens the picker. The input can already contain
+    // text and lose focus before that callback runs. Commit before its blur handler closes it.
+    function commitTypedValue() {
+        if (document.hasFocus() && picker.inputValue()) picker.createItem();
+    }
+    if (freeText) control.addEventListener("blur", commitTypedValue, true);
     const maxLength = Number(select.dataset.maxLength);
     if (!multiple && freeText && Number.isInteger(maxLength) && maxLength > 0) control.maxLength = maxLength;
     select.setAttribute("aria-hidden", "true");
@@ -124,6 +129,7 @@ export function mountSearchSelect(root) {
         dispose() {
             locks.disconnect();
             field.removeEventListener("change", fieldChanged);
+            control.removeEventListener("blur", commitTypedValue, true);
             picker.destroy();
         },
     };

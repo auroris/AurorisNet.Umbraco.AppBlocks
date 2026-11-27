@@ -211,7 +211,7 @@ else if (Model.Form is not null && AppBlockSchema.FieldAliases.Contains(alias))
         else
         {
             // A Display value with a link template shows its value as a link, which no label can point at; the link names the label instead.
-            var linkTemplate = alias == "appDisplay" ? BlockLinkTemplate.Read(block, culture) : null;
+            var linkTemplate = alias == "appDisplay" ? BlockLinkTemplate.Read(block, culture, Context.Request.PathBase) : null;
             var labelTarget = alias switch { AppBlockSchema.ShuttleAlias => id + "-available", AppBlockSchema.SearchSelectAlias => id + "-picker", _ => id };
             <div class="app-form-field">
                 <label id="@id-label" for="@(linkTemplate is not null ? null : labelTarget)">@(label)@if (required || Model.Form.Rules.Any(rule => rule.Field == key && rule.Action == "Require")) { <span data-required-mark aria-hidden="true" hidden="@(!required)"> *</span> }</label>

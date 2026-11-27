@@ -136,6 +136,7 @@ public interface IFormResourceProvider
 {
     IEnumerable<IFormResource> Resources { get; }
     Task<IEnumerable<IFormResource>> GetResourcesAsync() => Task.FromResult(Resources);
+    IFormResource? FindByKey(Guid key) => Resources.OfType<DataSources.SqlDataSource>().FirstOrDefault(source => source.Definition.Key == key);
 }
 
 /// <summary>
@@ -159,6 +160,7 @@ public sealed class FormResourceRegistry(IEnumerable<IFormResource> resources, I
     }
 
     private IReadOnlyDictionary<string, IFormResource>? all;
+    private Dictionary<Guid, DataSources.SqlDataSource>? byKey;
 
     private Task? loading;
     public Task LoadAsync() => loading ??= LoadCoreAsync();
@@ -168,15 +170,20 @@ public sealed class FormResourceRegistry(IEnumerable<IFormResource> resources, I
     public IReadOnlyDictionary<string, IFormResource> RegisteredResources => Indexed;
     public IFormResource? Find(string selection)
     {
-        if (selection.StartsWith("umb://document/", StringComparison.OrdinalIgnoreCase))
-            return AppBlocks.Blocks.AppBlockValues.DocumentKey(selection) is { } key
-                ? Resources.Values.OfType<DataSources.SqlDataSource>().FirstOrDefault(source => source.Definition.Key == key) : null;
+        if (AppBlocks.Blocks.AppBlockValues.DocumentKey(selection) is { } key)
+        {
+            _ = Resources;
+            if (byKey is not null && byKey.TryGetValue(key, out var found)) return found;
+            foreach (var provider in providers)
+                if (provider.FindByKey(key) is { } supplied) return supplied;
+            return Indexed.Values.OfType<DataSources.SqlDataSource>().FirstOrDefault(source => source.Definition.Key == key);
+        }
         return Indexed.GetValueOrDefault(selection) ?? Resources.GetValueOrDefault(selection);
     }
 
     public async Task<IFormResource?> FindAsync(string alias)
     {
-        if (!alias.StartsWith("umb://document/", StringComparison.OrdinalIgnoreCase) && Indexed.TryGetValue(alias, out var resource)) return resource;
+        if (AppBlocks.Blocks.AppBlockValues.DocumentKey(alias) is null && Indexed.TryGetValue(alias, out var resource)) return resource;
         await LoadAsync();
         return Find(alias);
     }
@@ -184,8 +191,14 @@ public sealed class FormResourceRegistry(IEnumerable<IFormResource> resources, I
     private async Task LoadCoreAsync()
     {
         var merged = new Dictionary<string, IFormResource>(Indexed, StringComparer.Ordinal);
+        var keys = Indexed.Values.OfType<DataSources.SqlDataSource>().ToDictionary(source => source.Definition.Key);
         foreach (var provider in providers)
-            foreach (var resource in await provider.GetResourcesAsync()) merged.TryAdd(resource.Alias, resource);
+            foreach (var resource in await provider.GetResourcesAsync())
+            {
+                merged.TryAdd(resource.Alias, resource);
+                if (resource is DataSources.SqlDataSource sql) keys.TryAdd(sql.Definition.Key, sql);
+            }
+        byKey = keys;
         all = merged;
     }
 }

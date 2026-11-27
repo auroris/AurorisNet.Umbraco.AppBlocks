@@ -30,7 +30,7 @@ public sealed class AppBlocksController(FormResourceRegistry resources, DataSour
 
     [HttpGet("page-properties/{type:guid}")]
     public IActionResult PageProperties(Guid type, [FromServices] Umbraco.Cms.Core.Services.IContentTypeService types)
-        => Ok(types.Get(type)?.CompositionPropertyTypes.Select(p => new { key = p.Key, alias = p.Alias, name = p.Name }));
+        => Ok(types.Get(type)?.CompositionPropertyTypes.Select(p => new { key = p.Key, alias = p.Alias, name = p.Name }) ?? []);
 
     [HttpGet("catalogue")]
     public async Task<IActionResult> Catalogue()

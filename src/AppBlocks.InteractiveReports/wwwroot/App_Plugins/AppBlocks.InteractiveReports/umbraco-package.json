@@ -48,7 +48,7 @@
         "label": "Report starting view",
         "icon": "icon-table",
         "group": "Application",
-        "propertyEditorSchemaAlias": "AppBlocks.ReportSourceValue"
+        "propertyEditorSchemaAlias": "Umbraco.TextArea"
       }
     },
     {

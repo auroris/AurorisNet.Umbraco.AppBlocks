@@ -34,7 +34,7 @@ public sealed class ScheduleSources(PublishedDataCatalog catalog, DataSourceRunt
         if (string.IsNullOrWhiteSpace(alias)) return null;
         alias = alias.Trim();
         foreach (var provider in providers ?? []) if (provider.TryResolve(alias, out var source)) return source;
-        return catalog.ResolveSource(alias) is { } definition ? new(alias, definition, FromReport: false) : null;
+        return catalog.ResolveSource(alias) is { } definition ? new(definition.Alias, definition, FromReport: false) : null;
     }
 
     /// <summary>

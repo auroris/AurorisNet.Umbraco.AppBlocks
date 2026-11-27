@@ -15,8 +15,16 @@ namespace AppBlocks.Attachments;
 /// <summary>The record a file belongs to: a form resource's alias and the record's key, as the form endpoints know them.</summary>
 public sealed record AttachmentOwner(string Alias, string Key)
 {
+    /// <summary>An earlier owner alias (such as a SQL data source's alias before durable document references) still matched on reads, renames and removals.</summary>
+    public string? LegacyAlias { get; init; }
+
+    internal bool HasLegacyAlias => !string.IsNullOrWhiteSpace(LegacyAlias) && !string.Equals(LegacyAlias, Alias, StringComparison.Ordinal);
+
     public static string ResourceId(Forms.IFormResource resource) => resource is DataSources.SqlDataSource sql
         ? Blocks.AppBlockValues.Udi(sql.Definition.Key) : resource.Alias;
+
+    public static AttachmentOwner ForResource(Forms.IFormResource resource, string key) => resource is DataSources.SqlDataSource sql
+        ? new(ResourceId(resource), key) { LegacyAlias = sql.Alias } : new(resource.Alias, key);
 
     /// <summary>Prefix for files waiting for a new record to be saved.</summary>
     public const string PendingPrefix = "pending:";
@@ -77,11 +85,12 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     public Task<AttachmentContent?> ReadAsync(AttachmentOwner owner, long id, CancellationToken ct) => GuardAsync<AttachmentContent?>(write: false, async () =>
     {
         await using var connection = await OpenAsync(ct);
-        await using var command = Command(connection, null, """
+        var (whereAlias, aliasParams) = OwnerFilter("l.", owner);
+        await using var command = Command(connection, null, $"""
             SELECT a.ATTACHMENT_ID, a.FILE_NAME, a.CONTENT_TYPE, a.SIZE, a.SHA256, a.CONTENT
             FROM APP_ATTACHMENT_LINK l JOIN APP_ATTACHMENT a ON a.ATTACHMENT_ID = l.ATTACHMENT_ID
-            WHERE l.OWNER_ALIAS = @alias AND l.OWNER_KEY = @key AND l.REMOVED_AT IS NULL AND l.ATTACHMENT_ID = @id
-            """, ("@alias", owner.Alias), ("@key", owner.Key), ("@id", id));
+            WHERE {whereAlias} AND l.OWNER_KEY = @key AND l.REMOVED_AT IS NULL AND l.ATTACHMENT_ID = @id
+            """, [.. aliasParams, ("@key", owner.Key), ("@id", id)]);
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
         return new AttachmentContent(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3), reader.GetString(4), (byte[])reader.GetValue(5));
@@ -108,10 +117,11 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     {
         await using var connection = await OpenAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var link = Command(connection, transaction, """
-            UPDATE APP_ATTACHMENT_LINK SET UPDATED_BY = @by, UPDATED_AT = @now
-            WHERE OWNER_ALIAS = @alias AND OWNER_KEY = @key AND ATTACHMENT_ID = @id AND REMOVED_AT IS NULL
-            """, ("@by", by), ("@now", DateTime.UtcNow), ("@alias", owner.Alias), ("@key", owner.Key), ("@id", id));
+        var (whereAlias, aliasParams) = OwnerFilter("", owner);
+        await using var link = Command(connection, transaction, $"""
+            UPDATE APP_ATTACHMENT_LINK SET OWNER_ALIAS = @alias, UPDATED_BY = @by, UPDATED_AT = @now
+            WHERE {whereAlias} AND OWNER_KEY = @key AND ATTACHMENT_ID = @id AND REMOVED_AT IS NULL
+            """, [("@by", by), ("@now", DateTime.UtcNow), .. aliasParams, ("@key", owner.Key), ("@id", id)]);
         if (await link.ExecuteNonQueryAsync(ct) != 1) return null;
         await using var rename = Command(connection, transaction,
             "UPDATE APP_ATTACHMENT SET FILE_NAME = @name WHERE ATTACHMENT_ID = @id", ("@name", fileName), ("@id", id));
@@ -125,11 +135,24 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     public Task<bool> RemoveAsync(AttachmentOwner owner, long id, string by, CancellationToken ct) => GuardAsync(write: true, async () =>
     {
         await using var connection = await OpenAsync(ct);
-        await using var command = Command(connection, null, """
+        var (whereAlias, aliasParams) = OwnerFilter("", owner);
+        await using var command = Command(connection, null, $"""
             UPDATE APP_ATTACHMENT_LINK SET REMOVED_BY = @by, REMOVED_AT = @now
-            WHERE OWNER_ALIAS = @alias AND OWNER_KEY = @key AND ATTACHMENT_ID = @id AND REMOVED_AT IS NULL
-            """, ("@by", by), ("@now", DateTime.UtcNow), ("@alias", owner.Alias), ("@key", owner.Key), ("@id", id));
+            WHERE {whereAlias} AND OWNER_KEY = @key AND ATTACHMENT_ID = @id AND REMOVED_AT IS NULL
+            """, [("@by", by), ("@now", DateTime.UtcNow), .. aliasParams, ("@key", owner.Key), ("@id", id)]);
         return await command.ExecuteNonQueryAsync(ct) == 1;
+    });
+
+    /// <summary>Moves stored attachment links from an earlier owner alias (such as a SQL data source alias) to a durable owner identifier.</summary>
+    public Task<int> MigrateOwnerAsync(string fromAlias, string toAlias, CancellationToken ct = default) => GuardAsync(write: true, async () =>
+    {
+        if (string.IsNullOrWhiteSpace(fromAlias) || string.IsNullOrWhiteSpace(toAlias) || string.Equals(fromAlias, toAlias, StringComparison.Ordinal)) return 0;
+        await using var connection = await OpenAsync(ct);
+        await using var command = Command(connection, null, """
+            UPDATE APP_ATTACHMENT_LINK SET OWNER_ALIAS = @to
+            WHERE OWNER_ALIAS = @from
+            """, ("@to", toAlias), ("@from", fromAlias));
+        return await command.ExecuteNonQueryAsync(ct);
     });
 
     /// <summary>Deletes the links removed before <paramref name="removedBefore"/> with their files.</summary>
@@ -304,11 +327,12 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
     /// <summary>The owner's items (one when <paramref name="id"/> names one of its files), newest first.</summary>
     private static async Task<IReadOnlyList<AttachmentItem>> ListAsync(DbConnection connection, DbTransaction? transaction, AttachmentOwner owner, long? id, CancellationToken ct)
     {
-        (string, object?)[] selection = id is null ? [("@alias", owner.Alias), ("@key", owner.Key)] : [("@alias", owner.Alias), ("@key", owner.Key), ("@id", id)];
-        await using var command = Command(connection, transaction, """
+        var (whereAlias, aliasParams) = OwnerFilter("l.", owner);
+        (string, object?)[] selection = id is null ? [.. aliasParams, ("@key", owner.Key)] : [.. aliasParams, ("@key", owner.Key), ("@id", id)];
+        await using var command = Command(connection, transaction, $"""
             SELECT a.ATTACHMENT_ID, a.FILE_NAME, a.CONTENT_TYPE, a.SIZE, a.SHA256, l.PURPOSE, l.LABEL, l.NOTES, a.UPLOADED_BY, a.UPLOADED_AT, l.UPDATED_BY, l.UPDATED_AT
             FROM APP_ATTACHMENT_LINK l JOIN APP_ATTACHMENT a ON a.ATTACHMENT_ID = l.ATTACHMENT_ID
-            WHERE l.OWNER_ALIAS = @alias AND l.OWNER_KEY = @key AND l.REMOVED_AT IS NULL
+            WHERE {whereAlias} AND l.OWNER_KEY = @key AND l.REMOVED_AT IS NULL
             """ + (id is null ? "" : " AND l.ATTACHMENT_ID = @id") + " ORDER BY l.LINK_ID DESC", selection);
         await using var reader = await command.ExecuteReaderAsync(ct);
         var items = new List<AttachmentItem>();
@@ -317,6 +341,10 @@ public sealed partial class AttachmentStore(IApplicationConnectionFactory connec
                 reader.GetString(8), reader.GetDateTime(9), reader.GetString(10), reader.GetDateTime(11)));
         return items;
     }
+
+    private static (string Clause, (string Name, object? Value)[] Parameters) OwnerFilter(string prefix, AttachmentOwner owner) => owner.HasLegacyAlias
+        ? ($"({prefix}OWNER_ALIAS = @alias OR {prefix}OWNER_ALIAS = @legacy)", [("@alias", owner.Alias), ("@legacy", owner.LegacyAlias)])
+        : ($"{prefix}OWNER_ALIAS = @alias", [("@alias", owner.Alias)]);
 
     private static async Task<long> InsertFileAsync(DbConnection connection, DbTransaction transaction, AttachmentUpload file, string by, DateTime now, CancellationToken ct)
     {

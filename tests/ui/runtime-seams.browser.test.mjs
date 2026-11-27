@@ -75,7 +75,7 @@ test('searchable selects filter by label and save scalar and ordered CSV values'
         ({ method, body }) => formAnswer(method === 'GET' ? record('1', { Primary: '', Regions: 'Retired' })
             : { ...record('1', body.values), readOnlyFields: ['Regions'] }));
     try {
-        const primary = page.getByRole('combobox', { name: 'Primary' });
+        const primary = page.getByRole('combobox', { name: 'Primary' }).and(page.locator('input'));
         const regions = page.getByRole('combobox', { name: 'Regions' });
         await primary.waitFor();
         assert.equal(await page.locator('link[href$="tom-select.css"]').count(), 1);
@@ -147,6 +147,14 @@ test('free-text selects commit typed entries, keep suggested keys, and reload mi
         await primary.fill('  west  ');
         await primary.press('Tab');
         assert.equal(await page.locator('#Primary').inputValue(), 'hasOwnProperty');
+        // A label can give the input focus and a fast edit can leave it in the same browser task.
+        await primary.evaluate(input => {
+            input.labels[0].click();
+            input.value = 'New unit';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            document.querySelector('#title').focus();
+        });
+        assert.equal(await page.locator('#Primary').inputValue(), 'New unit');
         assert.deepEqual(errors, []);
     } finally { await page.close(); }
 });

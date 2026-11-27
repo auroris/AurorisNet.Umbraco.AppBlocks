@@ -20,18 +20,23 @@ public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocument
     BindVariableProviders? providers = null, DataSourceHandlers? handlers = null) : IFormResourceProvider
 {
     private IReadOnlyList<SqlDataSource>? sources;
+    private Dictionary<Guid, SqlDataSource>? byKey;
 
     private Task? loading;
     public Task LoadAsync() => loading ??= LoadCoreAsync();
     public IReadOnlyList<SqlDataSource> DataSources => sources ?? throw new InvalidOperationException("Call LoadAsync before reading the data source catalogue.");
+    public SqlDataSource? FindByKey(Guid key) { _ = DataSources; return byKey?.GetValueOrDefault(key); }
     IEnumerable<IFormResource> IFormResourceProvider.Resources => DataSources;
+    IFormResource? IFormResourceProvider.FindByKey(Guid key) => FindByKey(key);
 
     async Task<IEnumerable<IFormResource>> IFormResourceProvider.GetResourcesAsync() { await LoadAsync(); return DataSources; }
 
     private async Task LoadCoreAsync()
     {
         var found = new List<SqlDataSource>();
+        var keys = new Dictionary<Guid, SqlDataSource>();
         sources = found;
+        byKey = keys;
         using var reference = contexts.EnsureUmbracoContext();
         if (reference.UmbracoContext.Content is not { } cache) return;
         var allGroups = (await groups.GetAllAsync()).ToArray();
@@ -46,12 +51,14 @@ public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocument
                 return read;
             }, groupVersion);
             if (definition is null) continue;
+            var sql = new SqlDataSource(definition, runtime, users, policies, providers, handlers);
+            keys.TryAdd(definition.Key, sql);
             if (found.Any(source => source.Alias == definition.Alias))
             {
-                logger.LogWarning("Data source {Name} ({Key}) is left out: an earlier data source has the alias {Alias}.", node.Name, node.Key, definition.Alias);
+                logger.LogWarning("Data source {Name} ({Key}) is left out of alias lookups: an earlier data source has the alias {Alias}.", node.Name, node.Key, definition.Alias);
                 continue;
             }
-            found.Add(new SqlDataSource(definition, runtime, users, policies, providers, handlers));
+            found.Add(sql);
         }
     }
 }
