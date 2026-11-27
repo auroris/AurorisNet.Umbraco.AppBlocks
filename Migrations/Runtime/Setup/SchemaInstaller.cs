@@ -248,7 +248,18 @@ public sealed partial class SchemaInstaller(IContentTypeService contentTypes, ID
             }
             var resets = Resets(definition);
             if (created.Contains(key)) { touched.Add((definition, existing, false)); continue; }
-            if (!resets) continue;
+            if (!resets)
+            {
+                // Earlier installs passed uSync's empty-GUID sentinel straight to Umbraco's package importer, leaving
+                // ListView = Guid.Empty instead of null and breaking backoffice workspaces with a 404 on data-type/00000000-....
+                if (existing.ListView == Guid.Empty)
+                {
+                    existing.ListView = null;
+                    var repaired = await contentTypes.UpdateAsync(existing, Constants.Security.SuperUserKey);
+                    if (!repaired.Success) throw new InvalidOperationException($"AppBlocks could not repair content type '{alias}' ({key}): {repaired.Result}.");
+                }
+                continue;
+            }
             await ResetAsync(existing, definition, change);
             var reset = await contentTypes.UpdateAsync(existing, Constants.Security.SuperUserKey);
             if (!reset.Success) throw new InvalidOperationException($"AppBlocks could not reset content type '{alias}' ({key}): {reset.Result}.");
@@ -305,7 +316,7 @@ public sealed partial class SchemaInstaller(IContentTypeService contentTypes, ID
         type.IsElement = (bool)info.Element("IsElement")!;
         type.AllowedInLibrary = (bool)info.Element("AllowedInLibrary")!;
         type.Variations = Enum.Parse<ContentVariation>(Value(info, "Variations"));
-        type.ListView = Guid.Parse(Value(info, "ListView"));
+        type.ListView = OptionalGuid(info, "ListView");
         type.HistoryCleanup = Cleanup(info);
         var folder = await FolderAsync(contentFolders, Value(info, "Folder"));
         if (type.ParentId != folder) type.ParentId = folder;
@@ -476,6 +487,7 @@ public sealed partial class SchemaInstaller(IContentTypeService contentTypes, ID
             var native = new XElement(definition);
             native.Name = "DocumentType";
             var info = Info(native);
+            if (OptionalGuid(info, "ListView") is null) info.Element("ListView")?.Remove();
             info.Add(new XElement("Key", Key(definition)), new XElement("Alias", definition.Attribute("Alias")!.Value));
             native.SetAttributeValue("Folders", Value(info, "Folder"));
             foreach (var property in native.Element("GenericProperties")!.Elements("GenericProperty"))
@@ -560,6 +572,7 @@ public sealed partial class SchemaInstaller(IContentTypeService contentTypes, ID
     private static Guid Key(XElement definition) => Guid.Parse(definition.Attribute("Key")!.Value);
     private static string Name(XElement definition) => Value(definition.Element("Info")!, "Name");
     private static string Value(XElement element, string name) => SchemaProperties.Value(element, name);
+    private static Guid? OptionalGuid(XElement element, string name) => Guid.TryParse(Value(element, name), out var value) && value != Guid.Empty ? value : null;
     private static int? OptionalInt(XElement element, string name) => Value(element, name) is { Length: > 0 } value ? int.Parse(value) : null;
 
     private sealed class Change

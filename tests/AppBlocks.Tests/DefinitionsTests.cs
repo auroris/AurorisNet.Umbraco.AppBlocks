@@ -86,6 +86,8 @@ public sealed class DefinitionsTests
         using (var actual = JsonDocument.Parse(JsonSerializer.Serialize(gridAfter.ConfigurationData)))
             Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
         Assert.Contains(types.Get(DataSourceSchema.RootAlias)!.AllowedContentTypes!, child => child.Alias == DataSourceSchema.SqlAlias);
+        foreach (var definition in services.GetServices<AppBlocksSchema>().DistinctBy(s => s.Assembly).SelectMany(s => s.Definitions("ContentTypes")))
+            Assert.Null(types.Get(Guid.Parse(definition.Attribute("Key")!.Value))!.ListView);
 
         // The site's content and its own type, which uses the package's grid, are as they were, and the page still works.
         Assert.Equal("orders.lines", contents.GetById(source.Id)!.GetValue<string>("alias"));
@@ -130,6 +132,22 @@ public sealed class DefinitionsTests
         var formDefinition = schema.Definitions("ContentTypes").Single(d => d.Attribute("Alias")!.Value == "appForm");
         var formRecord = SchemaInstaller.RecordKey(Guid.Parse(formDefinition.Attribute("Key")!.Value));
         Assert.Equal(SchemaInstaller.Fingerprint(formDefinition), keyValues.GetValue(formRecord));
+        foreach (var definition in schema.Definitions("ContentTypes"))
+            Assert.Null(types.Get(Guid.Parse(definition.Attribute("Key")!.Value))!.ListView);
+
+        // Earlier installs stored uSync's empty-GUID sentinel as ListView; a start clears that invalid sentinel while keeping real list views.
+        var brokenSources = types.Get(DataSourceSchema.RootAlias)!;
+        brokenSources.ListView = Guid.Empty;
+        Assert.True((await types.UpdateAsync(brokenSources, Constants.Security.SuperUserKey)).Success);
+        var customEndpoints = types.Get("apiEndpoints")!;
+        customEndpoints.ListView = Constants.DataTypes.Guids.ListViewContentGuid;
+        Assert.True((await types.UpdateAsync(customEndpoints, Constants.Security.SuperUserKey)).Success);
+        await installer.EnsureAsync(default);
+        Assert.Null(types.Get(DataSourceSchema.RootAlias)!.ListView);
+        Assert.Equal(Constants.DataTypes.Guids.ListViewContentGuid, types.Get("apiEndpoints")!.ListView);
+        customEndpoints = types.Get("apiEndpoints")!;
+        customEndpoints.ListView = null;
+        Assert.True((await types.UpdateAsync(customEndpoints, Constants.Security.SuperUserKey)).Success);
         foreach (var definition in schema.Definitions("ContentTypes").Concat(schema.Definitions("DataTypes")))
         {
             var indented = definition.ToString();

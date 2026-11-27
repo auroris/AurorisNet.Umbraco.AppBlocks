@@ -34,6 +34,7 @@ internal static class SchemaInstallationChecks
                 Assert.NotNull(type);
                 Assert.Equal(xml.Attribute("Alias")!.Value, type.Alias);
                 Assert.Equal((bool)xml.Element("Info")!.Element("IsElement")!, type.IsElement);
+                Assert.Null(type.ListView);
                 var properties = xml.Element("GenericProperties")!.Elements("GenericProperty").ToArray();
                 Assert.Equal(properties.Length, type.PropertyTypes.Count());
                 foreach (var property in properties)
