@@ -42,6 +42,11 @@ public sealed class IdentityTests
         Assert.True(account.IsInUserGroup("EDITOR")); Assert.False(account.IsInUserGroup("admin"));
         Assert.False(account.IsInMemberGroup("Editorial team"));
         Assert.Equal(["Editorial team"], account.Groups); Assert.Equal("backoffice:" + key, account.Key);
+        var picked = Assert.Single(account.UserGroupKeys);
+        groups = [Group("Renamed team", "renamed", picked)];
+        account = (await Request().ResolveAsync(principal, default))!;
+        Assert.True(account.IsInPickedUserGroup(picked.ToString()));
+        Assert.False(account.IsInUserGroup("editor"));
         groups = [Group("Site administrators", "admin")];
         account = (await Request().ResolveAsync(principal, default))!;
         Assert.True(account.IsInUserGroup("admin")); Assert.False(account.IsInUserGroup("editor"));
@@ -408,8 +413,8 @@ public sealed class IdentityTests
         Assert.Null(await access.AdmittedAsync(context, page));
     }
 
-    private static IReadOnlyUserGroup Group(string name, string alias) => Stub<IReadOnlyUserGroup>((method, _) => method.Name switch {
-        "get_Name" => name, "get_Alias" => alias, _ => throw new NotImplementedException(method.Name),
+    private static IReadOnlyUserGroup Group(string name, string alias, Guid? key = null) => Stub<IReadOnlyUserGroup>((method, _) => method.Name switch {
+        "get_Key" => key ?? AppBlocks.Blocks.AppBlockSchema.Key("test-group:" + name), "get_Name" => name, "get_Alias" => alias, _ => throw new NotImplementedException(method.Name),
     });
     private static IExternalLoginWithKeyService Logins() => Stub<IExternalLoginWithKeyService>((method, _) =>
         method.Name == "GetExternalLogins" ? Array.CreateInstance(method.ReturnType.GenericTypeArguments[0], 0) : throw new NotImplementedException(method.Name));

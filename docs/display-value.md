@@ -26,6 +26,8 @@ The page builds the address in the browser from the record the form loaded, when
 - **A template that is one field alone**, such as `{website}`, takes the whole address from that field's value.
 - **An empty value shows no link.** A new record's Display value is empty until the record is saved, unless the block has a default.
 
+Pick **Link page** to follow an Umbraco page through renames and moves. With a page selected, **Link template** can be empty or supply a query string or fragment, such as `?customer={customerId}#details`.
+
 ### Which addresses a link may have
 
 A link is a path from the site's root, a path relative to the page, or an `http:`, `https:`, `mailto:` or `tel:` address. A path from the site's root gets the site's path base, so `/customers/` works on a site served under `/intranet`.

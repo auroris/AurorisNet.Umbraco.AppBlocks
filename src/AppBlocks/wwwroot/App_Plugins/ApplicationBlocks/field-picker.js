@@ -31,7 +31,8 @@ export default class FieldPicker extends AppEditor {
     }
     availableFields(fields) { return fields.filter(field => !this.localResource || !field.readOnly); }
     render() {
-        const resource = this.catalogue?.formClasses?.find(r => r.alias === (this.localResource ?? this.form?.resource));
+        const picked = this.localResource ?? this.form?.resource;
+        const resource = picked && this.catalogue?.formClasses?.find(r => r.selection === picked || r.alias === picked);
         const fields = this.availableFields(resource?.fields ?? []);
         return html`${this.renderChoices(fields.map(field => ({
                 value: field.key, label: `${field.label} (${field.kind}) — ${field.key}`,

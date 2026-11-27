@@ -2,6 +2,7 @@ import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 import { html, css } from "@umbraco-cms/backoffice/external/lit";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
 import { UMB_AUTH_CONTEXT } from "@umbraco-cms/backoffice/auth";
+import "./data-source-picker.js";
 import { request } from "../AppBlocks/api.js";
 
 export default class ReportSource extends UmbLitElement {
@@ -56,8 +57,8 @@ export default class ReportSource extends UmbLitElement {
                 <option value="dataSource" ?selected=${selected.kind === "dataSource"}>Published data source</option>
             </select>
             ${selected.kind === "dataSource" ? html`
-                <label for="data-source">Published data source alias</label>
-                <input id="data-source" type="text" style="width:100%;box-sizing:border-box;padding:10px;color:inherit;background:var(--uui-color-surface);border:1px solid var(--uui-color-border);border-radius:4px;" .value=${selected.source ?? ""} ?readonly=${this.readonly} @input=${event => this.change({ kind: "dataSource", source: event.target.value })} />
+                <app-data-source-picker .value=${selected.source ?? ""} .readonly=${this.readonly}
+                    @change=${event => this.change({ kind: "dataSource", source: event.target.value })}></app-data-source-picker>
                 <p>Uses a published SQL data source's connection, query, row restriction and read access rules.</p>
             ` : selected.kind === "sql" ? html`
                 <label for="connection">Data source</label>

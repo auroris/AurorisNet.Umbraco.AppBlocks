@@ -58,7 +58,7 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         // A resource may let a caller it does not let write add files all the same.
         var add = write || !block.ReadOnly && !viewOnly && scope.Resource is IAddOnlyAttachmentOwner additions
             && await additions.MayAddAttachmentsAsync(scope.Record!, context, ct);
-        return new(200, null, block, scope.User, new AttachmentOwner(scope.Resource!.Alias, scope.OwnerKey), write, CanAdd: add,
+        return new(200, null, block, scope.User, new AttachmentOwner(AttachmentOwner.ResourceId(scope.Resource!), scope.OwnerKey), write, CanAdd: add,
             Resource: scope.Resource, Parameters: scope.Parameters);
     }
 
@@ -74,7 +74,7 @@ public sealed class AttachmentAccess(BlockOwnerAccess owners, IOptions<Attachmen
         var block = AttachmentBlock.Read(scope.Item!.Content, settings.Value);
         if (scope.ReadOnly || !await AllowsNewUploadsAsync(block, scope.Form!, scope.User!, pageKey, blockKey, scope.Parameters, ct, settings.Value))
             return AttachmentScope.Refused(404, "Save the record before adding files.");
-        return new(200, null, block, scope.User, AttachmentOwner.Pending(scope.Resource!.Alias, submissionKey, scope.User!), true, submissionKey, CanAdd: true,
+        return new(200, null, block, scope.User, AttachmentOwner.Pending(AttachmentOwner.ResourceId(scope.Resource!), submissionKey, scope.User!), true, submissionKey, CanAdd: true,
             Resource: scope.Resource, Parameters: scope.Parameters);
     }
 

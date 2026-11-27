@@ -122,7 +122,8 @@ public sealed class DisplayLinkSiteTests
         {
             // The installed type has the setting, after the fields' shared ones.
             var installed = scope.ServiceProvider.GetRequiredService<IContentTypeService>().Get("appDisplay")!;
-            Assert.Equal(AppBlockField.LinkTemplateAlias, installed.PropertyTypes.OrderBy(p => p.SortOrder).Last().Alias);
+            Assert.Contains(installed.PropertyTypes, p => p.Alias == AppBlockField.LinkTemplateAlias);
+            Assert.Contains(installed.PropertyTypes, p => p.Alias == "linkPage");
             var contents = scope.ServiceProvider.GetRequiredService<IContentService>();
             var blocks = BlockPages.Empty();
             var email = BlockPages.Add(blocks, "appDisplay", ("field", "email"), ("label", "Email the requester"), ("helpText", "Opens a message in your mail program."),
@@ -161,5 +162,26 @@ public sealed class DisplayLinkSiteTests
         Assert.DoesNotContain("data-display-link=\"name\"", html);
         Assert.Contains("[data-display-link]", await client.GetStringAsync("/App_Plugins/ApplicationBlocks/forms.js"));
         Assert.Contains(".app-display-link", await client.GetStringAsync("/App_Plugins/ApplicationBlocks/runtime.css"));
+
+        using var edit = site.CreateScope();
+        var service = edit.ServiceProvider.GetRequiredService<IContentService>();
+        var owner = service.GetById(pageKey)!;
+        var target = service.GetById(BlockSite.WebsitePageKey)!;
+        var grid = System.Text.Json.Nodes.JsonNode.Parse(owner.GetValue<string>(BlockSite.BodyAlias)!)!;
+        var display = BlockPages.Blocks(grid, "appDisplay").Single(b => BlockPages.Value(b, "field")?.ToString() == "website");
+        BlockPages.SetValue(display, "linkPage", AppBlockValues.Udi(target.Key));
+        BlockPages.SetValue(display, "linkTemplate", "?contact={reference}#details");
+        owner.SetValue(BlockSite.BodyAlias, grid.ToJsonString());
+#pragma warning disable CS0618
+        Assert.True(service.Save(owner).Success);
+        Assert.True(service.Publish(owner, ["*"]).Success);
+        Assert.Contains("/website/?contact={reference}#details", WebUtility.HtmlDecode(await client.GetStringAsync("/contacts/")));
+        target.Name = "Directory";
+        Assert.True(service.Save(target).Success);
+        Assert.True(service.Publish(target, ["*"]).Success);
+        Assert.True(service.Move(target, owner.Id).Success);
+#pragma warning restore CS0618
+        Assert.Contains("/contacts/directory/?contact={reference}#details", WebUtility.HtmlDecode(await client.GetStringAsync("/contacts/")));
+
     }
 }

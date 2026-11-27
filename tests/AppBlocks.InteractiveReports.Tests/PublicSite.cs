@@ -312,7 +312,8 @@ internal sealed class PublicSite : IAsyncDisposable
         var detailPage = Container(detailForm with { Values = [.. detailForm.Values, ("fieldRules", rules), ("sidePanel", "1"),
             ("parentPage", "umb://document/" + OrderPage.ToString("N")), ("parentForm", OrderForm.ToString()), ("linkField", "orderId")] });
         Add(detailPage, "Umbraco.BlockList", RelatedReport, AppBlockSchema.Key("appReport"), ("dataSource", Source("table", "PUBLIC_ORDER_LINES")),
-            ("formOnThisPage", 1), ("keyColumn", "id"), ("createVisibility", "Public"), ("openVisibility", "Public"));
+            ("formOnThisPage", 1), ("openForm", RelatedForm.ToString()), ("keyParameter", "previousParameter"),
+            ("keyColumn", "id"), ("createVisibility", "Public"), ("openVisibility", "Public"));
         Page("Related details", DetailsPage, home.Id, detailPage);
         Page("Reports", ReportPage, home.Id, Reports((PublicReport, Source("table", "PUBLIC_ROWS")),
             (PersonalReport, Source("sql", "SELECT id, title FROM PUBLIC_ROWS WHERE owner = :USER_KEY OR :USER_KEY IS NULL"))));

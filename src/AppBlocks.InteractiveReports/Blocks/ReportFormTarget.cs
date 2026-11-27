@@ -9,11 +9,16 @@ namespace AppBlocks.InteractiveReports.Blocks;
 
 internal sealed record ReportFormTarget(IPublishedContent Page, BlockGridItem? Block, string Parameter, bool SamePage, string? Culture = null)
 {
-    private static ReportFormTarget? For(IPublishedContent? page, IPublishedContent reportPage, string? culture, string? parameter, bool targetForm = false, bool createOnly = false)
+    private static ReportFormTarget? For(IPublishedContent? page, IPublishedContent reportPage, string? culture, string? parameter, bool targetForm = false, bool createOnly = false, string? selection = null)
     {
         if (page is null) return null;
         var local = page.Key == reportPage.Key;
         var forms = AppBlockContent.Flatten(AppBlockContent.Blocks(page, culture), culture).Where(b => b.Content.ContentType.Alias == "appForm").ToArray();
+        if (!string.IsNullOrWhiteSpace(selection))
+        {
+            var picked = Guid.TryParse(selection, out var key) ? forms.FirstOrDefault(form => form.ContentKey == key) : null;
+            return picked is null ? null : new(page, picked, KeyOf(picked), local, culture);
+        }
         var panels = forms.Where(form => form.Content.Value<bool>("sidePanel")).ToArray();
         var single = forms.Length == 1 ? forms[0] : null;
         static string KeyOf(BlockGridItem form) => FormDefinition.KeyParameterFor(form);
@@ -41,9 +46,10 @@ internal sealed record ReportFormTarget(IPublishedContent Page, BlockGridItem? B
             if (openPage?.Key != page.Key) openPage = null;
             if (createPage?.Key != page.Key) createPage = null;
         }
-        var open = For(openPage, page, culture, parameter, targetForm: useThisPage);
-        if (createPage?.Key == openPage?.Key) return (open, open);
-        return (open, For(createPage, page, culture, parameter, createOnly: true));
+        var open = For(openPage, page, culture, parameter, targetForm: useThisPage, selection: block.Value<string>("openForm"));
+        var createForm = block.Value<string>("createForm");
+        if (createPage?.Key == openPage?.Key && string.IsNullOrWhiteSpace(createForm)) return (open, open);
+        return (open, For(createPage, page, culture, parameter, createOnly: true, selection: createForm));
     }
 
     public FormRelationship? Relationship => Block is null ? null : FormRelationship.Read(Block.Content, Page, Culture);

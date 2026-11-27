@@ -89,6 +89,21 @@ test("SQL mode saves its chosen data source and query; changing mode clears the 
     assert.deepEqual(errors, []); await page.close();
 });
 
+test("a report selects a published document and reopens the same key", async () => {
+    const { page, errors } = await mount();
+    await page.getByLabel("Source type").selectOption("dataSource");
+    await page.getByLabel("SQL data source").selectOption({ label: "Old source (content-node)" });
+    const saved = await page.evaluate(() => window.changes.at(-1));
+    assert.deepEqual(JSON.parse(saved), { kind: "dataSource", source: "8289c031-96e6-834e-c0df-40d38196eb8a" });
+    assert.deepEqual(errors, []);
+    await page.close();
+    const reopened = await mount({ value: saved });
+    const selected = reopened.page.getByLabel("SQL data source").getByRole("option", { name: "Old source (content-node)" });
+    await selected.waitFor({ state: "attached" });
+    assert.equal(await selected.evaluate(option => option.selected), true);
+    await reopened.page.close();
+});
+
 test("an unavailable connection leaves other tables usable and preserves a saved choice", async () => {
     const saved = JSON.stringify({ kind: "table", connection: "Business", source: '"Orders"' });
     const { page, errors } = await mount({ value: saved, fail: true });
@@ -111,12 +126,12 @@ test("readonly SQL configuration cannot be changed", async () => {
 });
 
 test("forms list registered C# classes and published data sources under their own headings", async () => {
-    const { page, errors } = await mount({ form: true, formClasses: [{ alias: "orders.lines", kind: "dataSource" }, { alias: "Orders", kind: "class" }, { alias: "Legacy" }] });
+    const { page, errors } = await mount({ form: true, formClasses: [{ alias: "orders.lines", kind: "dataSource", selection: "umb://document/8289c03196e6834ec0df40d38196eb8a" }, { alias: "Orders", kind: "class" }, { alias: "Legacy" }] });
     const picker = page.getByLabel("Form class");
     assert.deepEqual(await picker.locator("optgroup").evaluateAll(groups => groups.map(group => [group.label, [...group.children].map(option => option.textContent)])),
         [["Form classes", ["Orders", "Legacy"]], ["Data sources", ["orders.lines"]]]);
-    await picker.selectOption("orders.lines");
-    assert.equal(await page.evaluate(() => window.changes.at(-1)), "orders.lines");
+    await picker.selectOption({ label: "orders.lines" });
+    assert.equal(await page.evaluate(() => window.changes.at(-1)), "umb://document/8289c03196e6834ec0df40d38196eb8a");
     assert.match(await page.locator("appblocks-form-class-picker p").textContent(), /published SQL data source/);
     assert.deepEqual(errors, []); await page.close();
 });

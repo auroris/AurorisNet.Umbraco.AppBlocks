@@ -425,7 +425,7 @@ string json = forms.ToJson();
 ```
 
 - `ToJson` gives the value of a property that uses the **AppBlocks: Forms container** data type, such as a Forms container block's `forms` property. Use it in `OwnedNode` values or a content service save.
-- `Form` takes the alias of a C# class or a published data source. It writes the Form Interface with the key parameter, `id` unless given, and the return page. It places the fields in the form's `fields` area and an Actions block in its `actions` area.
+- `Form` takes the alias of a registered C# class or the document key of a published SQL data source. It writes the Form Interface with the key parameter, `id` unless given, and the return page. It places the fields in the form's `fields` area and an Actions block in its `actions` area.
 - `Field` refuses an alias that is not a field block.
 - Use `appFormFullWidth`, `appFormColumns`, `appFormThreeColumns` or `appFormRegion` to arrange fields inside a Form. For example, `forms.Add("appFormColumns").Place("left", title).Place("right", date)` places the two fields side by side. The page layouts accept standalone blocks such as rich text and attachments.
 - `AppBlockItem.Place(area, ...)` refuses an area the block's grid entry lacks.

@@ -112,6 +112,8 @@ public sealed class DataSourceOperation
 
     /// <summary>The data source's alias.</summary>
     public string DataSource { get; }
+    /// <summary>The Umbraco key of the source supplying these rows.</summary>
+    public Guid DataSourceKey { get; internal init; }
     /// <summary>Initialize, Load, Create, Update, Delete, or Query for a tabular list and for the readers of <see cref="IDataSourceHandler.QueryAsync"/>.</summary>
     public DataSourceAction Action { get; }
     /// <summary>The anonymous visitor, Member, backoffice User or both; anonymous writes require the data source to opt in.</summary>
@@ -154,6 +156,8 @@ public sealed class DataSourceDetail
 
     public Guid Block { get; }
     public string DataSource { get; }
+    /// <summary>The Umbraco key of the source supplying these rows.</summary>
+    public Guid DataSourceKey { get; internal init; }
     public string LinkField { get; }
     /// <summary>The master's key as the link field holds it; null until a new master row is written.</summary>
     public string? MasterKey { get; internal set; }

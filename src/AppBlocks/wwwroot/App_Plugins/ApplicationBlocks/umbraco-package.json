@@ -41,7 +41,7 @@
         "label": "Form class",
         "icon": "icon-code",
         "group": "Application",
-        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+        "propertyEditorSchemaAlias": "AppBlocks.DocumentReference"
       }
     },
     {
@@ -77,7 +77,7 @@
         "label": "Form resource",
         "icon": "icon-database",
         "group": "Application",
-        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+        "propertyEditorSchemaAlias": "AppBlocks.DocumentReference"
       }
     },
     {
@@ -109,7 +109,7 @@
       "alias": "AppBlocks.ListPicker",
       "type": "propertyEditorUi",
       "meta": {
-        "propertyEditorSchemaAlias": "Umbraco.TextBox",
+        "propertyEditorSchemaAlias": "AppBlocks.DocumentReference",
         "group": "Application",
         "label": "List of values",
         "icon": "icon-list"
@@ -121,7 +121,7 @@
       "alias": "AppBlocks.DataSourcePicker",
       "type": "propertyEditorUi",
       "meta": {
-        "propertyEditorSchemaAlias": "Umbraco.TextBox",
+        "propertyEditorSchemaAlias": "AppBlocks.DocumentReference",
         "group": "Application",
         "label": "SQL data source",
         "icon": "icon-database"
@@ -383,6 +383,50 @@
       "element": "/App_Plugins/ApplicationBlocks/block-preview.js",
       "forContentTypeAlias": "appTime",
       "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.ScheduleSource",
+      "name": "Schedule source",
+      "element": "/App_Plugins/ApplicationBlocks/schedule-source-picker.js",
+      "meta": {
+        "label": "Schedule source",
+        "icon": "icon-link",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "AppBlocks.DocumentReference"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.ConditionItem",
+      "name": "Condition item",
+      "element": "/App_Plugins/ApplicationBlocks/condition-item.js",
+      "meta": {
+        "label": "Condition item",
+        "icon": "icon-link",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.ConditionValue",
+      "name": "Condition value",
+      "element": "/App_Plugins/ApplicationBlocks/condition-value.js",
+      "meta": {
+        "label": "Condition value",
+        "icon": "icon-link",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
+      "type": "propertyEditorSchema",
+      "alias": "AppBlocks.DocumentReference",
+      "name": "AppBlocks document reference",
+      "meta": {
+        "defaultPropertyEditorUiAlias": "AppBlocks.DataSourcePicker"
+      }
     }
   ]
 }

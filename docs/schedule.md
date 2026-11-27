@@ -9,10 +9,11 @@ Two queries supply the content. Anything that varies per row or per bar is a col
 | Setting | What it does |
 | --- | --- |
 | Heading, Help | The title above the schedule and a line under it. |
-| Rows source | The alias of a published report definition that selects a data source, or of a data source. One schedule row per row. |
-| Bars source | The alias of the source whose rows are the bars. |
+| Rows source | Pick a published SQL data source or a report definition that selects one. One schedule row per row. |
+| Bars source | Pick the source whose rows are the bars. Both source pickers store the selected document key. |
 | Days before today, Days after today | The window when the page's address carries no `from` and `to`. Empty is 7 and 14. |
 | Columns | Days, or one column per hour of every day in the window. A window of hour columns is cut to 31 days, or `AppBlocks:Schedule:MaxHourDays`. |
+| Link page | Optional Umbraco page for bar links. Its current URL supplies the destination. Use a link template such as `?id={key}#details` to append parameters or a fragment. |
 | Link template | Where a bar without a `link` value leads, such as `/orders-form/?id={key}`. `{key}` and any other bar column in braces are replaced, URL-encoded. An address starting with `/` is from the site's root. |
 | Hide empty rows | Leave out rows with no bar in the window, and say how many were left out. |
 

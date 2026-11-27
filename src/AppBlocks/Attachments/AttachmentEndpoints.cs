@@ -125,7 +125,7 @@ public static class AttachmentEndpoints
     }
 
     /// <summary>The owner the list names: the record's resource and key, or for pending files the resource and no key.</summary>
-    private static object Owner(AttachmentScope scope) => new { alias = scope.Owner!.ResourceAlias, key = scope.SubmissionKey is null ? scope.Owner.Key : null };
+    private static object Owner(AttachmentScope scope) => new { alias = scope.Resource!.Alias, key = scope.SubmissionKey is null ? scope.Owner!.Key : null };
 
     private static async Task<IResult> Download(Task<AttachmentScope> resolving, long id, HttpContext http, AttachmentStore store, CancellationToken ct)
     {

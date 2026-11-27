@@ -194,34 +194,27 @@ public sealed class PublishedReportCatalog(IUmbracoContextFactory contexts, IDoc
         reports = new(configured.CurrentValue.Reports, StringComparer.OrdinalIgnoreCase);
         nodes = new(StringComparer.OrdinalIgnoreCase);
         using var reference = contexts.EnsureUmbracoContext();
-        if (reference.UmbracoContext.Content is not { } cache || !navigation.TryGetRootKeysOfType(DataSourceSchema.RootAlias, out var roots)) return;
-        foreach (var root in roots)
+        if (reference.UmbracoContext.Content is not { } cache) return;
+        await foreach (var node in PublishedDefinitionNodes.OfType(cache, navigation, ReportAlias))
+        {
+            Func<string, object?> value = property => node.GetProperty(property)?.GetValue();
+            var alias = Text(value, "alias");
+            if (!reportOwners.TryAdd(alias, node.Key)) { warnings.Hidden(node, alias); continue; }
+            var selected = Text(value, "dataSource") is { Length: > 0 } selection ? data.ResolveSource(selection) : null;
+            var report = runtime.Definition(node.Key, node.UpdateDate, () => Logged(node, errors => ReadReport(node.Key, node.Name, value, errors)), SourceVersion(selected));
+            // An unavailable override cannot expose the configured seed's potentially broader dataset.
+            if (report is null) { reports.Remove(alias); unavailableReports.Add(alias); }
+            else if (nodes.TryAdd(report.Alias, report))
             {
-                if (await cache.GetByIdAsync(root, false) is null) continue;
-                var type = ReportAlias;
-                if (!navigation.TryGetDescendantsKeysOfType(root, type, out var keys)) continue;
-                foreach (var key in keys)
+                if (configured.CurrentValue.Reports.TryGetValue(report.Alias, out var seed))
                 {
-                    if (await cache.GetByIdAsync(key, false) is not { } node) continue;
-                    Func<string, object?> value = property => node.GetProperty(property)?.GetValue();
-                    var alias = Text(value, "alias");
-                    if (!reportOwners.TryAdd(alias, node.Key)) { warnings.Hidden(node, alias); continue; }
-                    var selected = Text(value, "dataSource") is { Length: > 0 } selection ? data.ResolveSource(selection) : null;
-                    var report = runtime.Definition(node.Key, node.UpdateDate, () => Logged(node, errors => ReadReport(node.Key, node.Name, value, errors)), SourceVersion(selected));
-                    // An unavailable override cannot expose the configured seed's potentially broader dataset.
-                    if (report is null) { reports.Remove(alias); unavailableReports.Add(alias); }
-                    else if (nodes.TryAdd(report.Alias, report))
-                    {
-                        if (configured.CurrentValue.Reports.TryGetValue(report.Alias, out var seed))
-                        {
-                            warnings.Replaced(report.Alias);
-                            // Preserve the configured report's authorization so a content node cannot downgrade a built-in admin report.
-                            if (seed.Authorization is not null) report.Definition.Authorization = seed.Authorization;
-                        }
-                        reports[report.Alias] = report.Definition;
-                    }
+                    warnings.Replaced(report.Alias);
+                    // Preserve the configured report's authorization so a content node cannot downgrade a built-in admin report.
+                    if (seed.Authorization is not null) report.Definition.Authorization = seed.Authorization;
                 }
+                reports[report.Alias] = report.Definition;
             }
+        }
     }
 
     private static string Text(Func<string, object?> value, string property) => value(property)?.ToString()?.Trim() ?? "";

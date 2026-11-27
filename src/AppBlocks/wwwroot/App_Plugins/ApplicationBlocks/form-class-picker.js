@@ -9,8 +9,8 @@ export default class FormClassPicker extends AppEditor {
     render() {
         const options = [...this.catalogue?.formClasses ?? []]
             .sort((a, b) => Number(kindOf(a) !== "class") - Number(kindOf(b) !== "class"))
-            .map(resource => ({ value: resource.alias, label: resource.alias, group: groups[kindOf(resource)] ?? kindOf(resource) }));
-        return html`${this.renderChoices(options, "Form class")}
+            .map(resource => ({ value: resource.selection ?? resource.alias, label: resource.alias, group: groups[kindOf(resource)] ?? kindOf(resource) }));
+        return html`${this.renderChoices(options, "Form class", this.catalogue?.formClasses.find(r => r.alias === this.value)?.selection ?? this.value)}
             <p>Select a registered C# form class or a published SQL data source. Its fields, and a class's business rules, define this form.</p>`;
     }
 }

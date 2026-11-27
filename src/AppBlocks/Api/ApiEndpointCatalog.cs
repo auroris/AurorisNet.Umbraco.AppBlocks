@@ -167,40 +167,24 @@ public sealed class ApiEndpointCatalog(IUmbracoContextFactory contexts, IDocumen
         var found = new List<ApiEndpointDefinition>();
         endpoints = found;
         using var reference = contexts.EnsureUmbracoContext();
-        if (reference.UmbracoContext.Content is not { } cache || !navigation.TryGetRootKeys(out var roots)) return;
+        if (reference.UmbracoContext.Content is not { } cache) return;
         MemberGroupNames? names = null;
-        // Where an endpoint sits is the editors' choice: any published endpoint whose ancestors are all published answers.
-        foreach (var root in roots)
+        await foreach (var node in PublishedDefinitionNodes.OfType(cache, navigation, Alias))
         {
-            var keys = new List<Guid>();
-            if (await cache.GetByIdAsync(root, false) is { } rootNode && rootNode.ContentType.Alias == Alias) keys.Add(root);
-            if (navigation.TryGetDescendantsKeysOfType(root, Alias, out var descendants)) keys.AddRange(descendants);
-            foreach (var key in keys)
+            names ??= new MemberGroupNames((await groups.GetAllAsync()).ToArray());
+            Func<string, object?> value = property => node.GetProperty(property)?.GetValue();
+            var endpoint = runtime.Definition(node.Key, node.UpdateDate, () => Logged(node, errors => Read(node.Key, node.Name, value, names.Resolve, errors)),
+                Dependencies(node.Key, node.Name, value, names.Resolve));
+            if (endpoint is null) continue;
+            if (found.FirstOrDefault(other => other.Alias.Equals(endpoint.Alias, StringComparison.OrdinalIgnoreCase)) is not null) { warnings.Hidden(node, endpoint.Alias); continue; }
+            if (found.FirstOrDefault(other => other.Route.Overlaps(endpoint.Route)) is { } earlier)
             {
-                if (await cache.GetByIdAsync(key, false) is not { } node || !await PublishedPathAsync(cache, key)) continue;
-                names ??= new MemberGroupNames((await groups.GetAllAsync()).ToArray());
-                Func<string, object?> value = property => node.GetProperty(property)?.GetValue();
-                var endpoint = runtime.Definition(node.Key, node.UpdateDate, () => Logged(node, errors => Read(node.Key, node.Name, value, names.Resolve, errors)),
-                    Dependencies(node.Key, node.Name, value, names.Resolve));
-                if (endpoint is null) continue;
-                if (found.FirstOrDefault(other => other.Alias.Equals(endpoint.Alias, StringComparison.OrdinalIgnoreCase)) is not null) { warnings.Hidden(node, endpoint.Alias); continue; }
-                if (found.FirstOrDefault(other => other.Route.Overlaps(endpoint.Route)) is { } earlier)
-                {
-                    logger.LogWarning("API endpoint {Name} ({Key}) was ignored: the earlier endpoint {Other} has the route {Route}.", node.Name, node.Key, earlier.Alias, earlier.Route);
-                    continue;
-                }
-                found.Add(endpoint);
+                logger.LogWarning("API endpoint {Name} ({Key}) was ignored: the earlier endpoint {Other} has the route {Route}.", node.Name, node.Key, earlier.Alias, earlier.Route);
+                continue;
             }
+            found.Add(endpoint);
         }
         found.Sort((a, b) => ApiRouteTemplate.Precedence(a.Route, b.Route));
-    }
-
-    private async Task<bool> PublishedPathAsync(Umbraco.Cms.Core.PublishedCache.IPublishedContentCache cache, Guid key)
-    {
-        if (!navigation.TryGetAncestorsKeys(key, out var ancestors)) return false;
-        foreach (var ancestor in ancestors)
-            if (await cache.GetByIdAsync(ancestor, false) is null) return false;
-        return true;
     }
 
     private T? Logged<T>(IPublishedContent node, Func<List<string>, T?> read) where T : class

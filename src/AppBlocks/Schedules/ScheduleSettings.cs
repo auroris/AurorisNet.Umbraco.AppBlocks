@@ -12,8 +12,8 @@ public enum ScheduleScale { Days, Hours }
 /// page's address does not say, the scale of its columns, how a bar links to its record, and whether rows without a
 /// bar in the window are shown.
 /// </summary>
-/// <param name="RowsSource">The alias of a published report definition that selects a data source, or of a data source, whose rows are the schedule's rows.</param>
-/// <param name="BarsSource">The alias of the source whose rows are the bars.</param>
+/// <param name="RowsSource">The selected report definition or SQL data source, whose rows are the schedule's rows.</param>
+/// <param name="BarsSource">The selected source whose rows are the bars.</param>
 /// <param name="DaysBefore">Days before today the window starts when the address carries no <c>from</c>.</param>
 /// <param name="DaysAfter">Days after today the window ends when the address carries no <c>to</c>.</param>
 /// <param name="LinkTemplate">Where a bar without a <c>link</c> value leads, with <c>{key}</c> and the other bar columns in braces; null leaves such bars without a link.</param>
@@ -52,6 +52,7 @@ public sealed record ScheduleSettings(string? Heading, string? Help, string Rows
     {
         string? Text(string alias) => block.Value<string>(alias) is { } value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
         return Read(alias => alias switch {
+            LinkTemplateAlias => Blocks.BlockLinkTemplate.Read(block),
             DaysBeforeAlias or DaysAfterAlias => block.Value<int?>(alias)?.ToString(CultureInfo.InvariantCulture),
             HideEmptyRowsAlias => block.Value<bool>(alias) ? "true" : "false",
             _ => Text(alias),

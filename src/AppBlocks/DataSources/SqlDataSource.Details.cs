@@ -156,7 +156,7 @@ public sealed partial class SqlDataSource
         public int MaximumRows => batch.MaximumRows;
         public IReadOnlyList<DataSourceChange> Original => batch.Changes;
         /// <summary>What the master's backing class sees and may change.</summary>
-        public DataSourceDetail Detail { get; } = new(batch.Block, source.Alias, batch.LinkField, batch.Changes.ToList());
+        public DataSourceDetail Detail { get; } = new(batch.Block, source.Alias, batch.LinkField, batch.Changes.ToList()) { DataSourceKey = source.Definition.Key };
         public string Receipt => receipt;
         public string Hash => hash;
         public IReadOnlyDictionary<string, object?>? App => app;

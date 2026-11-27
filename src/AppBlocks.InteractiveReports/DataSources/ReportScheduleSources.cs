@@ -9,8 +9,10 @@ public sealed class ReportScheduleSources(PublishedReportCatalog catalog) : ISch
     public bool TryResolve(string alias, out ScheduleSource? source)
     {
         source = null;
-        if (!catalog.ReportNodes.TryGetValue(alias, out var node)) return catalog.IsUnavailableReport(alias);
-        if (node.DataSource is { } definition) source = new(alias, definition, FromReport: true);
+        var node = AppBlocks.Blocks.AppBlockValues.DocumentKey(alias) is { } key
+            ? catalog.ReportNodes.Values.FirstOrDefault(report => report.Key == key) : catalog.ReportNodes.GetValueOrDefault(alias);
+        if (node is null) return catalog.IsUnavailableReport(alias);
+        if (node.DataSource is { } definition) source = new(node.Alias, definition, FromReport: true);
         return true;
     }
     public IReadOnlyList<string>? Columns(ScheduleSource source) => source.FromReport ? catalog.ReportColumns(source.Alias) : null;

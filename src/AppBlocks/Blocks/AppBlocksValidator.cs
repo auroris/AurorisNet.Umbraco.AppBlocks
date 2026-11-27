@@ -183,13 +183,13 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 else if (FieldCondition.IsComparison(comparison))
                 {
                     if (item.Length == 0) errors.Add($"Enter an item for the {label} comparison.");
-                    else if (enclosingForm is not null && (!formBlock || property == BlockConditions.ReadOnly) && !enclosingForm.Fields.Any(f => f.Key == item))
+                    else if (enclosingForm is not null && (!formBlock || property == BlockConditions.ReadOnly) && !Guid.TryParse(item, out _) && !enclosingForm.Fields.Any(f => f.Key == item))
                         errors.Add($"The {label} item '{item}' is not a field of {enclosingForm.Alias}.");
                 }
                 else if (comparison is "Member is in group" or "User is outside member groups" && string.IsNullOrWhiteSpace(Text(condition, "memberGroups")))
                     errors.Add($"Pick a Member Group for {label}.");
                 else if (comparison == "Backoffice user is in group" && string.IsNullOrWhiteSpace(Text(condition, "literal")))
-                    errors.Add($"Enter a User Group alias for {label}.");
+                    errors.Add($"Pick a User Group for {label}.");
                 else if (BlockConditions.ConstantResult(property, comparison) is null
                     && !(property == BlockConditions.ReadOnly && comparison == "User is outside member groups")
                     && comparison is not ("User is anonymous" or "User is signed in" or "Member is in group" or "Backoffice user is in group"))
@@ -271,7 +271,11 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
                 if (alias == AppBlockSchema.SearchSelectAlias && Text(child, AppBlockField.MaxOptionsAlias).Trim() is { Length: > 0 } maxOptions
                     && (!int.TryParse(maxOptions, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var maxCount) || maxCount < 0))
                     errors.Add($"The maximum visible choices for '{binding}' must be a whole number of 0 or more.");
-                if (alias == "appDisplay" && Text(child, AppBlockField.LinkTemplateAlias).Trim() is { Length: > 0 } template) links.Add((binding, template, target));
+                if (alias == "appDisplay" && Text(child, AppBlockField.LinkTemplateAlias).Trim() is { Length: > 0 } template)
+                {
+                    ValidateLinkPage(child, template, errors);
+                    links.Add((binding, template, target));
+                }
             }
             else if (Plugin(alias) is AccountPickerBlock picker) {
                 try { pickers.Add((picker.ReadSettings(key => Text(child, key).Trim()), target)); }
@@ -464,7 +468,14 @@ public sealed class AppBlocksValidator(FormResourceRegistry resources, Published
     private void Schedule(BlockItemData block, List<string> errors)
     {
         var settings = ScheduleSettings.Read(alias => Text(block, alias));
+        ValidateLinkPage(block, settings.LinkTemplate, errors);
         errors.AddRange(ScheduleValidation.Validate(settings, schedules is null || definitions is null ? null : schedules.Schema, Text(block, ScheduleSettings.ColumnsAlias), scheduleOptions?.Value));
+    }
+
+    private static void ValidateLinkPage(BlockItemData block, string? template, List<string> errors)
+    {
+        if (Text(block, "linkPage").Length > 0 && template is { Length: > 0 } && template[0] is not ('?' or '#'))
+            errors.Add("With a link page selected, start the link template with ? for a query string or # for a fragment.");
     }
 
     internal static bool Compatible(string alias, FormField field, bool hasListOfValues, bool multiple, bool allowFreeText = false)

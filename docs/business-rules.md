@@ -58,9 +58,9 @@ An account picker checks each selection against its accounts. When Security omit
 
 AppBlocks keeps responses that evaluate visitor or item-based Security or Read Only conditions out of shared caches. Site-owned plugin blocks can use the native condition lists by assigning **Application: Visibility conditions** to `blockVisibility`, **Application: Security conditions** to `blockSecurity`, and **Application: Read only conditions** to `blockReadOnly`. Custom editing controls and write endpoints must enforce Read Only when processing changes.
 
-All three lists offer sign-in, anonymous, Member Group, backoffice User Group, and item comparisons. A Member Group condition passes for any of its selected groups. A backoffice User Group condition takes the group's alias and uses the site's website identity setting described below.
+All three lists offer sign-in, anonymous, Member Group, backoffice User Group, and item comparisons. A Member Group condition passes for any of its selected groups. A backoffice User Group condition stores the selected group’s key and uses the site's website identity setting described below.
 
-Use an item comparison for equality, inequality, ordering, an empty value or a populated value. Inside a form, **Item** is a resource field key. The comparison reads the initialized or stored record for this visitor. Outside a form, **Item** is a published page property alias. On the form block itself, Visibility and Security use page properties and Read Only uses the form record. For example, **Is at least** with item `amount` and value `100` shows a review section for records whose numeric amount is 100 or more. Use ISO dates and invariant numbers for comparison values. The template evaluates conditions when it renders. For a field that responds immediately as someone types, use the form's **Field rules**.
+Use an item comparison for equality, inequality, ordering, an empty value or a populated value. Pick a page property under **Item** to compare its value. The stored property key follows changes to its name and alias. Inside a form, you can also choose **Form field** and enter a resource field key to compare the initialized or stored record for this visitor. On the form block itself, Visibility and Security read the page, and Read Only can also read the form record. For example, **Is at least** with item `amount` and value `100` shows a review section for records whose numeric amount is 100 or more. Use ISO dates and invariant numbers for comparison values. The template evaluates conditions when it renders. For a field that responds immediately as someone types, use the form's **Field rules**.
 
 ### Read Only
 
@@ -195,7 +195,7 @@ Choose the rule your application needs:
 
 `IsInMemberGroup(string name)` checks the Member Group's **name**, for example `"Order editors"`. `IsInUserGroup(string alias)` checks the backoffice User Group's **alias**, for example `"admin"`, whose default display name is "Administrators". Both comparisons ignore case. Neither method accepts a numeric group ID or GUID, and neither treats the other account type as a match.
 
-For a backoffice User Group, the alias is the second string shown with the lock control beside the editable name. Renaming the display name does not change the alias. An editable alias can be unlocked and changed deliberately; update any code or configuration that references the old alias when doing so. An alias is not an immutable group identity.
+For a backoffice User Group, the alias is the second string shown with the lock control beside the editable name. Renaming the display name does not change the alias. An editable alias can be unlocked and changed deliberately; update any code or configuration that references the old alias when doing so. Backoffice group selections in AppBlocks fields store the group key.
 
 Umbraco 18 Member Groups have a name and an entity key, but no separate alias field. This is why the Member Group method takes a name, while the User Group method takes an alias.
 
@@ -398,7 +398,7 @@ Files that nobody adopts are deleted after `Attachments:PendingLifetimeHours`, 2
 For a form whose files become read-only when it is submitted, adopt the pending files inside the resource's create transaction:
 
 1. Open the connection with the injected `AttachmentStore`'s `OpenConnectionAsync`. It opens the `Attachments:Connection` database with the attachment tables ensured. The form's tables must be in that database too.
-2. Call `AttachmentStore.AdoptAsync(connection, transaction, pendingOwner, savedOwner, actor, ct)`. The pending owner is `AttachmentOwner.Pending(alias, submissionKey, context.Member)`, with the submission key from `context.SubmissionKey`. The saved owner is `new AttachmentOwner(alias, key)`.
+2. Call `AttachmentStore.AdoptAsync(connection, transaction, pendingOwner, savedOwner, actor, ct)`. The pending owner is `AttachmentOwner.Pending(alias, submissionKey, context.Member)`, with the submission key from `context.SubmissionKey`. The saved owner is `new AttachmentOwner(alias, key)`. Get the owner identifier from `AttachmentOwner.ResourceId(resource)` for both calls. It returns a document UDI for a SQL data source and the registered alias for a C# resource.
 3. Commit the record and the adoption together.
 4. Deny later file writes through `IAttachmentOwner`.
 
@@ -683,16 +683,19 @@ if (stored.Status != "Draft")
 
 Read these values and perform the write in the same transaction, using the engine's concurrency checks or a checksum of the row's values compared inside that transaction. Apply ownership to reads and deletes too. Filter list queries at the database so records belonging to other accounts are never returned.
 
-For the built-in data-source engine, implement `IDataSourcePolicy`. Each registered policy must allow an operation:
+For the built-in data-source engine, implement `IDataSourcePolicy`. Every registered policy must allow the operation. Use `DataSourceKey` when a rule belongs to one published definition. Policies, handler operations and tabular details all expose this key.
 
 ```csharp
 using AppBlocks.DataSources;
 
 public sealed class DraftOrderPolicy : IDataSourcePolicy
 {
+    // Use the key of the Orders document installed by this application.
+    private static readonly Guid Orders = new("59457055-42ca-4f92-9e1f-e18061332965");
+
     public ValueTask<bool> IsAllowedAsync(DataSourceRequest request, CancellationToken ct)
     {
-        if (request.DataSource != "orders") return ValueTask.FromResult(true);
+        if (request.DataSourceKey != Orders) return ValueTask.FromResult(true);
 
         // This policy adds an edit rule. Configure read/query access separately.
         if (request.Action is not (DataSourceAction.Update or DataSourceAction.Delete))

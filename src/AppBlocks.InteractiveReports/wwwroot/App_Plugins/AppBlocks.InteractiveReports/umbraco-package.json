@@ -36,7 +36,7 @@
         "label": "Table or SQL query",
         "icon": "icon-database",
         "group": "Application",
-        "propertyEditorSchemaAlias": "Umbraco.TextArea"
+        "propertyEditorSchemaAlias": "AppBlocks.ReportSourceValue"
       }
     },
     {
@@ -48,7 +48,7 @@
         "label": "Report starting view",
         "icon": "icon-table",
         "group": "Application",
-        "propertyEditorSchemaAlias": "Umbraco.TextArea"
+        "propertyEditorSchemaAlias": "AppBlocks.ReportSourceValue"
       }
     },
     {
@@ -58,6 +58,38 @@
       "element": "/App_Plugins/AppBlocks.InteractiveReports/block-preview-entrypoint.js",
       "forContentTypeAlias": "appReport",
       "forBlockEditor": "block-grid"
+    },
+    {
+      "type": "propertyEditorSchema",
+      "alias": "AppBlocks.ReportSourceValue",
+      "name": "AppBlocks report source",
+      "meta": {
+        "defaultPropertyEditorUiAlias": "AppBlocks.ReportSource"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.OpenForm",
+      "name": "Open form",
+      "element": "/App_Plugins/ApplicationBlocks/openform-picker.js",
+      "meta": {
+        "label": "Open form",
+        "icon": "icon-link",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
+    },
+    {
+      "type": "propertyEditorUi",
+      "alias": "AppBlocks.CreateForm",
+      "name": "Create form",
+      "element": "/App_Plugins/ApplicationBlocks/createform-picker.js",
+      "meta": {
+        "label": "Create form",
+        "icon": "icon-link",
+        "group": "Application",
+        "propertyEditorSchemaAlias": "Umbraco.TextBox"
+      }
     }
   ]
 }

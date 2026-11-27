@@ -12,7 +12,7 @@ namespace AppBlocks.DataSources;
 
 /// <summary>
 /// The published data sources, beside the C# resources in <see cref="FormResourceRegistry"/>: every published
-/// <c>sqlDataSource</c> under a published Data sources root, in tree order. Read once per request scope; a
+/// <c>sqlDataSource</c> with a published path, in tree order. Read once per request scope; a
 /// definition that does not read is logged and left out, and of two nodes with one alias the first wins.
 /// </summary>
 public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocumentNavigationQueryService navigation, IMemberGroupService groups,
@@ -33,30 +33,25 @@ public sealed class DataSourceCatalog(IUmbracoContextFactory contexts, IDocument
         var found = new List<SqlDataSource>();
         sources = found;
         using var reference = contexts.EnsureUmbracoContext();
-        if (reference.UmbracoContext.Content is not { } cache || !navigation.TryGetRootKeysOfType(DataSourceSchema.RootAlias, out var roots)) return;
+        if (reference.UmbracoContext.Content is not { } cache) return;
         var allGroups = (await groups.GetAllAsync()).ToArray();
-        foreach (var root in roots)
+        var groupVersion = System.Text.Json.JsonSerializer.Serialize(allGroups.OrderBy(g => g.Key).Select(g => new { g.Key, g.Name }));
+        await foreach (var node in PublishedDefinitionNodes.OfType(cache, navigation, DataSourceSchema.SqlAlias))
         {
-            if (await cache.GetByIdAsync(root, false) is null) continue;
-            if (!navigation.TryGetDescendantsKeysOfType(root, DataSourceSchema.SqlAlias, out var keys)) continue;
-            foreach (var key in keys)
+            var definition = runtime.Definition(node.Key, node.UpdateDate, () => {
+                var errors = new List<string>();
+                var read = DataSourceDefinition.Read(node.Key, node.Name, alias => node.GetProperty(alias)?.GetValue(),
+                    picked => AppBlocks.Authentication.MemberGroupNames.Resolve(allGroups, picked, failOnMissing: true), errors);
+                if (read is null) logger.LogWarning("Data source {Name} ({Key}) is left out: {Errors}", node.Name, node.Key, string.Join(" ", errors));
+                return read;
+            }, groupVersion);
+            if (definition is null) continue;
+            if (found.Any(source => source.Alias == definition.Alias))
             {
-                if (await cache.GetByIdAsync(key, false) is not { } node) continue;
-                var definition = runtime.Definition(node.Key, node.UpdateDate, () => {
-                    var errors = new List<string>();
-                    var read = DataSourceDefinition.Read(node.Key, node.Name, alias => node.GetProperty(alias)?.GetValue(),
-                        picked => AppBlocks.Authentication.MemberGroupNames.Resolve(allGroups, picked, failOnMissing: true), errors);
-                    if (read is null) logger.LogWarning("Data source {Name} ({Key}) is left out: {Errors}", node.Name, node.Key, string.Join(" ", errors));
-                    return read;
-                });
-                if (definition is null) continue;
-                if (found.Any(source => source.Alias == definition.Alias))
-                {
-                    logger.LogWarning("Data source {Name} ({Key}) is left out: an earlier data source has the alias {Alias}.", node.Name, node.Key, definition.Alias);
-                    continue;
-                }
-                found.Add(new SqlDataSource(definition, runtime, users, policies, providers, handlers));
+                logger.LogWarning("Data source {Name} ({Key}) is left out: an earlier data source has the alias {Alias}.", node.Name, node.Key, definition.Alias);
+                continue;
             }
+            found.Add(new SqlDataSource(definition, runtime, users, policies, providers, handlers));
         }
     }
 }

@@ -83,6 +83,14 @@ public sealed class AppBlockValues
         return $"umb://{entityType}/{key:N}";
     }
 
+    /// <summary>Reads the key stored by a document picker as a GUID or document UDI.</summary>
+    public static Guid? DocumentKey(string value)
+    {
+        if (Guid.TryParse(value, out var key)) return key;
+        const string prefix = "umb://document/";
+        return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && Guid.TryParse(value[prefix.Length..], out key) ? key : null;
+    }
+
     /// <summary>
     /// Adds a block of element type <paramref name="alias"/> with <paramref name="values"/>, an object or dictionary whose members are
     /// the element's property aliases, and returns its item for the caller to place: on the page with <see cref="Place"/> or in an area.
@@ -140,6 +148,10 @@ public sealed class AppBlockValues
     /// an Actions block with <paramref name="actions"/> (its labels, say) in its actions area. <paramref name="values"/> are the form
     /// block's own, such as its heading; <paramref name="formInterface"/> adds to the interface's, such as <c>viewOnly</c>.
     /// </summary>
+    public AppBlockItem Form(Guid dataSource, IEnumerable<AppBlockItem> fields, Guid? returnPage = null, string? keyParameter = null, object? actions = null,
+        object? values = null, object? formInterface = null, string? id = null, int columnSpan = 12, bool returnWithKey = false)
+        => Form(Udi(dataSource), fields, returnPage, keyParameter, actions, values, formInterface, id, columnSpan, returnWithKey);
+
     public AppBlockItem Form(string resource, IEnumerable<AppBlockItem> fields, Guid? returnPage = null, string? keyParameter = null, object? actions = null,
         object? values = null, object? formInterface = null, string? id = null, int columnSpan = 12, bool returnWithKey = false)
     {

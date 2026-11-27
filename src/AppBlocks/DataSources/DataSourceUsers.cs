@@ -71,6 +71,9 @@ public sealed record DataSourceUser(string Key, string? Sid, string? Name, strin
     public IReadOnlyList<string> UserGroupNames => IsBackOfficeUser ? AdditionalBackOfficeAccount?.GroupNames ?? Groups : [];
     /// <summary>Current User Group aliases, such as "admin". Aliases can be deliberately changed in Umbraco. Empty without a backoffice account.</summary>
     public IReadOnlyList<string> UserGroupAliases { get; init; } = [];
+    public IReadOnlyList<Guid> UserGroupKeys { get; init; } = [];
+    public bool IsInPickedUserGroup(string selection) => Guid.TryParse(selection, out var key)
+        ? IsBackOfficeUser && UserGroupKeys.Contains(key) : IsInUserGroup(selection);
     /// <summary>Checks a Member Group name, ignoring case. Does not accept a numeric ID or GUID.</summary>
     public bool IsInMemberGroup(string name) => IsMember && Groups.Contains(name, StringComparer.OrdinalIgnoreCase);
     /// <summary>Checks a backoffice User Group alias, ignoring case. Does not accept its display name, numeric ID or GUID.</summary>
@@ -80,6 +83,7 @@ public sealed record DataSourceUser(string Key, string? Sid, string? Name, strin
         IsBackOfficeUser = true,
         AdditionalBackOfficeAccount = backOfficeUser.BackOfficeUser,
         UserGroupAliases = backOfficeUser.UserGroupAliases,
+        UserGroupKeys = backOfficeUser.UserGroupKeys,
         CanEditPage = backOfficeUser.CanEditPage,
         CanPublishPage = backOfficeUser.CanPublishPage,
         CanDeletePage = backOfficeUser.CanDeletePage,
@@ -140,6 +144,7 @@ public sealed class UmbracoDataSourceUsers(IMemberManager members, ApplicationAc
                 : new("backoffice:" + id, Sid(user.Key), user.Username, user.Email,
                     Bounded(user.Groups.Select(g => g.Name ?? g.Alias)), IsBackOfficeUser: true) {
                     UserGroupAliases = Bounded(user.Groups.Select(g => g.Alias)),
+                    UserGroupKeys = user.Groups.Select(g => g.Key).Distinct().ToArray(),
                     CanEditPage = await HasPagePermissionAsync(user, pageKey, ActionUpdate.ActionLetter),
                     CanPublishPage = await HasPagePermissionAsync(user, pageKey, ActionPublish.ActionLetter),
                     CanDeletePage = await HasPagePermissionAsync(user, pageKey, ActionDelete.ActionLetter),
@@ -184,7 +189,11 @@ public enum DataSourceAction { Initialize, Load, Create, Update, Delete, Query }
 /// </param>
 public sealed record DataSourceRequest(string DataSource, DataSourceAction Action, DataSourceUser User, Forms.FormExecutionContext Context,
     string? Key, IReadOnlyDictionary<string, object?>? Current, IReadOnlyDictionary<string, object?>? Proposed,
-    System.Data.Common.DbConnection? Connection = null, System.Data.Common.DbTransaction? Transaction = null);
+    System.Data.Common.DbConnection? Connection = null, System.Data.Common.DbTransaction? Transaction = null)
+{
+    /// <summary>The key of the definition supplying the rows.</summary>
+    public Guid DataSourceKey { get; init; }
+}
 
 /// <summary>
 /// A rule in C# for what a predicate cannot say, such as "only the requester may cancel, and only while the order

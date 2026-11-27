@@ -15,6 +15,7 @@ Install the package. Its composer registers it, and at startup it installs the r
 | Source | What to enter |
 |---|---|
 | Table | A table or view of a connection from **Settings → AppBlocks → Connections**, listed as `DataSourceName.TableName`, with the schema where it is needed |
+| Published data source | Pick the published SQL document. Its key identifies the source after a rename or move. |
 | SQL query | A connection and a SELECT. The query may use `:PARAM.name` and the signed-in user's bind variables, such as `:USER_KEY` |
 
 The source and the starting view are saved on the block. Connection credentials stay in AppBlocks' configuration.
@@ -64,7 +65,7 @@ On the Interactive Report block, open **Form links** and choose where the button
 
 Set **Record key column** to the report column that identifies the row, such as `LINE_ID`. **Open** passes that value to the form. **Create** opens a new record. **Open label** and **Create label** change the text shown by the report.
 
-A report automatically targets the only sidebar on a page, even beside an inline master form. A single form also supplies its own **Record key query parameter**. To select a different form or choose between sidebars, give each Form Interface a distinct parameter and enter the intended one on the report. Same-page form links and links to sidebars require an unambiguous match. Leave the destinations empty and **Form on this page** off for a report without form links.
+A report automatically targets the only sidebar on a page, even beside an inline master form. A single form also supplies its own **Record key query parameter**. Use **Open form** or **Create form** to target a specific form on its destination page. AppBlocks stores the block key and reads the current query parameter from that form. Same-page form links and links to sidebars require an unambiguous match. Leave the destinations empty and **Form on this page** off for a report without form links.
 
 ### Master and detail on one page
 
@@ -89,7 +90,7 @@ Each of the two has a setting for who sees it:
 
 Every Open link choice except Hidden needs the record key column. A published block whose Open link lacks its key column offers no Open link, and the log says so once.
 
-The backoffice group pickers store group aliases separated by commas. Membership is checked against the caller as AppBlocks resolves them for data sources, for Members and backoffice Users alike.
+The backoffice group pickers store group keys. Membership is checked against the caller as AppBlocks resolves them for data sources, for Members and backoffice Users alike.
 
 ### Form page decides
 

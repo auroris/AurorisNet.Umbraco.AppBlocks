@@ -18,7 +18,7 @@ export default class RuleFieldPicker extends AppEditor {
         }, "rule-form");
     }
     render() {
-        const resource = this.catalogue?.formClasses?.find(item => item.alias === this.resource);
+        const resource = this.resource && this.catalogue?.formClasses?.find(item => item.selection === this.resource || item.alias === this.resource);
         return this.renderChoices((resource?.fields ?? []).map(f => ({ value: f.key, label: f.label })), "Field");
     }
 }

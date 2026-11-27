@@ -16,7 +16,10 @@ function formsIn(properties) {
     return forms;
 }
 export default class ParentFormPicker extends AppEditor {
-    static properties = { ...AppEditor.properties, local: { state: true }, documentForms: { state: true }, pickedPage: { state: true }, remote: { state: true } };
+    static properties = { ...AppEditor.properties, local: { state: true }, documentForms: { state: true }, useThisPage: { state: true }, pickedPage: { state: true }, remote: { state: true } };
+    get pageProperty() { return "parentPage"; }
+    get label() { return "Parent form"; }
+    get createDestination() { return false; }
     constructor() {
         super();
         this.documents = new UmbDocumentDetailRepository(this);
@@ -24,7 +27,13 @@ export default class ParentFormPicker extends AppEditor {
             this.observe(manager?.contents, items => this.local = items, "parent-grid"));
         this.consumeContext(UMB_BLOCK_ELEMENT_PROPERTY_DATASET_CONTEXT, async dataset => {
             this.datasetContext = dataset;
-            this.observe(await dataset?.propertyValueByAlias("parentPage"), page => this.loadPage(page), "parent-page");
+            const update = () => this.loadPage(this.createPage || (this.useThisPage ? null : this.openPage));
+            this.observe(await dataset?.propertyValueByAlias(this.pageProperty), page => { this.openPage = page; update(); }, "parent-page");
+            if (this.pageProperty === "formPage") {
+                this.observe(await dataset?.propertyValueByAlias("formOnThisPage"), enabled => { this.useThisPage = [true, 1, "1", "true"].includes(enabled); update(); }, "this-page");
+                if (this.createDestination)
+                    this.observe(await dataset?.propertyValueByAlias("createFormPage"), page => { this.createPage = page; update(); }, "create-page");
+            }
         });
     }
     async connectedCallback() {
@@ -41,6 +50,7 @@ export default class ParentFormPicker extends AppEditor {
         if (this.pickedPage === page) this.remote = formsIn(data?.values);
     }
     render() {
+        if (this.pageProperty === "formPage" && !this.useThisPage && !this.pickedPage) return this.renderChoices([], this.label);
         const options = new Map();
         const forms = this.pickedPage ? this.remote ?? [] : [...(this.documentForms ?? []), ...(this.local ?? [])];
         for (const form of forms) {
@@ -49,9 +59,10 @@ export default class ParentFormPicker extends AppEditor {
             const [config] = listItems(content.formInterface);
             if (!config) continue;
             const parameter = config.keyParameter || (content.parentForm ? "detailId" : "id");
-            options.set(form.key, { value: form.key, label: (content.heading || config.resource || "Form") + " (" + parameter + ")" });
+            const resource = this.catalogue?.formClasses.find(r => r.selection === config.resource)?.alias ?? config.resource;
+            options.set(form.key, { value: form.key, label: (content.heading || resource || "Form") + " (" + parameter + ")" });
         }
-        return this.renderChoices([...options.values()], "Parent form");
+        return this.renderChoices([...options.values()], this.label);
     }
 }
 customElements.define("app-parent-form-picker", ParentFormPicker);

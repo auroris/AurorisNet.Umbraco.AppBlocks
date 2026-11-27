@@ -5,7 +5,7 @@ import { UMB_AUTH_CONTEXT } from "@umbraco-cms/backoffice/auth";
 import { request } from "./api.js";
 
 /**
- * Picks backoffice user groups. The value is their aliases separated by commas.
+ * Picks backoffice user groups. The value is their keys separated by commas.
  * A picked group that no longer exists stays listed, marked, until it is cleared.
  */
 export default class UserGroupPicker extends UmbLitElement {
@@ -22,7 +22,8 @@ export default class UserGroupPicker extends UmbLitElement {
             catch (error) { this.error = error.message; }
         });
     }
-    get selected() { return (this.value ?? "").split(",").map(alias => alias.trim()).filter(Boolean); }
+    get selected() { return (this.value ?? "").split(",").map(item => item.trim()).filter(Boolean)
+            .map(item => this.groups.find(group => group.alias.toLowerCase() === item.toLowerCase())?.key ?? item); }
     toggle(alias, checked) {
         if (this.readonly) return;
         const rest = this.selected.filter(item => item.toLowerCase() !== alias.toLowerCase());
@@ -31,8 +32,8 @@ export default class UserGroupPicker extends UmbLitElement {
     }
     render() {
         const selected = this.selected.map(alias => alias.toLowerCase());
-        const missing = this.selected.filter(alias => !this.groups.some(group => group.alias.toLowerCase() === alias.toLowerCase()));
-        const options = [...this.groups.map(group => ({ alias: group.alias, label: group.name })), ...missing.map(alias => ({ alias, label: `${alias} (no longer exists)` }))];
+        const missing = this.selected.filter(alias => !this.groups.some(group => group.key.toLowerCase() === alias.toLowerCase()));
+        const options = [...this.groups.map(group => ({ alias: group.key, label: group.name })), ...missing.map(alias => ({ alias, label: `${alias} (no longer exists)` }))];
         return html`${options.map(option => html`<label><input type="checkbox" .checked=${selected.includes(option.alias.toLowerCase())}
                 ?disabled=${this.readonly} @change=${e => this.toggle(option.alias, e.target.checked)}>${option.label}</label>`)}
             ${options.length === 0 && !this.error ? html`<p>No backoffice user groups.</p>` : ""}

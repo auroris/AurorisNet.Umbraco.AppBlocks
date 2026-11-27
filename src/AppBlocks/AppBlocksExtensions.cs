@@ -36,6 +36,7 @@ public static class AppBlocksExtensions
             configure?.Invoke(existing);
             return builder;
         }
+        builder.DataValueReferenceFactories().Append<DocumentReferenceTracking>();
         var connections = new AppBlocksBuilder(services);
         services.AddSingleton(connections);
         connections.AddConnection(ConnectionCatalog.ApplicationConnection, provider => provider.GetRequiredService<ConnectionCatalog>().Openable(ConnectionCatalog.ApplicationConnection));

@@ -15,7 +15,10 @@ namespace AppBlocks.Attachments;
 /// <summary>The record a file belongs to: a form resource's alias and the record's key, as the form endpoints know them.</summary>
 public sealed record AttachmentOwner(string Alias, string Key)
 {
-    /// <summary>What the alias of a <see cref="Pending"/> owner starts with. No resource alias does, so no record key can name pending files.</summary>
+    public static string ResourceId(Forms.IFormResource resource) => resource is DataSources.SqlDataSource sql
+        ? Blocks.AppBlockValues.Udi(sql.Definition.Key) : resource.Alias;
+
+    /// <summary>Prefix for files waiting for a new record to be saved.</summary>
     public const string PendingPrefix = "pending:";
 
     /// <summary>

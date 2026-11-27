@@ -8,7 +8,7 @@ using Umbraco.Cms.Web.Common.Authorization;
 
 namespace AppBlocks.Management;
 
-/// <summary>The backoffice user groups, by alias and name, that the User Group Picker offers to an editor of content.</summary>
+/// <summary>The backoffice user groups, by key, alias and name, that the User Group Picker offers to an editor of content.</summary>
 [ApiVersion("1.0")]
 [VersionedApiBackOfficeRoute("appblocks")]
 [ApiExplorerSettings(GroupName = "AppBlocks")]
@@ -20,7 +20,7 @@ public sealed class ReportUserGroupsController(IUserGroupService userGroups) : M
     public async Task<IActionResult> Groups()
     {
         Response.Headers.CacheControl = "no-store";
-        return Ok((await userGroups.GetAllAsync(0, 1000)).Items.Select(g => new { alias = g.Alias, name = g.Name })
+        return Ok((await userGroups.GetAllAsync(0, 1000)).Items.Select(g => new { key = g.Key, alias = g.Alias, name = g.Name })
             .OrderBy(g => g.name, StringComparer.OrdinalIgnoreCase));
     }
 }

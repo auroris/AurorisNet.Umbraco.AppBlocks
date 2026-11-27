@@ -177,7 +177,7 @@ public sealed class AppReportDefinitionStore(
     {
         if (!rule.HasGroups || pages is null || users is null || await pages.VisitorAsync(page) is not { } caller
             || await DataSourceQueries.ResolveReaderAsync(users, caller, ct) is not { IsAnonymous: false } user) return false;
-        if (rule.UserGroups.Any(user.IsInUserGroup)) return true;
+        if (rule.UserGroups.Any(user.IsInPickedUserGroup)) return true;
         if (rule.MemberGroups.Length == 0 || memberGroups is null) return false;
         return (await DefaultReportAccessPolicy.MemberGroupNamesAsync(memberGroups, rule.MemberGroups)).Any(user.IsInMemberGroup);
     }

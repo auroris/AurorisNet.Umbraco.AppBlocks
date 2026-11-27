@@ -388,7 +388,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
         IReadOnlyDictionary<string, object?>? current, IReadOnlyDictionary<string, object?>? proposed, DbConnection? connection, DbTransaction? transaction,
         CancellationToken ct)
     {
-        var request = new DataSourceRequest(definition.Alias, action, user, context, key, current, proposed, connection, transaction);
+        var request = new DataSourceRequest(definition.Alias, action, user, context, key, current, proposed, connection, transaction) { DataSourceKey = definition.Key };
         return await policies.AllowAsync(request, ct);
     }
 
@@ -396,6 +396,7 @@ public sealed partial class SqlDataSource(DataSourceDefinition definition, DataS
         DbConnection? connection, DbTransaction? transaction, string? key = null, IReadOnlyDictionary<string, object?>? current = null,
         IDictionary<string, object?>? values = null, IReadOnlyList<DataSourceDetail>? details = null, IReadOnlyList<IDictionary<string, object?>>? rows = null)
         => new(definition.Alias, action, user, context, plan.Dialect.Kind) {
+            DataSourceKey = definition.Key,
             Connection = connection, Transaction = transaction, Key = key, Current = current, Values = values, Details = details ?? [], Rows = rows,
         };
 

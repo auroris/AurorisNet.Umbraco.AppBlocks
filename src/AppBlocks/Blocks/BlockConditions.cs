@@ -14,7 +14,7 @@ using Umbraco.Extensions;
 namespace AppBlocks.Blocks;
 
 /// <summary>Server-side conditions on a published block. Both renderers and block endpoints use the same published values.</summary>
-public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupService memberGroups, IEnumerable<IAppBlockPlugin> plugins, IHttpContextAccessor http)
+public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupService memberGroups, IEnumerable<IAppBlockPlugin> plugins, IHttpContextAccessor http, IContentTypeService? contentTypes = null)
 {
     public const string Visibility = "blockVisibility", Security = "blockSecurity", ReadOnly = "blockReadOnly";
     private MemberGroupNames? groups;
@@ -75,7 +75,8 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         if (!FieldCondition.IsComparison(comparison)) return await VisitorMatchesAsync(condition, comparison, visitor, ct);
         var name = condition.Value<string>("item")?.Trim();
         if (string.IsNullOrEmpty(name)) return null;
-        var value = form is null ? PageValue(page, name, culture) : await FieldValueAsync(form, name, load);
+        var value = form is null || Guid.TryParse(name, out _)
+            ? PageValue(page, name, culture) : await FieldValueAsync(form, name, load);
         return value is { } left ? FieldCondition.Compare(left.Kind, comparison!, left.Text, condition.Value<string>("literal") ?? "") : null;
     }
 
@@ -87,7 +88,7 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         {
             case "User is anonymous": return user.IsAnonymous;
             case "User is signed in": return !user.IsAnonymous;
-            case "Backoffice user is in group": return user.IsInUserGroup(condition.Value<string>("literal")?.Trim() ?? "");
+            case "Backoffice user is in group": return user.IsInPickedUserGroup(condition.Value<string>("literal")?.Trim() ?? "");
             case "Member is in group":
             case "User is outside member groups":
                 if (!user.IsMember) return comparison == "User is outside member groups";
@@ -99,8 +100,14 @@ public sealed class BlockConditions(IDataSourceUserResolver users, IMemberGroupS
         }
     }
 
-    private static (string Kind, string Text)? PageValue(IPublishedContent page, string name, string? culture)
+    private (string Kind, string Text)? PageValue(IPublishedContent page, string name, string? culture)
     {
+        if (Guid.TryParse(name, out var key))
+        {
+            var type = contentTypes?.Get(page.ContentType.Key)?.CompositionPropertyTypes.FirstOrDefault(p => p.Key == key);
+            if (type is null) return null;
+            name = type.Alias;
+        }
         if (page.GetProperty(name) is not { } property) return null;
         var value = property.GetValue(culture);
         var kind = value switch {

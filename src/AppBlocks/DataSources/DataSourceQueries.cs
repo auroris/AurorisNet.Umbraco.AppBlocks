@@ -35,7 +35,7 @@ public sealed class DataSourceQueries(DataSourceRuntime runtime, IDataSourceUser
         object? Value(BindVariable variable) => Bind(variable, user, context.Parameters, now, plan.Dialect, app);
         if (definition.Handler is { } named && handlers?.Find(named) is { } handler)
         {
-            var operation = new DataSourceOperation(definition.Alias, DataSourceAction.Query, user, context, plan.Dialect.Kind) { Connection = connection };
+            var operation = new DataSourceOperation(definition.Alias, DataSourceAction.Query, user, context, plan.Dialect.Kind) { DataSourceKey = definition.Key, Connection = connection };
             await using var helper = new DataSourceSql(plan, operation, Value, token => runtime.OpenAsync(definition.Connection, token));
             operation.Sql = helper;
             if (await handler.ReadAsync(operation, ct) is { } supplied) return Supplied(plan, supplied, maximumRows, order, firstRows);
@@ -131,7 +131,7 @@ public sealed class DataSourceQueries(DataSourceRuntime runtime, IDataSourceUser
                 runtime.Logger.LogWarning("Data source {Alias} refused a query: its backing class {Handler} is not registered or its plan is not available.", definition.Alias, alias);
                 throw new UnauthorizedAccessException();
             }
-            var operation = new DataSourceOperation(definition.Alias, DataSourceAction.Query, user, context, plan.Dialect.Kind) { Connection = connection };
+            var operation = new DataSourceOperation(definition.Alias, DataSourceAction.Query, user, context, plan.Dialect.Kind) { DataSourceKey = definition.Key, Connection = connection };
             var now = runtime.Now(definition);
             var app = providers is null ? null : await providers.ResolveAsync(context, ct);
             await using var sql = new DataSourceSql(plan, operation, variable => Bind(variable, user, context.Parameters, now, plan.Dialect, app),
@@ -139,7 +139,7 @@ public sealed class DataSourceQueries(DataSourceRuntime runtime, IDataSourceUser
             operation.Sql = sql;
             if ((await handler.QueryAsync(operation, ct)).Kind == DataSourceOutcomeKind.Refused) throw new UnauthorizedAccessException();
         }
-        if (!await policies.AllowAsync(new DataSourceRequest(definition.Alias, DataSourceAction.Query, user, context, null, null, null, connection), ct))
+        if (!await policies.AllowAsync(new DataSourceRequest(definition.Alias, DataSourceAction.Query, user, context, null, null, null, connection) { DataSourceKey = definition.Key }, ct))
             throw new UnauthorizedAccessException();
         return user;
     }

@@ -166,13 +166,19 @@ public sealed class FormResourceRegistry(IEnumerable<IFormResource> resources, I
         ? throw new InvalidOperationException("Call LoadAsync before reading provider resources.") : Indexed);
     /// <summary>The C# resources alone, registered and compiled, which need no content read; <see cref="Resources"/> adds the providers'.</summary>
     public IReadOnlyDictionary<string, IFormResource> RegisteredResources => Indexed;
-    public IFormResource? Find(string alias) => Indexed.GetValueOrDefault(alias) ?? Resources.GetValueOrDefault(alias);
+    public IFormResource? Find(string selection)
+    {
+        if (selection.StartsWith("umb://document/", StringComparison.OrdinalIgnoreCase))
+            return AppBlocks.Blocks.AppBlockValues.DocumentKey(selection) is { } key
+                ? Resources.Values.OfType<DataSources.SqlDataSource>().FirstOrDefault(source => source.Definition.Key == key) : null;
+        return Indexed.GetValueOrDefault(selection) ?? Resources.GetValueOrDefault(selection);
+    }
 
     public async Task<IFormResource?> FindAsync(string alias)
     {
-        if (Indexed.TryGetValue(alias, out var resource)) return resource;
+        if (!alias.StartsWith("umb://document/", StringComparison.OrdinalIgnoreCase) && Indexed.TryGetValue(alias, out var resource)) return resource;
         await LoadAsync();
-        return Resources.GetValueOrDefault(alias);
+        return Find(alias);
     }
 
     private async Task LoadCoreAsync()
